@@ -480,14 +480,23 @@
     arr(urls).forEach(u => { const p = photoPath(u); if (p) { paths.push(p); if (/\.jpg$/.test(p) && !/_t\.jpg$/.test(p)) paths.push(p.replace(/\.jpg$/, '_t.jpg')); } });
     if (paths.length) try { await sb.storage.from('photos').remove(paths); } catch (e) { /* leftover files are harmless */ }
   }
-  /* <img> with thumbnail first, full photo as fallback, then hidden if both fail. */
+  /* <img> with its backup: a thumbnail falls back to the full photo, a real photo of a bundled demo picture to the bundled file;
+     hidden if the backup fails too. */
   document.addEventListener('error', e => {
     const img = e.target;
     if (!img || img.tagName !== 'IMG') return;
-    if (img.dataset.full && img.getAttribute('src') !== img.dataset.full) img.src = img.dataset.full;
+    const back = img.dataset.full || img.dataset.local;
+    if (back && img.getAttribute('src') !== back) img.src = back;
     else img.classList.add('broken');
   }, true);
-  const imgTag = (url, cls, alt, thumb) => url ? `<img src="${esc(thumb ? thumbUrl(url) : url)}"${thumb ? ` data-full="${esc(url)}"` : ''} alt="${esc(alt || '')}" loading="lazy" decoding="async"${cls ? ` class="${cls}"` : ''}>` : '';
+  /* bundled demo pictures (img/parts/…) show a real photo when there is one; not inside the Claude app, which blocks outside photos */
+  const realPhoto = (url, w) => !CFG.embedded && CFG.realPhotos !== false && window.SPARAT_DEMO && window.SPARAT_DEMO.realPhoto ? window.SPARAT_DEMO.realPhoto(url, w) : '';
+  const imgTag = (url, cls, alt, thumb) => {
+    if (!url) return '';
+    const real = realPhoto(url, thumb ? 480 : 1200);
+    const back = real ? ` data-local="${esc(url)}"` : thumb ? ` data-full="${esc(url)}"` : '';
+    return `<img src="${esc(real || (thumb ? thumbUrl(url) : url))}"${back} alt="${esc(alt || '')}" loading="lazy" decoding="async"${cls ? ` class="${cls}"` : ''}>`;
+  };
 
   /* ---------- router ---------- */
   const ROUTES = [];

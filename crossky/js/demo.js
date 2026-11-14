@@ -10,6 +10,20 @@
   const KEY = 'sp_demo_db_v' + SEED + SUFFIX;
   try { for (let v = 1; v < SEED; v++) { localStorage.removeItem('sp_demo_db_v' + v + SUFFIX); localStorage.removeItem('sp_demo_db_v' + v + SUFFIX + '_session'); } } catch (e) { /* no storage */ }
   const CATS = ['engine', 'brakes', 'suspension', 'electrical', 'lights', 'body', 'oils', 'cooling', 'ac', 'transmission', 'tires', 'interior', 'other'];
+  /* Real photos for the bundled part pictures (img/parts/NAME.jpg): free Pexels photos (pexels.com/license: free to use, no credit
+     required; credited here). The app shows them where the phone can reach images.pexels.com and falls back to the bundled picture
+     (offline, or inside the Claude app, which blocks outside photos). Parts with no clean free photo keep the bundled picture.
+     [photo id, photographer] — the photo page is https://www.pexels.com/photo/<id>/ */
+  const REAL = {
+    'brake-pads': [4022543, 'Jae Park'], 'radiator': [34351909, 'Erik Mclean'], 'rear-shocks': [11532598, 'Juan Montes'], 'front-strut': [11532598, 'Juan Montes'],
+    'headlight': [1003849, 'Vija Rindo Pratama'], 'tail-lamp': [191238, 'InstaWalli'], 'engine-oil': [13065697, 'Daniel Andraski'], 'battery': [4374843, 'JS Leng'],
+    'air-filter': [7541975, 'cottonbro studio']
+  };
+  /* the photo for a bundled picture, cropped to the cards' 4:3 at width w, or '' when there is none */
+  const realPhoto = (url, w) => {
+    const m = /(?:^|\/)img\/parts\/([a-z-]+)\.jpg$/.exec(url || ''), r = m && REAL[m[1]];
+    return r ? `https://images.pexels.com/photos/${r[0]}/pexels-photo-${r[0]}.jpeg?auto=compress&cs=tinysrgb&fit=crop&w=${w}&h=${Math.round(w * 3 / 4)}` : '';
+  };
   const now = () => new Date().toISOString();
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16)));
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -494,5 +508,5 @@
     }; } };
     return { auth, from, rpc, storage, __db: DB };
   }
-  window.SPARAT_DEMO = { create, reset() { try { localStorage.removeItem(KEY); localStorage.removeItem(KEY + '_session'); } catch (e) { /* ignore */ } } };
+  window.SPARAT_DEMO = { create, realPhoto, reset() { try { localStorage.removeItem(KEY); localStorage.removeItem(KEY + '_session'); } catch (e) { /* ignore */ } } };
 })();

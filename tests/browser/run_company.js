@@ -4,6 +4,7 @@ fs.mkdirSync(path.join(__dirname, 'shots'), { recursive: true });
 const SITE = process.env.SITE || path.resolve(__dirname, '../..'), ORIGIN = 'https://crossky.test/';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.py': 'text/plain' };
 const errors = []; let step = 0;
+let PEXELS = false; // the photo site: blocked (as offline) unless a step turns it on
 /* Stand-ins for the CDN libraries, with the same calls the app makes (ZXing for iPhone-style scanning, Tesseract for reading on the device). */
 const ZXING_STUB = `window.ZXing = { BarcodeFormat: { EAN_13: 7, EAN_8: 6, UPC_A: 14, UPC_E: 15, CODE_128: 4, CODE_39: 2, CODE_93: 3, ITF: 8, CODABAR: 1, QR_CODE: 11, DATA_MATRIX: 5 }, DecodeHintType: { POSSIBLE_FORMATS: 2, TRY_HARDER: 3 },
   BrowserMultiFormatReader: class { constructor(h, ms) { window.__zxHints = h; }
@@ -28,6 +29,7 @@ const log = s => console.log(`${++step}. ${s}`);
     if (u.hostname === 'cdn.jsdelivr.net' && u.pathname.includes('tesseract.js')) return route.fulfill({ contentType: 'text/javascript', body: TESS_STUB });
     if (u.hostname === 'cdn.jsdelivr.net') return route.fulfill({ contentType: 'text/javascript', body: '/* demo build: no supabase */' });
     if (u.hostname === 'cdn.sheetjs.com') return route.abort();
+    if (u.hostname === 'images.pexels.com') return PEXELS ? route.fulfill({ contentType: 'image/jpeg', body: fs.readFileSync(path.join(SITE, 'img/parts/battery.jpg')) }) : route.abort();
     return route.abort();
   });
   const page = await ctx.newPage();
@@ -47,6 +49,19 @@ const log = s => console.log(`${++step}. ${s}`);
     const tiles = await page.locator('.btile').allInnerTexts();
     must(tiles.some(x => x.includes('هيونداي')) && !tiles.some(x => x.includes('مرسيدس')), 'only Korean/Japanese brands: ' + tiles.join('|'));
     log('company home: name, hero, demo banner, basket, assistant, KR/JP brands only'); await shot('01-home');
+    // bundled part pictures show their real photo when the photo site answers, and the bundled file when it doesn't
+    const tags = await page.evaluate(() => [SP.imgTag('img/parts/battery.jpg', '', 'b'), SP.imgTag('img/parts/battery.jpg', '', 'b', true), SP.imgTag('img/parts/clutch-kit.jpg', '', 'c', true)]);
+    must(/images\.pexels\.com\/photos\/4374843\/.*w=1200&amp;h=900/.test(tags[0]) && /w=480&amp;h=360/.test(tags[1]) && /data-local="img\/parts\/battery\.jpg"/.test(tags[1]) && !/pexels/.test(tags[2]), 'photo sizes and backup: ' + tags.join(' | '));
+    const firstReal = async () => {
+      const h = page.locator('#gnew .card .media img[data-local]').first(); await h.scrollIntoViewIfNeeded();
+      await page.waitForFunction(i => i.complete && i.naturalWidth > 0, await h.elementHandle(), { timeout: 6000 });
+      return h.evaluate(i => ({ src: i.getAttribute('src'), local: i.dataset.local }));
+    };
+    let ph = await firstReal(); must(/img\/parts\/[a-z-]+\.jpg$/.test(ph.local) && ph.src === ph.local, 'photo site out of reach: bundled picture shown: ' + JSON.stringify(ph));
+    PEXELS = true; await page.reload(); await see('#gnew .card');
+    ph = await firstReal(); must(ph.src.startsWith('https://images.pexels.com/photos/') && ph.src.includes('w=480'), 'real photo shown: ' + ph.src);
+    PEXELS = false; await page.reload(); await see('#gnew .card');
+    log('part cards show the real photo, and the bundled picture when the photo site is out of reach');
     await go('search'); await page.fill('#sq input', 'كمبروسر'); await page.press('#sq input', 'Enter'); await see('#grid .card .price.locked');
     log('per-part hidden price shows a lock: ' + await text('#grid .card .price'));
     await go('bot'); await see('.msg.bot');

@@ -69,6 +69,8 @@ const log = (() => { let n = 0; return s => console.log(`${++n}. ${s}`); })();
     must(brandName.includes('CROSSKY'), 'brand ' + brandName);
     must(await page.evaluate(() => [...document.querySelectorAll('.topbar .brand img')].every(i => i.complete && i.naturalWidth > 0)), 'the logo in the bar loads');
     must(await page.locator('.banner.inst').count() === 0, 'no install banner inside the Claude app');
+    // the Claude app blocks outside photos, so its page keeps the bundled part pictures
+    must(await page.evaluate(() => [...document.querySelectorAll('img')].every(i => !/^https?:/.test(i.getAttribute('src') || ''))), 'no outside photos inside the Claude app');
     const cfg = await page.evaluate(() => window.SPARAT_CONFIG);
     must(cfg.embedded && cfg.noServiceWorker && cfg.demo && !cfg.supabaseUrl, 'page config'); log('opens as a page with the demo, fonts unreachable, no install banner');
     await go('login'); await see('#ae'); await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago');
