@@ -1,0 +1,14 @@
+node_modules/
+__pycache__/
+tests/browser/shots/
+packaging/android-ios/www/
+packaging/android-ios/android/
+packaging/android-ios/ios/
+packaging/windows/app/
+packaging/windows/dist/
+corssky/packaging/android-ios/www/
+corssky/packaging/android-ios/android/
+corssky/packaging/android-ios/ios/
+corssky/packaging/windows/app/
+corssky/packaging/windows/dist/
+sparat_sync.ini

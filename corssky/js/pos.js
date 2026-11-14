@@ -1,0 +1,365 @@
+/* Sales system inside the app: point of sale, invoices (print / WhatsApp / return), reports, staff and permissions.
+   Every rule is enforced again by the database functions (create_invoice, return_invoice, sales_report, save_staff). */
+(function () {
+  'use strict';
+  const SP = window.SP;
+  const { $, $$, esc, I, t, S, api, opt, shell, bar, empty, gate } = SP;
+  const sb = () => SP.sb;
+  const chk = r => { if (r && r.error) throw r.error; return r ? r.data : null; };
+
+  Object.assign(SP.L.T, {
+    posT: ["منظومة المبيعات", "Sales system"], posSale: ["نقطة البيع", "Point of sale"], posSearchPh: ["اسم القطعة أو الكود أو الباركود…", "Part name, code or barcode…"],
+    posNoItems: ["ابحث عن قطعة وأضفها للفاتورة.", "Search for a part and add it to the invoice."], posPrice: ["السعر", "Price"], posQty: ["الكمية", "Qty"],
+    posSubtotal: ["المجموع", "Subtotal"], posDiscount: ["الخصم", "Discount"], posTotal: ["الإجمالي", "Total"], posPaid: ["المدفوع", "Paid"], posRemain: ["المتبقي", "Balance due"],
+    posCustomer: ["اسم الزبون (اختياري)", "Customer name (optional)"], posPhone: ["هاتف الزبون", "Customer phone"], posPay: ["طريقة الدفع", "Payment"],
+    pay_cash: ["كاش", "Cash"], pay_card: ["بطاقة", "Card"], pay_transfer: ["تحويل", "Transfer"], pay_credit: ["آجل", "On credit"],
+    posSave: ["احفظ الفاتورة", "Save invoice"], posSaved: ["تم حفظ الفاتورة رقم {n}", "Invoice {n} saved"], posStock: ["الكمية غير كافية: {t} (المتوفر {n})", "Not enough stock: {t} ({n} available)"],
+    posNoPrice: ["القطعة بدون سعر: {t}", "This part has no price: {t}"], posBranch: ["الفرع", "Branch"], posClear: ["فاتورة جديدة", "New invoice"], posInStock: ["متوفر {n}", "{n} in stock"],
+    posNote: ["ملاحظة", "Note"], posRemove: ["احذف", "Remove"],
+    invT: ["فاتورة رقم {n}", "Invoice {n}"], invDate: ["التاريخ", "Date"], invStaff: ["البائع", "Seller"], invPrint: ["طباعة", "Print"], invShare: ["إرسال للزبون", "Send to customer"],
+    invReturn: ["مرتجع", "Return"], invReturned: ["مرتجعة", "Returned"], invReturnQ: ["ترجيع الفاتورة كاملة للمخزون؟", "Return the whole invoice to stock?"],
+    invReturnDone: ["تم المرتجع ورجعت الكميات للمخزون", "Returned; quantities are back in stock"], invList: ["الفواتير", "Invoices"], invEmpty: ["لا توجد فواتير في هذه الفترة", "No invoices in this period"],
+    rangeToday: ["اليوم", "Today"], range7: ["آخر 7 أيام", "Last 7 days"], rangeMonth: ["هذا الشهر", "This month"], rangeAll: ["الكل", "All"],
+    invSearchPh: ["رقم الفاتورة أو اسم الزبون", "Invoice number or customer"], invExport: ["تصدير Excel", "Export to Excel"], invItem: ["الصنف", "Item"],
+    invMsg: ["فاتورة رقم {n} من {app}\n{items}\nالإجمالي: {t}\nشكراً لتعاملكم معنا.", "Invoice {n} from {app}\n{items}\nTotal: {t}\nThank you for your business."],
+    repT: ["التقارير", "Reports"], repSales: ["المبيعات", "Sales"], repCount: ["عدد الفواتير", "Invoices"], repAvg: ["متوسط الفاتورة", "Average invoice"],
+    repDiscount: ["الخصومات", "Discounts"], repCredit: ["ديون آجلة", "Credit due"], repReturned: ["مرتجعات", "Returns"], repProfit: ["الربح التقريبي", "Approx. profit"],
+    repCostMissing: ["{n} قطعة مباعة بدون سعر تكلفة، فالربح تقريبي.", "{n} sold items have no cost price, so profit is approximate."],
+    repByPay: ["حسب طريقة الدفع", "By payment"], repByStaff: ["حسب الموظف", "By staff"], repByBranch: ["حسب الفرع", "By branch"], repByDay: ["حسب اليوم", "By day"], repTop: ["الأكثر مبيعاً", "Best sellers"],
+    staffT: ["الموظفين والصلاحيات", "Staff and permissions"], staffAdd: ["أضف موظفاً", "Add staff"], staffEdit: ["تعديل الموظف", "Edit staff"], staffEmail: ["بريد الموظف", "Staff email"],
+    staffEmailHint: ["الموظف يسجّل في التطبيق بنفس البريد، فيتفعل حسابه بالصلاحيات تلقائياً.", "The employee signs up in the app with this email and gets these permissions automatically."],
+    staffName: ["اسم الموظف", "Staff name"], staffAllBranches: ["كل الفروع", "All branches"], staffPerms: ["الصلاحيات", "Permissions"], staffActive: ["الحساب فعّال", "Account active"],
+    staffSaved: ["تم حفظ الموظف", "Staff saved"], staffDel: ["احذف الموظف", "Delete staff"], staffDelQ: ["حذف {n} من الموظفين؟", "Remove {n} from staff?"], staffDeleted: ["حُذف الموظف", "Staff removed"],
+    staffWaiting: ["لم يسجّل بعد", "Not signed up yet"], staffOff: ["موقوف", "Disabled"], noStaff: ["لا يوجد موظفون بعد. أضف أول موظف وحدد صلاحياته.", "No staff yet. Add the first employee and choose their permissions."],
+    perm_sales: ["البيع وإنشاء الفواتير", "Sell and create invoices"], perm_invoices: ["رؤية كل الفواتير", "See all invoices"], perm_returns: ["المرتجعات", "Returns"],
+    perm_discounts: ["إعطاء خصم", "Give discounts"], perm_prices: ["تعديل سعر البيع في الفاتورة", "Change prices on invoices"], perm_products: ["إضافة وتعديل القطع والأسعار والكميات", "Add and edit parts, prices and stock"],
+    perm_customers: ["اعتماد وإدارة الزبائن", "Approve and manage customers"], perm_reports: ["التقارير", "Reports"], perm_costs: ["رؤية التكلفة والأرباح", "See cost prices and profit"],
+    perm_settings: ["إعدادات الشركة", "Company settings"], costL: ["سعر التكلفة", "Cost price"], costHint: ["لا يظهر إلا للمالك ومن عنده صلاحية التكلفة.", "Visible only to the owner and staff allowed to see costs."]
+  });
+  const PERMS = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'settings'];
+  const PAYS = ['cash', 'card', 'transfer', 'credit'];
+
+  /* ---------- permissions ---------- */
+  SP.can = p => !!(S.admin || (S.perms && S.perms.staff && (S.perms.perms || []).includes(p)));
+  SP.isStaff = () => !!(S.admin || (S.perms && S.perms.staff));
+  SP.loadPerms = async () => {
+    S.perms = null;
+    if (!S.user || !SP.sb) return;
+    try { S.perms = chk(await sb().rpc('my_perms')); } catch (e) { S.perms = null; }
+  };
+  const P = {
+    create: async v => chk(await sb().rpc('create_invoice', { p: v })),
+    ret: async id => chk(await sb().rpc('return_invoice', { p_id: id })),
+    get: async id => chk(await sb().rpc('get_invoice', { p_id: id })),
+    list: async a => { const rows = chk(await sb().rpc('list_invoices', a)) || []; return { items: rows, total: rows.length ? +rows[0].total_count : 0 }; },
+    report: async a => chk(await sb().rpc('sales_report', a)) || {},
+    staff: async () => chk(await sb().from('staff').select('*').order('created_at', { ascending: true })) || [],
+    saveStaff: async a => chk(await sb().rpc('save_staff', a)),
+    delStaff: async id => chk(await sb().rpc('delete_staff', { p_id: id }))
+  };
+  function posErr(e) {
+    const m = String((e && e.message) || '');
+    let x = /not enough stock: (.+) \(available (-?\d+)\)/.exec(m);
+    if (x) return t('posStock', { t: x[1], n: x[2] });
+    x = /part has no price: (.+)$/.exec(m);
+    if (x) return t('posNoPrice', { t: x[1] });
+    if (/not authorized/.test(m)) return t('errPerm');
+    return SP.errText(e);
+  }
+  const money = (v, cur) => SP.priceText(Number(v || 0), cur || SP.currencyOf(S.country));
+  function guard(n, perm) {
+    if (!S.user) { S.after = SP.here(); shell(bar(t('posT')) + `<main class="wrap">${empty('lock', t('needLoginT'), '', `<a class="btn btn-ink" href="#login">${esc(t('signIn'))}</a>`)}</main>`); return false; }
+    if (perm && !(perm === 'staffadmin' ? S.admin : SP.can(perm))) { shell(bar(t('posT')) + `<main class="wrap">${empty('lock', t('noPermT'), t('errPerm'))}</main>`); return false; }
+    return true;
+  }
+
+  /* Entry tiles on the account page for the owner and staff. */
+  SP.posEntry = () => {
+    if (!SP.isStaff()) return '';
+    const tiles = [['pos', 'tag', 'posSale', SP.can('sales')], ['receive', 'receipt', 'rcvT', SP.can('purchases')], ['invoices', 'copy', 'invList', SP.can('sales') || SP.can('invoices')],
+      ['purchases', 'box', 'purT', SP.can('purchases') || SP.can('reports')], ['reports', 'grid', 'repT', SP.can('reports')], ['staff', 'user', 'staffT', S.admin]]
+      .filter(x => x[3]).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('');
+    return tiles ? `<section class="mcard"><h2 class="lbl">${esc(t('posT'))}</h2><div class="pos-grid">${tiles}</div></section>` : '';
+  };
+
+  /* ---------- point of sale ---------- */
+  const POS_KEY = 'sp_pos';
+  const loadPos = () => { try { return JSON.parse(sessionStorage.getItem(POS_KEY) || 'null') || { lines: [], pay: 'cash' }; } catch (e) { return { lines: [], pay: 'cash' }; } };
+  const savePos = v => { try { sessionStorage.setItem(POS_KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } };
+  /* Puts parts on the open sale (used by "open as a sale" when receiving). */
+  SP.posLoad = items => {
+    const st = loadPos();
+    items.forEach(p => {
+      const ex = st.lines.find(l => l.id === p.id);
+      if (ex) ex.qty += p.qty || 1;
+      else st.lines.push({ id: p.id, title: p.title, sku: p.sku || '', price: p.price, base: p.price, qty: p.qty || 1, stock: p.stock, cur: p.cur });
+    });
+    savePos(st);
+  };
+  const codeKey = v => String(v || '').toUpperCase().replace(/[\s\-./_]/g, '');
+  SP.route(/^pos$/, async (m, n) => {
+    if (gate(n) || !guard(n, 'sales')) return;
+    const st = loadPos(), fixedBranch = S.perms && S.perms.branch;
+    shell(bar(t('posSale'), `<a class="iconbtn" href="#invoices" aria-label="${esc(t('invList'))}">${I('copy')}</a>`) + `<main class="wrap pos">
+      <div class="pos-top"><div class="field"><label for="pbr">${esc(t('posBranch'))}</label><select id="pbr" class="input"${fixedBranch ? ' disabled' : ''}></select></div>
+        <form class="field" id="psf" role="search"><label for="pq">${esc(t('search'))}</label><div class="inrow"><input id="pq" class="input" autocomplete="off" placeholder="${esc(t('posSearchPh'))}" enterkeyhint="search">
+          <button type="button" class="btn btn-ink sq" id="pscan" aria-label="${esc(t('scanBtn'))}" title="${esc(t('scanBtn'))}">${I('scan')}</button></div></form></div>
+      <div id="pres" class="pres"></div><div id="plines" class="plines"></div><div id="psum"></div></main>`);
+    try {
+      const sh = (await api.shops({ p_limit: 100 })).items;
+      if (!SP.alive(n)) return;
+      const cur = fixedBranch || st.branch || (sh[0] && sh[0].id) || '';
+      $('#pbr').innerHTML = sh.map(s => opt(s.id, s.name + ' · ' + s.city, cur)).join('');
+      st.branch = $('#pbr').value; savePos(st);
+    } catch (e) { /* branch list optional */ }
+    $('#pbr').onchange = e => { st.branch = e.target.value; savePos(st); };
+    const curOf = l => l.cur || SP.currencyOf(S.country);
+    function add(p, quiet) {
+      if (p.price == null && !SP.can('prices')) { SP.toast(t('posNoPrice', { t: p.title })); return false; }
+      const ex = st.lines.find(l => l.id === p.id);
+      if (ex) ex.qty++; else st.lines.push({ id: p.id, title: p.title, sku: p.sku || p.part_no, price: p.price, base: p.price, qty: 1, stock: p.qty, cur: p.shop && p.shop.currency });
+      savePos(st); draw(); $('#pres').innerHTML = ''; $('#pq').value = '';
+      if (!quiet) $('#pq').focus();
+      return true;
+    }
+    async function find(q) {
+      q = q.trim();
+      if (!SP.alive(n) || !$('#pres')) return;
+      if (!q) { $('#pres').innerHTML = ''; return; }
+      try {
+        const r = await api.search({ ...SP.searchArgs({ ...SP.FDEF, q }, { limit: 8 }), p_country: null, p_city: null, p_include_sold: true });
+        if (!SP.alive(n) || !$('#pres')) return;
+        /* a barcode scanner types the full code and Enter: an exact item code, barcode or part number goes straight on the invoice */
+        const k = codeKey(q), exact = r.items.filter(p => (p.sku && codeKey(p.sku) === k) || (p.barcode && codeKey(p.barcode) === k) || (p.part_no && codeKey(p.part_no) === k));
+        if (exact.length === 1) return add(exact[0]);
+        $('#pres').innerHTML = r.items.length ? r.items.map(p => `<button type="button" class="pres-row" data-id="${p.id}"><span><b>${esc(p.title)}</b><small>${esc([p.sku || p.part_no, p.qty != null ? t('posInStock', { n: p.qty }) : ''].filter(Boolean).join(' · '))}</small></span>${SP.priceHTML(p.price, p.shop && p.shop.currency, p.price_hidden)}</button>`).join('')
+          : `<p class="muted-p">${esc(t('noResT'))}</p>`;
+        $('#pres').onclick = e => { const b = e.target.closest('[data-id]'); if (b) add(r.items.find(p => p.id === b.dataset.id)); };
+      } catch (e) { if ($('#pres')) $('#pres').innerHTML = `<p class="form-err">${esc(SP.errText(e))}</p>`; }
+    }
+    $('#psf').onsubmit = e => { e.preventDefault(); find($('#pq').value); };
+    $('#pscan').onclick = () => SP.scanCode({
+      title: t('posSale'),
+      onCode: async code => {
+        const p = await SP.findByCode(code).catch(() => null);
+        if (!SP.alive(n)) return '';
+        if (!p) return t('scanUnknown', { c: code });
+        return add(p, true) ? t('scanAdded', { t: p.title }) : t('posNoPrice', { t: p.title });
+      }
+    });
+    $('#pq').oninput = SP.debounce(e => find(e.target.value), 350);
+    function totals() {
+      const sub = st.lines.reduce((k, l) => k + (Number(l.price) || 0) * l.qty, 0), disc = Math.min(Number(st.discount) || 0, sub);
+      return { sub, disc, total: sub - disc };
+    }
+    function draw() {
+      const cur = st.lines[0] ? curOf(st.lines[0]) : SP.currencyOf(S.country), tt = totals();
+      $('#plines').innerHTML = st.lines.length ? st.lines.map((l, i) => `<div class="pline" data-i="${i}"><span class="pl-main"><b>${esc(l.title)}</b><small>${esc([l.sku, l.stock != null ? t('posInStock', { n: l.stock }) : ''].filter(Boolean).join(' · '))}</small></span>
+          ${SP.can('prices') ? `<input class="input num pl-price" inputmode="decimal" dir="ltr" value="${l.price == null ? '' : esc(l.price)}" aria-label="${esc(t('posPrice'))}">` : `<span class="num pl-p">${esc(money(l.price, cur))}</span>`}
+          <span class="stepper"><button type="button" data-d="-1" aria-label="−">−</button><b class="num">${l.qty}</b><button type="button" data-d="1" aria-label="+">+</button></span></div>`).join('')
+        : `<p class="muted-p pos-empty">${esc(t('posNoItems'))}</p>`;
+      $('#psum').innerHTML = st.lines.length ? `<div class="mcard psum"><div class="prow"><span>${esc(t('posSubtotal'))}</span><b class="num">${esc(money(tt.sub, cur))}</b></div>
+        ${SP.can('discounts') ? `<div class="prow"><label for="pdisc">${esc(t('posDiscount'))}</label><input id="pdisc" class="input num" inputmode="decimal" dir="ltr" value="${esc(st.discount || '')}"></div>` : ''}
+        <div class="prow big"><span>${esc(t('posTotal'))}</span><b class="num">${esc(money(tt.total, cur))}</b></div>
+        <fieldset class="field"><legend>${esc(t('posPay'))}</legend><div class="seg">${PAYS.map((k, i) => `<input type="radio" name="pp" id="pp${i}" value="${k}"${(st.pay || 'cash') === k ? ' checked' : ''}><label for="pp${i}">${esc(t('pay_' + k))}</label>`).join('')}</div></fieldset>
+        ${st.pay === 'credit' ? `<div class="prow"><label for="ppaid">${esc(t('posPaid'))}</label><input id="ppaid" class="input num" inputmode="decimal" dir="ltr" value="${esc(st.paid || '')}"></div>` : ''}
+        <div class="row2"><div class="field"><label for="pcn">${esc(t('posCustomer'))}</label><input id="pcn" class="input" maxlength="80" value="${esc(st.cname || '')}"></div>
+          <div class="field"><label for="pcp">${esc(t('posPhone'))}</label><input id="pcp" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(st.cphone || '')}"></div></div>
+        <div class="field"><label for="pnote">${esc(t('posNote'))}</label><input id="pnote" class="input" maxlength="500" value="${esc(st.note || '')}"></div>
+        <p class="form-err" id="perr" role="alert"></p>
+        <div class="form-actions"><button type="button" class="btn btn-signal" id="psave">${I('check')} ${esc(t('posSave'))}</button><button type="button" class="btn btn-ghost" id="pnew">${I('trash')} ${esc(t('posClear'))}</button></div></div>` : '';
+      const keep = (id, k, numeric) => { const el = $(id); if (el) el.oninput = () => { st[k] = numeric ? SP.digits(el.value) : el.value; savePos(st); if (numeric) redrawTotals(); }; };
+      keep('#pdisc', 'discount', true); keep('#ppaid', 'paid', true); keep('#pcn', 'cname'); keep('#pcp', 'cphone'); keep('#pnote', 'note');
+      $$('input[name=pp]').forEach(r => r.onchange = () => { st.pay = r.value; savePos(st); draw(); });
+      $$('.pl-price').forEach(inp => inp.oninput = () => { const l = st.lines[+inp.closest('.pline').dataset.i]; const v = SP.digits(inp.value).replace(',', '.'); l.price = v === '' ? null : Number(v); savePos(st); redrawTotals(); });
+      if ($('#psave')) $('#psave').onclick = save;
+      if ($('#pnew')) $('#pnew').onclick = () => { st.lines = []; st.discount = st.paid = st.cname = st.cphone = st.note = ''; st.pay = 'cash'; savePos(st); draw(); };
+    }
+    function redrawTotals() {
+      const cur = st.lines[0] ? curOf(st.lines[0]) : SP.currencyOf(S.country), tt = totals(), rows = $$('#psum .prow b');
+      if (rows[0]) rows[0].textContent = money(tt.sub, cur);
+      if (rows[rows.length - 1]) rows[rows.length - 1].textContent = money(tt.total, cur);
+    }
+    $('#plines').onclick = e => {
+      const b = e.target.closest('[data-d]');
+      if (!b) return;
+      const i = +b.closest('.pline').dataset.i, l = st.lines[i];
+      l.qty += +b.dataset.d;
+      if (l.qty <= 0) st.lines.splice(i, 1);
+      savePos(st); draw();
+    };
+    async function save() {
+      const b = $('#psave'), err = $('#perr');
+      err.textContent = ''; b.classList.add('busy');
+      try {
+        const inv = await P.create({
+          branch: st.branch || null, payment: st.pay || 'cash', discount: Number(st.discount) || 0, paid: st.pay === 'credit' ? (Number(st.paid) || 0) : null,
+          customer_name: (st.cname || '').trim(), customer_phone: (st.cphone || '').trim(), note: (st.note || '').trim(),
+          items: st.lines.map(l => ({ id: l.id, qty: l.qty, price: SP.can('prices') ? l.price : undefined }))
+        });
+        sessionStorage.removeItem(POS_KEY);
+        SP.toast(t('posSaved', { n: inv.no }));
+        SP.go('inv-' + inv.id);
+      } catch (e) { err.textContent = posErr(e); b.classList.remove('busy'); }
+    }
+    draw();
+    SP.done(n);
+  });
+
+  /* ---------- one invoice ---------- */
+  const when = v => { try { return new Intl.DateTimeFormat(SP.LANG + '-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(v)); } catch (e) { return String(v).slice(0, 16).replace('T', ' '); } };
+  SP.route(/^inv-([0-9a-f-]{36})$/, async (m, n) => {
+    if (gate(n) || !guard(n)) return;
+    shell(bar(t('invList')) + `<main class="wrap"><div class="sk sk-block"></div></main>`);
+    let inv;
+    try { inv = await P.get(m[1]); } catch (e) { return SP.fail(e, n); }
+    if (!SP.alive(n)) return;
+    if (!inv) return shell(bar(t('invList')) + `<main class="wrap">${empty('lock', t('noPermT'), t('errPerm'))}</main>`);
+    const st = S.settings || {}, cur = inv.currency, br = inv.branch || {}, app = st.brand_name || SP.CFG.appName || t('app');
+    const draw = v => {
+      shell(bar(t('invT', { n: v.no }), `<button type="button" class="iconbtn" onclick="window.print()" aria-label="${esc(t('invPrint'))}">${I('copy')}</button>`) + `<main class="wrap invoice-wrap">
+        <article class="invoice${v.status === 'returned' ? ' returned' : ''}" id="invoice">
+          <header class="inv-head">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : `<span class="brand-mark">${I('nut')}</span>`}<div><b>${esc(app)}</b><small>${esc([br.name, br.city, br.phone ? SP.prettyPhone(br.phone, S.country) : ''].filter(Boolean).join(' · '))}</small></div>
+            <div class="inv-no"><small>${esc(t('invT', { n: '' }).trim())}</small><b class="num">${esc(v.no)}</b></div></header>
+          ${v.status === 'returned' ? `<p class="inv-stamp">${esc(t('invReturned'))}</p>` : ''}
+          <dl class="inv-meta"><div><dt>${esc(t('invDate'))}</dt><dd>${esc(when(v.created_at))}</dd></div><div><dt>${esc(t('invStaff'))}</dt><dd>${esc(v.staff_name || '—')}</dd></div>
+            ${v.customer_name || v.customer_phone ? `<div><dt>${esc(t('custName'))}</dt><dd>${esc([v.customer_name, v.customer_phone].filter(Boolean).join(' · '))}</dd></div>` : ''}<div><dt>${esc(t('posPay'))}</dt><dd>${esc(t('pay_' + v.payment))}</dd></div></dl>
+          <table class="inv-items"><thead><tr><th>${esc(t('invItem'))}</th><th>${esc(t('posQty'))}</th><th>${esc(t('posPrice'))}</th><th>${esc(t('posTotal'))}</th></tr></thead>
+            <tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.sku ? `<small class="mono">${esc(it.sku)}</small>` : ''}</td><td class="num">${it.qty}</td><td class="num">${esc(money(it.price, cur))}</td><td class="num">${esc(money(it.line_total, cur))}</td></tr>`).join('')}</tbody></table>
+          <dl class="inv-tot">${+v.discount ? `<div><dt>${esc(t('posSubtotal'))}</dt><dd class="num">${esc(money(v.subtotal, cur))}</dd></div><div><dt>${esc(t('posDiscount'))}</dt><dd class="num">− ${esc(money(v.discount, cur))}</dd></div>` : ''}
+            <div class="big"><dt>${esc(t('posTotal'))}</dt><dd class="num">${esc(money(v.total, cur))}</dd></div>
+            ${v.payment === 'credit' ? `<div><dt>${esc(t('posPaid'))}</dt><dd class="num">${esc(money(v.paid, cur))}</dd></div><div><dt>${esc(t('posRemain'))}</dt><dd class="num">${esc(money(v.total - v.paid, cur))}</dd></div>` : ''}</dl>
+          ${v.note ? `<p class="inv-note">${esc(v.note)}</p>` : ''}</article>
+        <div class="form-actions noprint"><button type="button" class="btn btn-ink" onclick="window.print()">${I('copy')} ${esc(t('invPrint'))}</button>
+          <button type="button" class="btn btn-wa" id="ish">${I('chat')} ${esc(t('invShare'))}</button>
+          ${SP.can('returns') && v.status === 'done' ? `<button type="button" class="btn btn-danger" id="iret">${I('back', 'dirx')} ${esc(t('invReturn'))}</button>` : ''}
+          ${SP.can('sales') ? `<a class="btn btn-ghost" href="#pos">${I('plus')} ${esc(t('posClear'))}</a>` : ''}</div></main>`);
+      $('#ish').onclick = () => {
+        const items = (v.items || []).map(it => `• ${it.title} × ${it.qty} = ${money(it.line_total, cur)}`).join('\n');
+        const text = t('invMsg', { n: v.no, app, items, t: money(v.total, cur) });
+        const w = SP.waLink(v.customer_phone, text, S.country) || 'https://wa.me/?text=' + encodeURIComponent(text);
+        window.open(w, '_blank', 'noopener');
+      };
+      if ($('#iret')) $('#iret').onclick = async () => {
+        if (!await SP.confirmSheet({ title: t('invReturn'), body: t('invReturnQ'), ok: t('invReturn'), danger: true })) return;
+        try { const r = await P.ret(v.id); SP.toast(t('invReturnDone')); draw(r); } catch (e) { SP.toast(posErr(e)); }
+      };
+    };
+    draw(inv);
+    SP.done(n);
+  });
+
+  /* ---------- invoices list ---------- */
+  function range(k) {
+    const d = new Date(), start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (k === 'today') return [start, null];
+    if (k === '7') return [new Date(start - 6 * 864e5), null];
+    if (k === 'month') return [new Date(d.getFullYear(), d.getMonth(), 1), null];
+    return [null, null];
+  }
+  const RANGES = [['today', 'rangeToday'], ['7', 'range7'], ['month', 'rangeMonth'], ['all', 'rangeAll']];
+  SP.route(/^invoices$/, async (m, n) => {
+    if (gate(n) || !guard(n)) return;
+    if (!(SP.can('sales') || SP.can('invoices'))) return guard(n, 'invoices');
+    S.invRange = S.invRange || 'today';
+    shell(bar(t('invList'), SP.can('sales') ? `<a class="iconbtn" href="#pos" aria-label="${esc(t('posSale'))}">${I('plus')}</a>` : '') + `<main class="wrap">
+      <div class="chips light">${RANGES.map(([k, l]) => `<button type="button" class="chip${S.invRange === k ? ' on' : ''}" data-r="${k}">${esc(t(l))}</button>`).join('')}</div>
+      <form class="searchbox flat" id="iq" role="search">${I('search')}<input type="search" value="${esc(S.invQ || '')}" placeholder="${esc(t('invSearchPh'))}"></form>
+      <div class="res-head"><span class="rcount" id="rc"></span><button type="button" class="btn btn-ghost sm" id="iexp">${I('download')} ${esc(t('invExport'))}</button></div>
+      <div id="il"><div class="sk sk-row"></div></div><div class="center"><button type="button" class="btn btn-ghost more-btn" id="more" hidden></button></div></main>`);
+    $$('[data-r]').forEach(b => b.onclick = () => { S.invRange = b.dataset.r; SP.render(); });
+    $('#iq').onsubmit = e => { e.preventDefault(); S.invQ = $('#iq input').value.trim(); SP.render(); };
+    const [from, to] = range(S.invRange);
+    const args = off => ({ p_from: from ? from.toISOString() : null, p_to: to ? to.toISOString() : null, p_q: S.invQ || null, p_limit: 30, p_offset: off });
+    const row = v => `<a class="arow inv-row${v.status === 'returned' ? ' ret' : ''}" href="#inv-${v.id}"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${esc(v.customer_name || t('pay_' + v.payment))}${v.status === 'returned' ? ` <span class="pill demo">${esc(t('invReturned'))}</span>` : ''}</b>
+      <small>${esc(when(v.created_at))} · ${esc(v.staff_name || '')} · ${esc(SP.count(+v.items_count || 0, 'parts'))}</small></span><b class="num">${esc(money(v.total, v.currency))}</b></a>`;
+    await SP.pager(n, $('#il'), $('#more'), off => P.list(args(off)), items => items.map(row).join(''), (r, first) => {
+      if (!first) return;
+      $('#rc').textContent = SP.fmtNum(r.total) + ' · ' + t('invList');
+      if (!r.total) $('#il').innerHTML = empty('copy', t('invEmpty'));
+    });
+    $('#iexp').onclick = async () => {
+      const b = $('#iexp'); b.classList.add('busy');
+      try {
+        const all = [];
+        for (let off = 0; off < 5000; off += 100) { const r = await P.list({ ...args(off), p_limit: 100 }); all.push(...r.items); if (r.items.length < 100) break; }
+        const cell = v => { const s = v == null ? '' : String(v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        const lines = ['no,date,branch,staff,customer,phone,payment,subtotal,discount,total,paid,status'].concat(all.map(v => [v.no, v.created_at, v.branch_name, v.staff_name, v.customer_name, v.customer_phone, v.payment, v.subtotal, v.discount, v.total, v.paid, v.status].map(cell).join(',')));
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+        a.download = 'invoices-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 1500);
+      } catch (e) { SP.toast(SP.errText(e)); } finally { b.classList.remove('busy'); }
+    };
+    SP.done(n);
+  });
+
+  /* ---------- reports ---------- */
+  SP.route(/^reports$/, async (m, n) => {
+    if (gate(n) || !guard(n, 'reports')) return;
+    S.repRange = S.repRange || 'today';
+    shell(bar(t('repT')) + `<main class="wrap mine"><div class="chips light">${RANGES.map(([k, l]) => `<button type="button" class="chip${S.repRange === k ? ' on' : ''}" data-r="${k}">${esc(t(l))}</button>`).join('')}</div><div id="rep"><div class="sk sk-block"></div></div></main>`);
+    $$('[data-r]').forEach(b => b.onclick = () => { S.repRange = b.dataset.r; SP.render(); });
+    const [from] = range(S.repRange);
+    let r;
+    try { r = await P.report({ p_from: (from || new Date(2000, 0, 1)).toISOString(), p_to: new Date(Date.now() + 864e5).toISOString(), p_branch: null, p_tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Tripoli' }); }
+    catch (e) { if (SP.alive(n)) $('#rep').innerHTML = SP.errBox(e); return; }
+    if (!SP.alive(n)) return;
+    const cur = SP.currencyOf(S.country), cnt = +r.count || 0;
+    const stat = (k, v) => `<div class="astat"><b class="num">${esc(v)}</b><small>${esc(t(k))}</small></div>`;
+    const bars = (list, label, val) => { const max = Math.max(1, ...list.map(val)); return list.map(x => `<div class="rbar"><span>${esc(label(x))}</span><i style="--w:${Math.round(val(x) / max * 100)}%"></i><b class="num">${esc(money(val(x), cur))}</b></div>`).join(''); };
+    const pays = Object.entries(r.by_payment || {});
+    $('#rep').innerHTML = `<div class="astats">${stat('repSales', money(r.total, cur))}${stat('repCount', SP.fmtNum(cnt))}${stat('repAvg', money(cnt ? r.total / cnt : 0, cur))}${r.profit != null ? stat('repProfit', money(r.profit, cur)) : ''}${stat('repDiscount', money(r.discount, cur))}${stat('repCredit', money(r.credit, cur))}${stat('repReturned', SP.fmtNum(+r.returned || 0))}</div>
+      ${r.cost_missing ? `<p class="hint">${esc(t('repCostMissing', { n: r.cost_missing }))}</p>` : ''}
+      ${pays.length ? `<section class="mcard"><h2 class="lbl">${esc(t('repByPay'))}</h2>${bars(pays, x => t('pay_' + x[0]), x => +x[1])}</section>` : ''}
+      ${(r.by_staff || []).length ? `<section class="mcard"><h2 class="lbl">${esc(t('repByStaff'))}</h2>${bars(r.by_staff, x => x.name || '—', x => +x.total)}</section>` : ''}
+      ${(r.by_branch || []).length > 1 ? `<section class="mcard"><h2 class="lbl">${esc(t('repByBranch'))}</h2>${bars(r.by_branch, x => x.name, x => +x.total)}</section>` : ''}
+      ${(r.by_day || []).length > 1 ? `<section class="mcard"><h2 class="lbl">${esc(t('repByDay'))}</h2>${bars(r.by_day, x => x.day, x => +x.total)}</section>` : ''}
+      ${(r.top || []).length ? `<section class="mcard"><h2 class="lbl">${esc(t('repTop'))}</h2>${(r.top || []).map(x => `<div class="rbar"><span>${esc(x.title)}</span><small class="num">× ${esc(x.qty)}</small><b class="num">${esc(money(x.total, cur))}</b></div>`).join('')}</section>` : ''}
+      ${cnt ? '' : empty('grid', t('invEmpty'))}`;
+    SP.done(n);
+  });
+
+  /* ---------- staff and permissions (owner only) ---------- */
+  function staffSheet(v, branches, onSaved) {
+    v = v || { email: '', name: '', perms: ['sales'], branch_id: null, active: true };
+    const s = SP.openSheet(`<h2 class="sheet-title">${esc(t(v.id ? 'staffEdit' : 'staffAdd'))}</h2><form class="form" id="stf" novalidate>
+      <div class="field"><label for="se">${esc(t('staffEmail'))}</label><input id="se" class="input" type="email" dir="ltr" autocapitalize="off" value="${esc(v.email)}"${v.id ? ' readonly' : ''}><span class="hint">${esc(t('staffEmailHint'))}</span></div>
+      <div class="row2"><div class="field"><label for="sn2">${esc(t('staffName'))}</label><input id="sn2" class="input" maxlength="80" value="${esc(v.name)}"></div>
+        <div class="field"><label for="sbr">${esc(t('posBranch'))}</label><select id="sbr" class="input">${opt('', t('staffAllBranches'), v.branch_id || '')}${branches.map(b => opt(b.id, b.name, v.branch_id || '')).join('')}</select></div></div>
+      <fieldset class="field"><legend>${esc(t('staffPerms'))}</legend><div class="perm-list">${PERMS.map(p => `<label class="switch"><input type="checkbox" value="${p}"${(v.perms || []).includes(p) ? ' checked' : ''}><span></span>${esc(t('perm_' + p))}</label>`).join('')}</div></fieldset>
+      <label class="switch"><input type="checkbox" id="sac"${v.active !== false ? ' checked' : ''}><span></span>${esc(t('staffActive'))}</label>
+      <p class="form-err" id="serr2" role="alert"></p>
+      <div class="sheet-actions"><button class="btn btn-signal">${I('check')} ${esc(t('saveChanges'))}</button>${v.id ? `<button type="button" class="btn btn-danger" id="sdel2">${I('trash')} ${esc(t('staffDel'))}</button>` : ''}</div></form>`, { label: t('staffT') });
+    $('#stf', s.el).onsubmit = async e => {
+      e.preventDefault();
+      const email = $('#se', s.el).value.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { $('#serr2', s.el).textContent = t('badEmail'); return; }
+      try {
+        await P.saveStaff({ p_email: email, p_name: $('#sn2', s.el).value.trim(), p_perms: $$('.perm-list input:checked', s.el).map(x => x.value), p_branch: $('#sbr', s.el).value || null, p_active: $('#sac', s.el).checked });
+        SP.toast(t('staffSaved')); s.close(); onSaved();
+      } catch (x) { $('#serr2', s.el).textContent = SP.errText(x); }
+    };
+    if ($('#sdel2', s.el)) $('#sdel2', s.el).onclick = async () => {
+      s.close();
+      if (!await SP.confirmSheet({ title: t('staffDelQ', { n: v.name || v.email }), ok: t('staffDel'), danger: true })) return;
+      try { await P.delStaff(v.id); SP.toast(t('staffDeleted')); onSaved(); } catch (x) { SP.toast(SP.errText(x)); }
+    };
+  }
+  SP.route(/^staff$/, async (m, n) => {
+    if (gate(n) || !guard(n, 'staffadmin')) return;
+    shell(bar(t('staffT'), `<button type="button" class="iconbtn" id="sadd" aria-label="${esc(t('staffAdd'))}">${I('plus')}</button>`) + `<main class="wrap mine"><div id="sl"><div class="sk sk-row"></div></div>
+      <button type="button" class="btn btn-signal" id="sadd2">${I('plus')} ${esc(t('staffAdd'))}</button></main>`);
+    let list = [], branches = [];
+    try { [list, branches] = await Promise.all([P.staff(), api.shops({ p_limit: 100 }).then(r => r.items)]); } catch (e) { if (SP.alive(n)) $('#sl').innerHTML = SP.errBox(e); return; }
+    if (!SP.alive(n)) return;
+    const bname = id => (branches.find(b => b.id === id) || {}).name || t('staffAllBranches');
+    $('#sl').innerHTML = list.length ? list.map((v, i) => `<button type="button" class="arow staff-row" data-i="${i}"><span class="hexav"><span>${esc(SP.initial(v.name || v.email))}</span></span>
+        <span class="ar-main"><b>${esc(v.name || v.email)} ${!v.active ? `<span class="pill demo">${esc(t('staffOff'))}</span>` : !v.user_id ? `<span class="pill demo">${esc(t('staffWaiting'))}</span>` : ''}</b>
+        <small class="ltr">${esc(v.email)}</small><small>${esc(bname(v.branch_id))} · ${esc((v.perms || []).map(p => t('perm_' + p)).join('، ') || '—')}</small></span>${I('chevL', 'dirx')}</button>`).join('')
+      : empty('user', t('staffT'), t('noStaff'));
+    const again = () => SP.render();
+    $('#sl').onclick = e => { const b = e.target.closest('[data-i]'); if (b) staffSheet(list[+b.dataset.i], branches, again); };
+    $('#sadd').onclick = $('#sadd2').onclick = () => staffSheet(null, branches, again);
+    SP.done(n);
+  });
+})();

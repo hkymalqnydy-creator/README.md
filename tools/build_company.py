@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Builds the single-company edition of the app (one company, its branches and its customers) into its own folder,
+with the company's name, icons, app ids and settings. The result is a complete project: web app, database setup,
+invoice-reader function, sync bridge, Android/iPhone/Windows packaging and the guide.
+
+  python3 tools/build_company.py --name Corssky --email owner@corssky.ly --brand branding/corssky/png --out corssky
+
+--demo (default on) lets the app run without a server, with sample data kept on the device; it switches itself off
+as soon as supabaseUrl and supabaseKey are filled in config.js."""
+import argparse
+import json
+import os
+import re
+import shutil
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WEB = ['index.html', 'privacy.html', 'sw.js', 'css', 'js', 'LICENSE.txt']
+
+
+def read(p):
+    with open(p, encoding='utf-8') as f:
+        return f.read()
+
+
+def write(p, text):
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
+
+
+def copy(src, dst):
+    if os.path.isdir(src):
+        shutil.copytree(src, dst, ignore=shutil.ignore_patterns('node_modules', 'www', 'app', '__pycache__', 'sparat_sync.ini'))
+    else:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(src, dst)
+
+
+def sub(text, old, new, count=1):
+    if old not in text:
+        raise SystemExit('build: expected text not found: ' + old[:60])
+    return text.replace(old, new) if count == 0 else text.replace(old, new, count)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--name', required=True, help='company / app name, e.g. Corssky')
+    ap.add_argument('--email', required=True, help='owner e-mail used by the demo (password 123456)')
+    ap.add_argument('--brand', required=True, help='folder with the brand PNGs (see branding/corssky/make_assets.py)')
+    ap.add_argument('--out', required=True, help='output folder (replaced)')
+    ap.add_argument('--country', default='LY')
+    ap.add_argument('--app-id', default='', help='Android/iOS id, default ly.<name>.app')
+    ap.add_argument('--tagline-ar', default='قطع غيار السيارات الكورية واليابانية')
+    ap.add_argument('--tagline-en', default='Korean & Japanese car parts')
+    ap.add_argument('--no-demo', action='store_true')
+    a = ap.parse_args()
+    name, slug = a.name.strip(), re.sub(r'[^a-z0-9]+', '', a.name.lower()) or 'company'
+    app_id = a.app_id or 'ly.%s.app' % slug
+    out = os.path.abspath(a.out)
+    brand = os.path.abspath(a.brand)
+    if os.path.exists(out):
+        shutil.rmtree(out)
+    os.makedirs(out)
+
+    # web app
+    for k in WEB:
+        copy(os.path.join(ROOT, k), os.path.join(out, k))
+    copy(os.path.join(ROOT, 'supabase'), os.path.join(out, 'supabase'))
+    copy(os.path.join(ROOT, 'tools', 'sync'), os.path.join(out, 'tools', 'sync'))
+    for f in os.listdir(brand):
+        if f.endswith('.png') and not f.startswith('app-'):
+            copy(os.path.join(brand, f), os.path.join(out, 'icons', f))
+    svg = os.path.join(os.path.dirname(brand), 'svg', 'icon.svg')
+    if os.path.exists(svg):
+        copy(svg, os.path.join(out, 'icons', 'icon.svg'))
+
+    write(os.path.join(out, 'config.js'), """/* %(name)s settings. Put your Supabase project URL and its public key here (Project Settings → API).
+   The public key ("anon" / "publishable") is safe in the browser: the database rules in supabase/setup.sql protect the data.
+   While both are empty and demo is true, the app runs as a demo with sample data kept on this device. */
+window.SPARAT_CONFIG = {
+  mode: 'company',          // one company with its branches, customers, staff and sales system
+  appName: %(jname)s,
+  supabaseUrl: '',          // e.g. 'https://abcdefghijkl.supabase.co'
+  supabaseKey: '',          // the anon / publishable key
+  siteUrl: '',              // public address of the app, e.g. 'https://parts.example.ly/' (used in share links and e-mails)
+  defaultCountry: %(jcountry)s,
+  defaultLang: '',          // '' = follow the phone's language; or 'ar', 'en', 'fr', 'es', 'de', 'tr', 'ru', 'zh'
+  demo: %(demo)s,             // demo data on the device while no server is set
+  demoEmail: %(jemail)s       // demo owner login (password 123456)
+  // aiScan: false          // stop the app from trying the AI invoice reader (supabase/functions/scan-invoice)
+};
+""" % {'name': name, 'jname': json.dumps(name), 'jcountry': json.dumps(a.country), 'demo': 'false' if a.no_demo else 'true', 'jemail': json.dumps(a.email)})
+
+    m = json.loads(read(os.path.join(ROOT, 'manifest.webmanifest')))
+    m.update({'name': name, 'short_name': name, 'description': '%s · %s. %s' % (name, a.tagline_ar, a.tagline_en), 'background_color': '#0d2038',
+              'categories': ['shopping', 'business', 'productivity']})
+    m['shortcuts'] = [
+        {'name': 'نقطة البيع', 'short_name': 'البيع', 'url': './#pos', 'icons': [{'src': 'icons/icon-192.png', 'sizes': '192x192'}]},
+        {'name': 'استلام بضاعة', 'short_name': 'استلام', 'url': './#receive', 'icons': [{'src': 'icons/icon-192.png', 'sizes': '192x192'}]},
+        {'name': 'رقم الشاصي (VIN)', 'short_name': 'VIN', 'url': './#vin', 'icons': [{'src': 'icons/icon-192.png', 'sizes': '192x192'}]},
+    ]
+    write(os.path.join(out, 'manifest.webmanifest'), json.dumps(m, ensure_ascii=False, indent=2) + '\n')
+
+    h = read(os.path.join(out, 'index.html'))
+    desc = '%s: %s، والطلب واتساب ومنظومة مبيعات للشركة. %s.' % (name, a.tagline_ar, a.tagline_en)
+    h = sub(h, '<title>سبيرات · Sparat</title>', '<title>%s</title>' % name)
+    h = re.sub(r'<meta name="description" content="[^"]*">', '<meta name="description" content="%s">' % desc, h, count=1)
+    h = re.sub(r'<meta property="og:description" content="[^"]*">', '<meta property="og:description" content="%s">' % desc, h, count=1)
+    h = sub(h, '<meta name="apple-mobile-web-app-title" content="سبيرات">', '<meta name="apple-mobile-web-app-title" content="%s">' % name)
+    h = sub(h, '<meta property="og:title" content="سبيرات · Sparat">', '<meta property="og:title" content="%s">' % name)
+    h = sub(h, 'aria-label="سبيرات"', 'aria-label="%s"' % name)
+    h = sub(h, 'لاستخدام سبيرات · Please enable JavaScript to use Sparat.', 'لاستخدام %s · Please enable JavaScript to use %s.' % (name, name))
+    write(os.path.join(out, 'index.html'), h)
+
+    p = read(os.path.join(out, 'privacy.html'))
+    p = p.replace('Sparat Privacy Policy', '%s Privacy Policy' % name).replace('تطبيق سبيرات', 'تطبيق %s' % name).replace('Sparat app', '%s app' % name)
+    write(os.path.join(out, 'privacy.html'), p)
+
+    # its own offline caches, so it never clears another app's caches on the same web address
+    s = read(os.path.join(out, 'sw.js')).replace("'sparat-", "'%s-" % slug).replace("startsWith('sparat-')", "startsWith('%s-')" % slug)
+    write(os.path.join(out, 'sw.js'), s)
+
+    # Android / iPhone (Capacitor) and Windows (Electron)
+    pk = os.path.join(out, 'packaging')
+    copy(os.path.join(ROOT, 'packaging', 'android-ios'), os.path.join(pk, 'android-ios'))
+    copy(os.path.join(ROOT, 'packaging', 'windows'), os.path.join(pk, 'windows'))
+    for f in os.listdir(brand):
+        if f.startswith('app-'):
+            copy(os.path.join(brand, f), os.path.join(pk, 'android-ios', 'assets', f[4:]))
+    cap = json.loads(read(os.path.join(pk, 'android-ios', 'capacitor.config.json')))
+    cap.update({'appId': app_id, 'appName': name})
+    cap.setdefault('android', {})['backgroundColor'] = '#0d2038'
+    cap.setdefault('ios', {})['backgroundColor'] = '#0d2038'
+    write(os.path.join(pk, 'android-ios', 'capacitor.config.json'), json.dumps(cap, ensure_ascii=False, indent=2) + '\n')
+    pj = json.loads(read(os.path.join(pk, 'android-ios', 'package.json')))
+    pj.update({'name': slug + '-mobile', 'description': '%s for Android and iPhone (Capacitor wrapper around the web app)' % name})
+    write(os.path.join(pk, 'android-ios', 'package.json'), json.dumps(pj, ensure_ascii=False, indent=2) + '\n')
+    wj = json.loads(read(os.path.join(pk, 'windows', 'package.json')))
+    wj.update({'name': slug + '-windows', 'productName': name, 'description': '%s desktop app for Windows' % name})
+    wj['build'].update({'appId': app_id.replace('.app', '.desktop'), 'productName': name})
+    wj['build']['nsis']['shortcutName'] = name
+    write(os.path.join(pk, 'windows', 'package.json'), json.dumps(wj, ensure_ascii=False, indent=2) + '\n')
+    wm = read(os.path.join(pk, 'windows', 'main.js')).replace("title: 'Sparat'", "title: %s" % json.dumps(name)).replace("'#15181d'", "'#0d2038'").replace('Sparat for Windows', '%s for Windows' % name)
+    write(os.path.join(pk, 'windows', 'main.js'), wm)
+
+    # guide
+    guide = os.path.join(ROOT, 'docs', 'دليل-نسخة-الشركة.md')
+    if os.path.exists(guide):
+        write(os.path.join(out, 'docs', 'دليل-نسخة-الشركة.md'), read(guide).replace('{{NAME}}', name).replace('{{EMAIL}}', a.email))
+    readme = os.path.join(ROOT, 'docs', 'company-README.md')
+    if os.path.exists(readme):
+        write(os.path.join(out, 'README.md'), read(readme).replace('{{NAME}}', name).replace('{{EMAIL}}', a.email).replace('{{APPID}}', app_id))
+    print('built %s edition in %s' % (name, out))
+
+
+if __name__ == '__main__':
+    main()

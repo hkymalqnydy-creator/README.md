@@ -31,6 +31,7 @@
     const b = $('#minst');
     if (b) b.onclick = async () => { if (SP.canInstall) await SP.install(); else SP.toast(t('iosInstall'), 7000); };
   }
+  SP.prefs = prefs; SP.wirePrefs = wirePrefs;
   const mcard = s => `<section class="mcard"><a class="mc-head" href="#s-${s.id}">${avatar(s)}<span><b>${esc(s.name)}${vb(s)}</b>
       <small><span aria-hidden="true">${SP.flag(s.country)}</span> ${esc(s.city)}${s.last_at ? ' · ' + esc(t('lastPart', { ago: SP.ago(s.last_at) })) : ''}</small></span></a>
     <div class="mstats"><div class="mstat"><b class="num">${esc(SP.fmtNum(s.product_count))}</b><small>${esc(t('statParts'))}</small></div>
@@ -41,6 +42,7 @@
 
   SP.route(/^mine$/, async (m, n) => {
     if (gate(n)) return;
+    if (SP.company && SP.customerView && !S.admin && !(S.myShops && S.myShops.length)) return SP.customerView(m, n);
     if (!S.user) {
       shell(bar(t('mine'), '', { noBack: true }) + `<main class="wrap mine"><section class="onb"><h2>${esc(t('sellT'))}</h2>
         <ol class="steps">${[1, 2, 3].map(i => `<li><span><b>${esc(t('step' + i + 'T'))}</b><small>${esc(t('step' + i + 'B'))}</small></span></li>`).join('')}</ol>
@@ -55,6 +57,7 @@
       <section class="mcard acct"><div class="mc-head">${I('user')}<span><b>${esc(t('signedInT'))}</b><small class="ltr">${esc(S.user.email)}</small></span>
         <button type="button" class="btn btn-ghost sm" id="lo">${I('logout', 'dirx')} ${esc(t('logout'))}</button></div></section>
       ${S.admin ? `<a class="admin-entry" href="#admin">${I('shield')}<span><b>${esc(t('admin'))}</b><small>${esc(t('adminB'))}</small></span>${I('chevL', 'dirx')}</a>` : ''}
+      ${SP.posEntry ? SP.posEntry() : ''}
       ${shops.length ? `<div class="sec-h"><h2>${esc(t(shops.length > 1 ? 'yourShops' : 'yourShop'))}</h2></div>${shops.map(mcard).join('')}<a class="btn btn-ghost" href="#new-shop">${I('plus')} ${esc(t('anotherShop'))}</a>`
         : `<section class="onb"><h2>${esc(t('registerT'))}</h2><p>${esc(t('ctaB'))}</p><a class="btn btn-signal" href="#new-shop">${I('store')} ${esc(t('registerShop'))}</a></section>`}
       ${prefs()}</main>`);
@@ -71,6 +74,9 @@
     shell(bar(t(up ? 'signupT' : 'loginT')) + `<main class="wrap form-wrap">
       <div class="chips light authtabs"><a class="chip${up ? '' : ' on'}" href="#login"${up ? '' : ' aria-current="page"'}>${esc(t('tabIn'))}</a><a class="chip${up ? ' on' : ''}" href="#signup"${up ? ' aria-current="page"' : ''}>${esc(t('tabUp'))}</a></div>
       <form class="form" id="af" novalidate style="margin-top:18px">
+        ${up && SP.company ? `<div class="field"><label for="anm">${esc(t('custName'))} <span class="req">*</span></label><input id="anm" class="input" maxlength="80" autocomplete="name" required></div>
+        <div class="row2"><div class="field"><label for="aph">${esc(t('phoneNum'))} <span class="req">*</span></label><input id="aph" class="input" type="tel" inputmode="tel" dir="ltr" maxlength="30" autocomplete="tel"></div>
+          <div class="field"><label for="act">${esc(t('city'))}</label><input id="act" class="input" maxlength="40" autocomplete="address-level2"></div></div>` : ''}
         <div class="field"><label for="ae">${esc(t('email'))}</label><input id="ae" class="input" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" dir="ltr" required></div>
         <div class="field"><label for="ap">${esc(t('password'))}</label><input id="ap" class="input" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" minlength="6" dir="ltr" required>${up ? `<span class="hint">${esc(t('passHint'))}</span>` : ''}</div>
         <p class="form-err" id="aerr" role="alert"></p>
@@ -82,6 +88,10 @@
       const email = $('#ae').value.trim(), pw = $('#ap').value;
       if (!okEmail(email)) { err.textContent = t('badEmail'); $('#ae').focus(); return; }
       if (pw.length < 6) { err.textContent = t('shortPass'); $('#ap').focus(); return; }
+      const prof = $('#anm') ? { name: $('#anm').value.trim(), phone: SP.digits($('#aph').value).trim(), city: $('#act').value.trim() } : null;
+      if (prof && prof.name.length < 2) { err.textContent = t('needCustName'); $('#anm').focus(); return; }
+      if (prof && !SP.waNum(prof.phone)) { err.textContent = t('badPhone'); $('#aph').focus(); return; }
+      if (prof) SP.store('sp_pending_profile', prof);
       btn.classList.add('busy'); btn.textContent = t('wait');
       try {
         const d = up ? await SP.auth.signUp(email, pw) : await SP.auth.signIn(email, pw);
@@ -143,7 +153,7 @@
     const v = s ? { ...s } : { name: '', person: '', whatsapp: '', phone: '', city: S.city || '', area: '', hours: '', about: '', kinds: ['original', 'aftermarket'], makes: [], logo: '', cover: '', country: S.country };
     let cc = v.country;
     const dialHint = () => `+${SP.dialOf(cc)} …`;
-    const pop = D.POPULAR.slice(0, 18);
+    const pop = SP.popularIds().slice(0, 18);
     const makeSet = new Set(v.makes);
     const makeChips = () => [...new Set([...pop, ...v.makes])].map((b, i) => `<input type="checkbox" id="mk${i}" value="${esc(b)}"${makeSet.has(b) ? ' checked' : ''}><label for="mk${i}">${esc(SP.brandName(b))}</label>`).join('');
     shell(bar(t(id ? 'shopEdit' : 'shopNew')) + `<main class="wrap form-wrap"><form class="form" id="sf" novalidate>
@@ -228,8 +238,8 @@
     } catch (e) { return SP.fail(e, n); }
     if (!SP.alive(n)) return;
     if (!s) return shell(bar(t('itemNew')) + `<main class="wrap">${empty('store', t('shopMissingT'), t('shopMissingB'))}</main>`);
-    if (s.owner_id !== S.user.id && !S.admin) return noPerm(t('noPermPart'));
-    const v = p ? { ...p } : { title: '', cat: '', cond: '', price: null, nego: false, qty: null, make: 'any', model: '', y_from: null, y_to: null, part_no: '', descr: '', imgs: [] };
+    if (s.owner_id !== S.user.id && !S.admin && !(SP.can && SP.can('products'))) return noPerm(t('noPermPart'));
+    const v = p ? { ...p } : { title: '', cat: '', cond: '', price: null, nego: false, qty: null, make: 'any', model: '', y_from: null, y_to: null, part_no: '', descr: '', imgs: [], sku: '', barcode: '', hide_price: false };
     let imgs = v.imgs.slice(), pending = 0;
     const cur = s.currency || SP.currencyOf(s.country);
     shell(bar(t(editId ? 'itemEdit' : 'itemNew')) + `<main class="wrap form-wrap">
@@ -242,6 +252,11 @@
         <div class="row2"><div class="field"><label for="ip">${esc(t('priceCur', { cur }))}</label><input id="ip" class="input num" inputmode="decimal" dir="ltr" value="${v.price == null ? '' : esc(v.price)}" maxlength="12"><span class="hint">${esc(t('priceHint'))}</span></div>
           <div class="field"><label for="iq">${esc(t('qty'))}</label><input id="iq" class="input num" inputmode="numeric" dir="ltr" value="${v.qty == null ? '' : esc(v.qty)}" maxlength="6"></div></div>
         <label class="switch"><input type="checkbox" id="ing"${v.nego ? ' checked' : ''}><span></span>${esc(t('negoL'))}</label>
+        ${SP.company ? `<label class="switch"><input type="checkbox" id="ihp"${v.hide_price ? ' checked' : ''}><span></span>${esc(t('hidePriceL'))}</label>
+        ${S.admin || (SP.can && SP.can('costs')) ? `<div class="field"><label for="icost">${esc(t('costL'))}</label><input id="icost" class="input num" inputmode="decimal" dir="ltr" maxlength="12" value="${v.cost == null ? '' : esc(v.cost)}"><span class="hint">${esc(t('costHint'))}</span></div>` : ''}
+        <div class="field"><label for="isku">${esc(t('skuL'))}</label><input id="isku" class="input mono" dir="ltr" maxlength="60" value="${esc(v.sku || '')}" spellcheck="false"><span class="hint">${esc(t('skuHint'))}</span></div>
+        <div class="field"><label for="ibar">${esc(t('barcodeL'))}</label><div class="inrow"><input id="ibar" class="input mono" dir="ltr" maxlength="60" value="${esc(v.barcode || '')}" spellcheck="false" autocomplete="off">
+          <button type="button" class="btn btn-ink sq" id="ibarscan" aria-label="${esc(t('scanBtn'))}" title="${esc(t('scanBtn'))}">${I('scan')}</button></div><span class="hint">${esc(t('barcodeHint'))}</span></div>` : ''}
         <fieldset class="field fitset"><legend>${esc(t('fitsQ'))}</legend>
           <select id="imake" class="input" aria-label="${esc(t('brand'))}">${SP.brandOptions(v.make, null, opt('any', t('anyCar'), v.make) + opt('other', t('otherBrand'), v.make))}</select>
           <select id="imodel" class="input" aria-label="${esc(t('model'))}"></select>
@@ -281,6 +296,7 @@
       };
     }
     drawPhotos();
+    if ($('#ibarscan')) $('#ibarscan').onclick = async () => { const c = await SP.scanCode({ title: t('barcodeL') }); if (c) { $('#ibar').value = c; $('#ibar').focus(); } };
     /* car fit */
     const mk = $('#imake'), md = $('#imodel'), mx = $('#imodelx'), yf = $('#iyf'), yt = $('#iyt');
     const modelVal = () => md.value === '__other' ? mx.value.trim() : md.value;
@@ -324,6 +340,8 @@
         model: make === 'any' ? '' : (make === 'other' ? mx.value.trim() : modelVal()).slice(0, 60),
         y_from: yFrom, y_to: yTo, part_no: $('#ipn').value.trim().toUpperCase(), descr: $('#id').value.trim(), imgs: imgs.slice(0, 6)
       };
+      if ($('#isku')) { val.sku = $('#isku').value.trim() || null; val.barcode = $('#ibar').value.trim() || null; val.hide_price = $('#ihp').checked; }
+      if ($('#icost')) { const c = SP.digits($('#icost').value).replace(/[\s,]/g, '').trim(); val.cost = c === '' ? null : Number(c); if (val.cost != null && !(val.cost >= 0)) return bad(t('badPrice'), $('#icost')); }
       const b = addAnother ? $('#iadd') : $('#igo');
       b.classList.add('busy');
       try {
@@ -332,7 +350,7 @@
         if (addAnother) {
           SP.toast(t('publishedNext'));
           imgs = []; drawPhotos();
-          ['#it', '#ip', '#iq', '#ipn', '#id'].forEach(q => { $(q).value = ''; });
+          ['#it', '#ip', '#iq', '#ipn', '#id', '#isku', '#ibar', '#icost'].forEach(q => { if ($(q)) $(q).value = ''; });
           $('#ing').checked = false;
           b.classList.remove('busy');
           window.scrollTo(0, 0); $('#it').focus({ preventScroll: true });
@@ -360,7 +378,7 @@
     if (!S.admin) return shell(bar(t('admin')) + `<main class="wrap">${empty('lock', t('adminOnly'), t('notAdmin'))}</main>`);
     const st = S.settings || {};
     S.acc = S.acc || '';
-    shell(bar(t('admin')) + `<main class="wrap mine"><div class="astats" id="ast">${'<div class="sk" style="height:74px"></div>'.repeat(4)}</div>
+    shell(bar(t('admin')) + `<main class="wrap mine">${SP.adminTabs ? SP.adminTabs('admin') : ''}<div class="astats" id="ast">${'<div class="sk" style="height:74px"></div>'.repeat(4)}</div>
       <section class="mcard"><h2 class="lbl">${esc(t('settingsT'))}</h2><form class="form" id="stf">
         <div class="field"><label for="saw">${esc(t('adminWa'))}</label><input id="saw" class="input" type="tel" dir="ltr" value="${esc(st.admin_wa || '')}" maxlength="30"><span class="hint">${esc(t('adminWaHint'))}</span></div>
         <div class="field"><label for="snt">${esc(t('notice'))}</label><textarea id="snt" class="input" maxlength="300" placeholder="${esc(t('noticePh'))}">${esc(st.notice || '')}</textarea></div>
@@ -405,5 +423,4 @@
   SP.L.T.noPermT = SP.L.T.noPermT || ["ليست لديك صلاحية", "You don’t have permission", "Accès non autorisé", "No tienes permiso", "Keine Berechtigung", "Yetkiniz yok", "Нет доступа", "没有权限"];
   SP.L.T.negoL = SP.L.T.negoL || SP.L.T.negoL;
 
-  SP.boot();
 })();

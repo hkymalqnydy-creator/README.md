@@ -1,0 +1,15 @@
+{
+  "appId": "ly.corssky.app",
+  "appName": "Corssky",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#0d2038"
+  },
+  "ios": {
+    "backgroundColor": "#0d2038",
+    "contentInset": "never"
+  }
+}

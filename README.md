@@ -13,6 +13,24 @@
 - **للإدارة**: أول حساب يُنشأ يصبح المدير. يوثّق المحلات، ويعدّل أي محل، ويضع إعلاناً في الرئيسية.
 - **الأمان**: قواعد صلاحيات داخل قاعدة البيانات (RLS)، فلا يقدر أحد يعدّل محل غيره حتى لو تلاعب بالتطبيق.
 
+## نسخة الشركة الواحدة (مثال: [`corssky/`](corssky/))
+
+نفس الكود يشتغل كتطبيق لشركة واحدة وفروعها (`mode: 'company'` في `config.js`)، ويضيف:
+
+- تحكم كامل للمالك: الاسم والشعار والنصوص، إخفاء الأسعار (للكل، للمسجّلين، للمعتمدين، أو لقطع معينة)، اعتماد الزبائن، والماركات المعروضة.
+- سلة طلب على واتساب الشركة، ومساعد رد آلي بقواعد يكتبها المالك، ونصوص جاهزة لـ WhatsApp Business.
+- منظومة مبيعات: نقطة بيع، فواتير وطباعة ومرتجعات، تقارير وأرباح، موظفين بصلاحيات تتحقق منها قاعدة البيانات.
+- باركود بكاميرا الهاتف (أندرويد وآيفون) أو بجهاز باركود، واستلام بضاعة بتصوير فاتورة المورّد.
+- ربط مع منظومة المبيعات الحالية: Excel/CSV، أو برنامج `tools/sync/sparat_sync.py`، أو API.
+
+تبني نسخة باسم أي شركة وأيقوناتها بأمر واحد:
+
+```
+python3 tools/build_company.py --name Corssky --email owner@corssky.ly --brand branding/corssky/png --out corssky
+```
+
+الدليل: [`docs/دليل-نسخة-الشركة.md`](docs/دليل-نسخة-الشركة.md).
+
 ## التشغيل (مرة واحدة)
 
 1. أنشئ مشروعاً مجانياً على [supabase.com](https://supabase.com).
@@ -36,10 +54,18 @@
 | `js/data.js` | الدول والماركات والموديلات والأقسام |
 | `js/i18n.js` | النصوص بثماني لغات |
 | `js/vin.js` | قراءة رقم الشاصي |
+| `js/company.js`, `js/pos.js`, `js/scan.js` | نسخة الشركة، منظومة المبيعات، الباركود واستلام البضاعة |
+| `js/demo.js` | خادم تجريبي داخل المتصفح (للعرض والاختبارات) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | التثبيت والعمل بدون إنترنت |
-| `supabase/setup.sql` | الجداول والصلاحيات ودوال البحث |
+| `supabase/setup.sql` | الجداول والصلاحيات ودوال البحث والمبيعات والاستلام |
+| `supabase/functions/scan-invoice` | قراءة فواتير الموردين بالذكاء الاصطناعي (اختياري) |
+| `tools/sync` | برنامج ربط منظومة المبيعات (Python) |
+| `tools/build_company.py`, `branding/` | بناء نسخة شركة باسمها وأيقوناتها |
+| `tests/` | اختبارات قاعدة البيانات والمتصفح ودالة القراءة |
 | `privacy.html` | سياسة الخصوصية (تطلبها المتاجر) |
 
 ## English
 
 Static PWA (no build step) + Supabase (Postgres, Auth, Storage). Run `supabase/setup.sql` in the SQL editor, turn off "Confirm email" (or set up SMTP), set the Site URL, put the project URL and anon key in `config.js`, and host the folder on any static host. The first account to sign up becomes the admin.
+
+Company edition (`mode: 'company'`): one company with branches, owner-controlled price visibility and branding, WhatsApp orders, an auto-reply assistant, a sales system (POS, invoices, returns, reports, staff permissions enforced in the database), barcode scanning (native BarcodeDetector or ZXing on iPhone), receiving stock from a photographed supplier invoice (Claude vision via `supabase/functions/scan-invoice`, or on-device Tesseract), and sales-system sync (CSV/XLSX, `tools/sync`, or the `sync_products` RPC). Build a branded copy with `tools/build_company.py`.

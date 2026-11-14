@@ -56,6 +56,8 @@
   function t(key, vars) {
     const row = L.T[key];
     let s = row ? (row[LI] != null ? row[LI] : row[1]) : key;
+    const bn = (S.settings && S.settings.brand_name) || CFG.appName;
+    if (bn && row) s = s.replace(/سبيرات|Sparat/g, bn);
     if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => vars[k] != null ? vars[k] : '');
     return s;
   }
@@ -75,11 +77,18 @@
       return new Intl.NumberFormat(LANG + '-u-nu-latn', { style: 'currency', currency: cur || 'USD', currencyDisplay: 'narrowSymbol', maximumFractionDigits: v % 1 ? 2 : 0 }).formatToParts(v);
     } catch (e) { return [{ type: 'integer', value: fmtNum(v) }, { type: 'literal', value: ' ' }, { type: 'currency', value: cur || '' }]; }
   }
-  function priceHTML(v, cur) {
-    if (v == null) return `<span class="price call">${esc(t('callPrice'))}</span>`;
+  /* Why a price is not shown: owner hid it, or the customer must sign in / be approved first. */
+  function hiddenLabel() {
+    const m = (S.settings && S.settings.price_mode) || 'all';
+    if ((m === 'members' || m === 'approved') && !S.user) return t('loginPrice');
+    if (m === 'approved' && S.user && !(S.customer && S.customer.approved)) return t('approvedPrice');
+    return t('callPrice');
+  }
+  function priceHTML(v, cur, hidden) {
+    if (v == null) return hidden ? `<span class="price call locked">${I('lock')} ${esc(hiddenLabel())}</span>` : `<span class="price call">${esc(t('callPrice'))}</span>`;
     return '<span class="price num">' + priceParts(v, cur).map(p => p.type === 'currency' ? `<small>${esc(p.value)}</small>` : esc(p.value)).join('') + '</span>';
   }
-  const priceText = (v, cur) => v == null ? t('callPrice') : priceParts(v, cur).map(p => p.value).join('');
+  const priceText = (v, cur, hidden) => v == null ? (hidden ? hiddenLabel() : t('callPrice')) : priceParts(v, cur).map(p => p.value).join('');
   function ago(ms) {
     if (!ms) return '';
     const s = Math.max(0, (Date.now() - ms) / 1000);
@@ -206,7 +215,10 @@
   /* ---------- backend (Supabase) ---------- */
   let sb = null;
   function initBackend() {
-    if (!CFG.supabaseUrl || !CFG.supabaseKey) return 'config';
+    if (!CFG.supabaseUrl || !CFG.supabaseKey) {
+      if (CFG.demo && window.SPARAT_DEMO) { sb = SP.sb = window.SPARAT_DEMO.create({ seed: true, persist: true }); SP.demo = true; return ''; }
+      return 'config';
+    }
     if (!window.supabase || typeof window.supabase.createClient !== 'function') return 'lib';
     sb = SP.sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
       auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
@@ -226,6 +238,7 @@
     if (code === '42501' || /row-level security|permission denied|not authorized|JWT/i.test(m)) return t('errPerm');
     if (code === 413 || code === '413' || /Payload too large|maximum allowed size/i.test(m)) return t('errBigImg');
     if (/mime type|invalid_mime|unsupported/i.test(m)) return t('errImgType');
+    if (code === '23505' || /duplicate key/i.test(m)) return /sku/i.test(m) ? t('dupSku') : t('errData');
     if (['23514', '22P02', '23502', '22001', '22003'].includes(code) || /violates check|invalid input/i.test(m)) return t('errData');
     return t('errGeneric');
   }
@@ -245,7 +258,7 @@
   function normProduct(r) {
     const p = {
       id: r.id, shop_id: r.shop_id, owner_id: r.owner_id, title: r.title || '', cat: r.cat || 'other', cond: r.cond || 'aftermarket',
-      price: r.price == null ? null : Number(r.price), nego: !!r.nego, qty: r.qty == null ? null : +r.qty,
+      price: r.price == null ? null : Number(r.price), price_hidden: !!r.price_hidden, hide_price: !!r.hide_price, cost: r.cost == null ? null : Number(r.cost), sku: r.sku || '', barcode: r.barcode || '', nego: !!r.nego, qty: r.qty == null ? null : +r.qty,
       make: r.make || 'any', model: r.model || '', y_from: r.y_from || null, y_to: r.y_to || null, part_no: r.part_no || '',
       descr: r.descr || '', imgs: arr(r.imgs), status: r.status || 'active', created_at: ms(r.created_at),
       shop: r.shop ? normShop(r.shop, true) : (S.scache.get(r.shop_id) || null)
@@ -256,7 +269,7 @@
   /* Words for the search index: title, numbers, brand and model in Arabic and Latin, category and condition in all languages. */
   function searchText(p) {
     const b = BRAND.get(p.make), m = modelObj(p.make, p.model);
-    const parts = [p.title, p.part_no, p.part_no ? p.part_no.replace(/[\s\-./]/g, '') : '', p.model, m && m.ar, b && b.en, b && b.ar, p.descr];
+    const parts = [p.title, p.part_no, p.part_no ? p.part_no.replace(/[\s\-./]/g, '') : '', p.sku, p.sku ? String(p.sku).replace(/[\s\-./]/g, '') : '', p.barcode, p.model, m && m.ar, b && b.en, b && b.ar, p.descr];
     (L.CAT[p.cat] || []).forEach(r => parts.push(r[0]));
     (L.COND[p.cond] || []).forEach(r => parts.push(r[1]));
     return norm(parts.filter(Boolean).join(' ')).slice(0, 3000);
@@ -312,7 +325,7 @@
       return m;
     },
     async settings() { const d = chk(await sb.from('settings').select('*').eq('id', 1).maybeSingle()); S.settings = d || {}; return S.settings; },
-    async saveSettings(v) { S.settings = chk(await sb.from('settings').update(v).eq('id', 1).select().maybeSingle()) || S.settings; return S.settings; },
+    async saveSettings(v) { S.settings = chk(await sb.from('settings').update(v).eq('id', 1).select().maybeSingle()) || S.settings; applyBranding(); return S.settings; },
     async saveShop(v, id) {
       const q = id ? sb.from('shops').update(v).eq('id', id) : sb.from('shops').insert(v);
       const s = normShop(chk(await q.select().single()));
@@ -339,6 +352,20 @@
     async deleteProduct(p) { chk(await sb.from('products').delete().eq('id', p.id)); S.pcache.delete(p.id); await removePhotos(p.imgs); },
     async verify(id, on) { return normShop(chk(await sb.from('shops').update({ verified: on }).eq('id', id).select().single())); },
     async isAdmin() { try { return !!chk(await sb.rpc('is_admin')); } catch (e) { return false; } },
+    async me() {
+      if (!S.user) { S.customer = null; return null; }
+      S.customer = chk(await sb.from('customers').select('*').eq('user_id', S.user.id).maybeSingle()) || null;
+      return S.customer;
+    },
+    async saveMe(v) {
+      const q = S.customer ? sb.from('customers').update(v).eq('user_id', S.user.id) : sb.from('customers').insert(v);
+      S.customer = chk(await q.select().single());
+      return S.customer;
+    },
+    async customers() { return chk(await sb.from('customers').select('*').order('created_at', { ascending: false }).limit(1000)) || []; },
+    async approve(id, on) { return chk(await sb.from('customers').update({ approved: on }).eq('user_id', id).select().single()); },
+    async importRows(rows, shop) { return chk(await sb.rpc('import_products', { p_rows: rows, p_shop: shop || null })) || {}; },
+    async rotateKey() { return chk(await sb.rpc('rotate_sync_key')); },
     async myShops() {
       if (!S.user) return [];
       S.myShops = (await api.shops({ p_owner: S.user.id, p_limit: 100 })).items;
@@ -358,9 +385,38 @@
     const u = session && session.user;
     S.user = u ? { id: u.id, email: u.email || '' } : null;
     S.admin = S.user ? await api.isAdmin() : false;
+    if (SP.loadPerms) await SP.loadPerms();
     S.myShops = null;
     if (S.user) await api.myShops().catch(() => { S.myShops = []; });
+    S.customer = null;
+    if (S.user) {
+      await api.me().catch(() => {});
+      const pend = load('sp_pending_profile', null);
+      if (!S.customer && pend && pend.name) { try { await api.saveMe(pend); store('sp_pending_profile', null); } catch (e) { /* retried next sign-in */ } }
+    }
   }
+
+  /* ---------- company edition: brands shown, branding, cart ---------- */
+  function brandIds() { const s = arr(S.settings && S.settings.brands); return s.length ? s : arr(CFG.brands); }
+  function brandsList() { const ids = brandIds(); return ids.length ? D.BRANDS.filter(b => ids.includes(b.id)) : D.BRANDS; }
+  function popularIds() {
+    const ok = brandsList().map(b => b.id), pop = D.POPULAR.filter(id => ok.includes(id));
+    return pop.length >= 8 ? pop : [...new Set([...pop, ...ok])].slice(0, 24);
+  }
+  function applyBranding() {
+    const st = S.settings || {}, root = document.documentElement;
+    if (/^#[0-9a-f]{6}$/i.test(st.accent || '')) root.style.setProperty('--signal', st.accent); else root.style.removeProperty('--signal');
+    const name = st.brand_name || CFG.appName;
+    if (name) document.title = name + (st.tagline ? ' · ' + st.tagline : '');
+  }
+  const cart = {
+    get() { return arr(load('sp_cart', [])).filter(x => x && x.id && x.qty > 0); },
+    set(c) { store('sp_cart', c.slice(0, 100)); document.dispatchEvent(new Event('sp:cart')); },
+    add(id, n) { const c = cart.get(), x = c.find(i => i.id === id); if (x) x.qty = Math.min(999, x.qty + (n || 1)); else c.push({ id, qty: n || 1 }); cart.set(c); },
+    qty(id, q) { cart.set(cart.get().map(i => i.id === id ? { id, qty: Math.max(0, Math.min(999, q)) } : i).filter(i => i.qty > 0)); },
+    count() { return cart.get().reduce((k, i) => k + i.qty, 0); },
+    clear() { cart.set([]); }
+  };
 
   /* ---------- images ---------- */
   function drawScaled(file, maxDim) {
@@ -468,7 +524,8 @@
           setTimeout(() => refreshUser(session).then(() => render()), 0);
         }
       });
-      api.settings().catch(() => { /* defaults */ });
+      await Promise.race([api.settings().catch(() => { /* defaults */ }), sleep(2500)]);
+      applyBranding();
       const h = location.hash;
       if (/error_description=/.test(h)) {
         const m = /error_description=([^&]+)/.exec(h);
@@ -484,6 +541,7 @@
     COUNTRY, BRAND, flag, currencyOf, dialOf, setLang, t, fmtNum, plural, count, countryName, priceHTML, priceText, ago,
     brandName, modelObj, modelName, carText, catName, condName, fitText, fitsCar, waNum, waLink, telHref, prettyPhone,
     setCountry, setCity, setCar, toggleFav, toast, openSheet, confirmSheet, errText, api, auth, refreshUser, searchArgs, queryParts, searchText,
+    hiddenLabel, brandsList, popularIds, applyBranding, cart, company: CFG.mode === 'company',
     uploadPhoto, removePhotos, thumbUrl, imgTag, route, render, go, here, alive, done, install, isIOS, standalone, boot, siteUrl
   });
 })();

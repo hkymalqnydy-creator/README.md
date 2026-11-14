@@ -28,19 +28,21 @@
     let nav = $('#tabs');
     if (!nav) { nav = document.createElement('nav'); nav.id = 'tabs'; nav.className = 'tabs'; document.body.appendChild(nav); }
     nav.setAttribute('aria-label', t('nav'));
-    const T = [['home', '', 'home', 'tabHome'], ['cats', 'cats', 'grid', 'tabCats'], ['shops', 'shops', 'store', 'tabShops'], ['favs', 'favs', 'heart', 'tabFavs'], ['mine', 'mine', 'user', 'tabMine']];
+    const T = [['home', '', 'home', 'tabHome'], ['cats', 'cats', 'grid', 'tabCats'], ['shops', 'shops', 'store', SP.company ? 'tabBranches' : 'tabShops'], ['favs', 'favs', 'heart', 'tabFavs'], ['mine', 'mine', 'user', SP.company ? 'tabAccount' : 'tabMine']];
     nav.innerHTML = `<div class="tabs-in">${T.map(([id, h, ic, k]) => `<a class="tab${SP.tab === id ? ' on' : ''}" href="#${h}"${SP.tab === id ? ' aria-current="page"' : ''}>${I(ic)}<span>${esc(t(k))}</span></a>`).join('')}</div>`;
   }
   function shell(html, o = {}) {
     document.body.classList.toggle('has-actionbar', !!o.actionbar);
     $('#app').innerHTML = html;
     tabs();
+    if (SP.afterShell) SP.afterShell(o);
   }
   const bar = (title, actions, o = {}) => `<header class="topbar"><div class="wrap">${o.noBack ? '' : `<button type="button" class="iconbtn" data-act="back" aria-label="${esc(t('back'))}">${I('back', 'dirx')}</button>`}<h1 class="tb-title">${esc(title)}</h1><div class="tb-actions">${actions || ''}</div></div></header>`;
   function homeBar() {
-    return `<header class="topbar"><div class="wrap"><a class="brand" href="#"><span class="brand-mark">${I('nut')}</span><span>${esc(t('app'))}</span></a>
+    const st = S.settings || {};
+    return `<header class="topbar"><div class="wrap"><a class="brand" href="#">${st.logo ? `<img class="brand-logo" src="${esc(st.logo)}" alt="">` : `<span class="brand-mark">${I('nut')}</span>`}<span>${esc(t('app'))}</span></a>
       <button type="button" class="citypill" data-act="loc" aria-label="${esc(t('country'))}"><span class="fl" aria-hidden="true">${SP.flag(S.country)}</span><span>${esc(S.city || SP.countryName(S.country))}</span>${I('chevD')}</button>
-      <button type="button" class="iconbtn" data-act="lang" aria-label="${esc(t('language'))}">${I('globe')}</button></div></header>`;
+      ${SP.cartBtn ? SP.cartBtn() : ''}<button type="button" class="iconbtn" data-act="lang" aria-label="${esc(t('language'))}">${I('globe')}</button></div></header>`;
   }
   const skel = k => Array.from({ length: k }, () => '<div class="sk sk-card"></div>').join('');
   const empty = (icon, title, body, btn) => `<div class="empty">${I(icon)}<h3>${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ''}${btn || ''}</div>`;
@@ -72,7 +74,7 @@
         <div class="ribbons">${p.status === 'sold' ? `<span class="ribbon sold">${esc(t('soldOut'))}</span>` : ''}${fits ? `<span class="ribbon">${esc(t('fitsYourCar'))}</span>` : ''}</div>
         <span class="cond ${esc(p.cond)}">${esc(SP.condName(p.cond, true))}</span></div>
       <div class="card-body">${p.part_no ? `<span class="pn">${esc(p.part_no)}</span>` : ''}<h3 class="card-title">${esc(p.title)}</h3>
-        <p class="fit">${esc(SP.fitText(p))}</p>${SP.priceHTML(p.price, cur)}${p.shop ? `<p class="card-shop">${esc(p.shop.name)} · ${esc(p.shop.city)}</p>` : ''}</div></a>
+        <p class="fit">${esc(SP.fitText(p))}</p>${SP.priceHTML(p.price, cur, p.price_hidden)}${p.shop ? `<p class="card-shop">${esc(p.shop.name)} · ${esc(p.shop.city)}</p>` : ''}</div></a>
       <button type="button" class="fav${on ? ' on' : ''}" data-act="fav" data-id="${p.id}" aria-pressed="${on}" aria-label="${esc(t(on ? 'favRemove' : 'favAdd'))}">${I('heart', on ? 'f' : '')}</button></article>`;
   }
   const cards = items => items.map(card).join('');
@@ -110,8 +112,8 @@
 
   /* ---------- option lists ---------- */
   function brandOptions(cur, first, extra) {
-    const pop = D.POPULAR.map(id => BRAND.get(id)).filter(Boolean);
-    const rest = D.BRANDS.filter(b => !D.POPULAR.includes(b.id)).sort((a, b) => SP.brandName(a.id).localeCompare(SP.brandName(b.id), SP.LANG));
+    const P = SP.popularIds(), pop = P.map(id => BRAND.get(id)).filter(Boolean);
+    const rest = SP.brandsList().filter(b => !P.includes(b.id)).sort((a, b) => SP.brandName(a.id).localeCompare(SP.brandName(b.id), SP.LANG));
     return (first != null ? opt('', first, cur) : '') + (extra || '') +
       `<optgroup label="${esc(t('popularBrands'))}">${pop.map(b => opt(b.id, SP.brandName(b.id), cur)).join('')}</optgroup>` +
       `<optgroup label="${esc(t('allBrandsT'))}">${rest.map(b => opt(b.id, SP.brandName(b.id), cur)).join('')}</optgroup>`;
@@ -361,15 +363,15 @@
   SP.route(/^$/, async (m, n) => {
     if (gate(n)) return;
     const car = S.car, notice = (S.settings && S.settings.notice) || '';
-    const brands = D.POPULAR.slice(0, 16).map(id => BRAND.get(id)).filter(Boolean);
+    const brands = SP.popularIds().slice(0, 16).map(id => BRAND.get(id)).filter(Boolean);
     shell(homeBar() + `<section class="hero"><div class="wrap">
-        <h1>${esc(t('heroA'))} <em>${esc(t('heroB'))}</em></h1><p>${esc(t('heroSub'))}</p>
+        ${S.settings.hero_title ? `<h1>${esc(S.settings.hero_title)}</h1>` : `<h1>${esc(t('heroA'))} <em>${esc(t('heroB'))}</em></h1>`}<p>${esc(S.settings.hero_sub || t('heroSub'))}</p>
         <form class="searchbox" role="search" id="hs">${I('search')}<input type="search" name="q" placeholder="${esc(t('searchPh'))}" enterkeyhint="search" aria-label="${esc(t('search'))}"><button class="go">${esc(t('search'))}</button></form>
         <div class="hero-row"><button type="button" class="plate" data-act="car"><span class="plate-band">${I('car')}</span>
           <span class="plate-main"><small>${esc(t('myCar'))}</small><strong>${esc(car ? SP.carText(car) : t('setCar'))}</strong></span>
           <span class="plate-edit">${car ? esc(t('change')) : I('plus')}</span></button>
           <div class="pulse" id="pulse" aria-live="polite"></div></div></div></section><div class="hazard"></div>
-      <main class="wrap" id="home">${installBanner()}
+      <main class="wrap" id="home">${SP.demo ? `<a class="banner warn demo-b" href="#mine">${I('info')}<span>${esc(t('demoB'))}</span></a>` : ''}${installBanner()}
         ${notice ? `<div class="banner note">${I('megaphone')}<span>${esc(notice)}</span></div>` : ''}
         <a class="banner vinb" href="#vin">${I('barcode')}<span><b>${esc(t('vinCta'))}</b><small>${esc(t('vinSub'))}</small></span>${I('chevL', 'dirx')}</a>
         <section class="sec"><div class="sec-h"><h2>${esc(t('cats'))}</h2><a class="more" href="#cats">${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div>
@@ -380,7 +382,7 @@
         ${car ? `<section class="sec"><div class="sec-h"><h2>${esc(t('fitsYourCar'))} <small>${esc(SP.carText(car))}</small></h2><a class="more" ${sf({ fit: true })}>${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div><div class="grid" id="gfit">${skel(4)}</div></section>` : ''}
         <section class="sec"><div class="sec-h"><h2>${esc(t('newArrivals'))}</h2><a class="more" ${sf({})}>${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div><div class="grid" id="gnew">${skel(8)}</div></section>
         <section class="sec" id="secshops"><div class="sec-h"><h2>${esc(t('shops'))}</h2><a class="more" href="#shops">${esc(t('allShops'))} ${I('chevL', 'dirx')}</a></div><div class="hscroll" id="hshops"></div></section>
-        <section class="cta"><h2>${esc(t('ctaT'))}</h2><p>${esc(t('ctaB'))}</p><a class="btn btn-signal" href="#mine">${I('store')} ${esc(t('ctaBtn'))}</a></section>
+        ${SP.company && SP.contactCta ? SP.contactCta() : `<section class="cta"><h2>${esc(t('ctaT'))}</h2><p>${esc(t('ctaB'))}</p><a class="btn btn-signal" href="#mine">${I('store')} ${esc(t('ctaBtn'))}</a></section>`}
       </main>`);
     wireInstall($('#home'));
     $('#hs').onsubmit = e => { e.preventDefault(); S.f = { ...FDEF, q: e.target.q.value.trim(), fit: !!S.car && S.f.fit }; saveF(); SP.go('search'); };
@@ -461,11 +463,12 @@
   /* ---------- product ---------- */
   function waText(p, cur) {
     const car = S.car ? t('waCar', { car: SP.carText(S.car) }) + (S.car.vin ? t('vinMsg', { v: S.car.vin }) : '') : '';
-    return t('waMsg', { title: p.title, pn: p.part_no ? t('waPn', { pn: p.part_no }) : '', price: SP.priceText(p.price, cur), car }) + '\n' + SP.siteUrl() + '#p-' + p.id;
+    const pn = p.part_no || p.sku ? t('waPn', { pn: p.part_no || p.sku }) : '';
+    return (p.price == null ? t('waMsgNoPrice', { title: p.title, pn, car }) : t('waMsg', { title: p.title, pn, price: SP.priceText(p.price, cur), car })) + '\n' + SP.siteUrl() + '#p-' + p.id;
   }
   function drawProduct(p, n) {
     const sh = p.shop || {}, cur = sh.currency || SP.currencyOf(S.country), on = S.favs.has(p.id);
-    const mine = S.user && (S.user.id === p.owner_id || S.admin);
+    const mine = S.user && (S.user.id === p.owner_id || S.admin || (SP.can && SP.can('products')));
     const fit = SP.fitsCar(p, S.car);
     const imgs = p.imgs.length ? p.imgs.map((u, i) => `<div class="slide">${SP.imgTag(u, '', p.title + ' ' + (i + 1))}</div>`).join('') : `<div class="slide noimg">${I(catIcon(p.cat))}<span>${esc(t('noImgs'))}</span></div>`;
     const wa = SP.waLink(sh.whatsapp || sh.phone, waText(p, cur), sh.country), tel = SP.telHref(sh.phone || sh.whatsapp, sh.country);
@@ -475,7 +478,7 @@
         <div class="ribbons">${p.status === 'sold' ? `<span class="ribbon sold">${esc(t('soldOut'))}</span>` : ''}</div></div>
       <div class="pd-info wrap"><div class="pd-tags"><span class="cchip ${esc(p.cond)}">${esc(SP.condName(p.cond))}</span><span class="cchip">${esc(SP.catName(p.cat))}</span>${p.part_no ? `<span class="pn">${esc(p.part_no)}</span>` : ''}</div>
         <h1 class="pd-title">${esc(p.title)}</h1>
-        <div class="pd-price">${SP.priceHTML(p.price, cur)}${p.nego ? `<span class="nego">${esc(t('nego'))}</span>` : ''}</div>
+        <div class="pd-price">${SP.priceHTML(p.price, cur, p.price_hidden)}${p.nego ? `<span class="nego">${esc(t('nego'))}</span>` : ''}</div>
         <div class="fitbox">${I('car')}<span><small>${esc(t('fitsOn'))}</small><strong>${esc(SP.fitText(p))}</strong>
           ${fit === true ? `<em class="ok">${I('check')} ${esc(t('fitsYours', { car: SP.carText(S.car) }))}</em>` : fit === false ? `<em class="no">${I('warn')} ${esc(t('notYours', { car: SP.carText(S.car) }))}</em>` : ''}</span></div>
         <dl class="specs"><div><dt>${esc(t('qty'))}</dt><dd>${p.qty == null ? esc(t('inStock')) : esc(SP.fmtNum(p.qty))}</dd></div>
@@ -490,10 +493,11 @@
           <button type="button" class="btn btn-danger sm" id="pdel">${I('trash')} ${esc(t('del'))}</button></div>` : ''}
         <section class="pd-more" id="pmore" hidden><h2>${esc(t('moreShop'))}</h2><div class="grid" id="pmg"></div></section>
       </div></div>
-      <div class="actionbar"><div class="wrap">${p.status === 'sold' ? `<p class="note">${esc(t('soldNote'))}</p>` : (wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('whatsapp'))}</a>` : '') + (tel ? `<a class="btn btn-ghost" href="${esc(tel)}">${I('phone')} ${esc(t('call'))}</a>` : '') + (!wa && !tel ? `<p class="note">${esc(t('noNumber'))}</p>` : '')}</div></div>`, { actionbar: true });
+      <div class="actionbar"><div class="wrap">${p.status === 'sold' ? `<p class="note">${esc(t('soldNote'))}</p>` : (S.settings.orders_enabled ? `<button type="button" class="btn btn-signal" id="padd">${I('plus')} ${esc(t('addCart'))}</button>` : '') + (wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('whatsapp'))}</a>` : '') + (tel ? `<a class="btn btn-ghost" href="${esc(tel)}">${I('phone')} ${esc(t('call'))}</a>` : '') + (!wa && !tel ? `<p class="note">${esc(t('noNumber'))}</p>` : '')}</div></div>`, { actionbar: true });
     const gt = $('#gt'), gc = $('#gc');
     if (gc) gt.addEventListener('scroll', SP.debounce(() => { gc.textContent = (Math.round(Math.abs(gt.scrollLeft) / gt.clientWidth) + 1) + '/' + p.imgs.length; }, 60), { passive: true });
-    $('#psh').onclick = () => share(t('sharePart'), [p.title, t('shPrice', { p: SP.priceText(p.price, cur) }), t('shFits', { f: SP.fitText(p) }), sh.name ? t('shAt', { s: sh.name + ' · ' + sh.city }) : '', t('shVia')].filter(Boolean).join('\n'), SP.siteUrl() + '#p-' + p.id);
+    if ($('#padd')) $('#padd').onclick = () => { SP.cart.add(p.id); SP.toast(t('addedCart')); };
+    $('#psh').onclick = () => share(t('sharePart'), [p.title, t('shPrice', { p: SP.priceText(p.price, cur, p.price_hidden) }), t('shFits', { f: SP.fitText(p) }), sh.name ? t('shAt', { s: sh.name + ' · ' + sh.city }) : '', t('shVia')].filter(Boolean).join('\n'), SP.siteUrl() + '#p-' + p.id);
     if (mine) {
       $('#psold').onclick = async () => {
         const b = $('#psold'); b.classList.add('busy');
@@ -526,7 +530,7 @@
   /* ---------- shops ---------- */
   SP.route(/^shops$/, async (m, n) => {
     if (gate(n)) return;
-    shell(bar(t('shops'), `<button type="button" class="iconbtn" data-act="loc" aria-label="${esc(t('chooseCity'))}">${I('pin')}</button>`, { noBack: true }) +
+    shell(bar(t(SP.company ? 'branches' : 'shops'), `<button type="button" class="iconbtn" data-act="loc" aria-label="${esc(t('chooseCity'))}">${I('pin')}</button>`, { noBack: true }) +
       `<main class="wrap"><form class="searchbox flat" id="shq" role="search" style="margin-top:16px">${I('search')}<input type="search" name="q" value="${esc(S.shq || '')}" placeholder="${esc(t('shopsPh'))}" aria-label="${esc(t('search'))}"></form>
       <div class="res-head"><span class="rcount" id="rc"></span><span class="rcount">${SP.flag(S.country)} ${esc(S.city || SP.countryName(S.country))}</span></div>
       <div class="shops" id="sl">${'<div class="sk sk-row"></div>'.repeat(4)}</div><div class="center"><button type="button" class="btn btn-ghost more-btn" id="more" hidden></button></div></main>`);
@@ -553,7 +557,7 @@
     try { s = await api.shop(id); } catch (e) { if (!s) { failView(e, n); return; } }
     if (!SP.alive(n)) return;
     if (!s) { shell(bar(t('shop')) + `<main class="wrap">${empty('store', t('shopMissingT'), t('shopMissingB'), `<a class="btn btn-ink" href="#shops">${esc(t('allShops'))}</a>`)}</main>`); return; }
-    const mine = S.user && (S.user.id === s.owner_id || S.admin);
+    const mine = S.user && (S.user.id === s.owner_id || S.admin || (SP.can && SP.can('products')));
     const wa = SP.waLink(s.whatsapp || s.phone, t('waShop', { name: s.name }), s.country), tel = SP.telHref(s.phone || s.whatsapp, s.country);
     shell(bar(s.name, `<button type="button" class="iconbtn" id="ssh" aria-label="${esc(t('shareShop'))}">${I('share')}</button>`) +
       `<div class="sp-cover">${s.cover ? SP.imgTag(s.cover, '', s.name) : ''}</div>
@@ -596,11 +600,12 @@
 
   /* ---------- brands ---------- */
   SP.route(/^brands$/, (m, n) => {
-    const total = D.BRANDS.reduce((k, b) => k + b.models.length, 0);
-    const pop = D.POPULAR.map(id => BRAND.get(id)).filter(Boolean);
-    const rest = D.BRANDS.filter(b => !D.POPULAR.includes(b.id)).sort((a, b) => SP.brandName(a.id).localeCompare(SP.brandName(b.id), SP.LANG));
+    const ALL = SP.brandsList(), P = SP.popularIds();
+    const total = ALL.reduce((k, b) => k + b.models.length, 0);
+    const pop = P.map(id => BRAND.get(id)).filter(Boolean);
+    const rest = ALL.filter(b => !P.includes(b.id)).sort((a, b) => SP.brandName(a.id).localeCompare(SP.brandName(b.id), SP.LANG));
     const row = b => `<a class="catrow" href="#b-${b.id}" data-k="${esc(SP.norm(b.en + ' ' + b.ar + ' ' + b.id))}"><span class="hex bfl"><span aria-hidden="true">${SP.flag(b.origin)}</span></span><span class="cr-name">${esc(SP.brandName(b.id))}${SP.LANG === 'ar' ? ` <small class="ltr">${esc(b.en)}</small>` : ''}</span><span class="cr-n">${esc(t('modelsN', { n: SP.fmtNum(b.models.length) }))}</span>${I('chevL', 'dirx')}</a>`;
-    shell(bar(t('allBrandsT')) + `<main class="wrap"><p class="muted-p" style="margin-top:14px">${esc(t('brandsSub', { b: SP.fmtNum(D.BRANDS.length), m: SP.fmtNum(total) }))}</p>
+    shell(bar(t('allBrandsT')) + `<main class="wrap"><p class="muted-p" style="margin-top:14px">${esc(t('brandsSub', { b: SP.fmtNum(ALL.length), m: SP.fmtNum(total) }))}</p>
       <form class="searchbox flat" id="bq" role="search" style="margin-top:12px">${I('search')}<input type="search" placeholder="${esc(t('searchBrand'))}" aria-label="${esc(t('searchBrand'))}"></form>
       <h2 class="lbl optg">${esc(t('popularBrands'))}</h2><div class="catlist bl">${pop.map(row).join('')}</div>
       <h2 class="lbl optg">${esc(t('allBrandsT'))}</h2><div class="catlist bl">${rest.map(row).join('')}</div></main>`);
