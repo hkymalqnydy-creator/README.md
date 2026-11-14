@@ -10,6 +10,8 @@ window.SPARAT_CONFIG = {
   skin: "royal",                 // look: '' (market) or 'royal' (brand blue)
   logo: "icons/logo.svg",                 // wordmark for the blue bar (it replaces the name there)
   logoInk: "icons/logo-ink.svg",              // wordmark for paper and light screens
+  heroCar: "icons/hero-car.svg",              // picture of a car in the blue hero (skin royal)
+  demoExtra: [{"sku": "CS-AF-100", "title": "فلتر هواء CROSSKY", "cat": "oils", "cond": "original", "price": 45, "qty": 80, "make": "any", "part_no": "CS-AF-100", "descr": "فلتر هواء أصلي من CROSSKY في علبته. تنقية عالية للهواء وأداء ممتاز للمحرك.", "imgs": ["img/demo/crossky-air-filter.jpg"]}],      // the edition's own demo parts, with real photos
   defaultCountry: "LY",
   defaultLang: '',          // '' = follow the phone's language; or 'ar', 'en', 'fr', 'es', 'de', 'tr', 'ru', 'zh'
   demo: true,             // demo data on the device while no server is set

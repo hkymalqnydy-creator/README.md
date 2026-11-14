@@ -71,10 +71,23 @@
       [s3, 'GEN-OIL-5W30', 'زيت محرك 5W-30 (4 لتر)', 'oils', 'aftermarket', 95, 60, 'any', '', null, null, ''],
       [s1, 'GEN-BAT-70', 'بطارية 70 أمبير', 'electrical', 'aftermarket', 520, 8, 'any', '', null, null, '']
     ];
+    /* studio pictures of each kind of part (img/parts, rendered from 3D models); the drawn icon when there is none */
+    const PART_IMG = { 'HY-58101': 'brake-pads', 'TY-04465': 'brake-pads', 'NS-40206': 'brake-pads', 'HO-45022': 'brake-pads', 'HY-25310': 'radiator',
+      'KI-55300': 'rear-shocks', 'KI-SPT-SH': 'front-strut', 'KI-26300': 'oil-filter', 'NS-15208': 'oil-filter', 'TY-81110': 'headlight', 'HY-ELN-LED': 'tail-lamp',
+      'TY-88320': 'ac-compressor', 'MT-MR968': 'clutch-kit', 'MZ-PE01': 'spark-plugs', 'GEN-OIL-5W30': 'engine-oil', 'GEN-BAT-70': 'battery' };
+    const imgBase = C.demoImgBase == null ? 'img/parts/' : C.demoImgBase;
+    const DESCR = 'القطعة جديدة في الكرتونة، وعليها ضمان من الشركة. التوصيل متاح لكل المدن.';
     P.forEach(([s, sku, title, cat, cond, price, qty, make, model, yf, yt, pn], i) => DB.products.push({
       id: uuid(), shop_id: s.id, owner_id: owner.id, sku, title, cat, cond, price, nego: i % 4 === 0, qty, make, model, y_from: yf, y_to: yt, part_no: pn,
-      descr: 'القطعة جديدة في الكرتونة، وعليها ضمان من الشركة. التوصيل متاح لكل المدن.', imgs: [art(cat, i), art(cat, i + 2)],
+      descr: DESCR, imgs: PART_IMG[sku] && imgBase ? [imgBase + PART_IMG[sku] + '.jpg'] : [art(cat, i), art(cat, i + 2)],
       status: qty === 0 ? 'sold' : 'active', hide_price: i === 6 || i === 9, search_text: '', created_at: ago(40 + i * 97), updated_at: ago(3)
+    }));
+    /* the edition's own parts with real photos (config demoExtra, from tools/build_company.py --demo-extra): listed first */
+    (Array.isArray(C.demoExtra) ? C.demoExtra : []).forEach((x, k) => x && x.sku && x.title && DB.products.push({
+      id: uuid(), shop_id: s1.id, owner_id: owner.id, sku: String(x.sku), title: String(x.title), cat: x.cat || 'other', cond: x.cond || 'original',
+      price: x.price == null ? null : +x.price, nego: false, qty: x.qty == null ? 10 : +x.qty, make: x.make || 'any', model: x.model || '', y_from: null, y_to: null,
+      part_no: x.part_no || String(x.sku), descr: x.descr || DESCR, imgs: Array.isArray(x.imgs) ? x.imgs.slice(0, 6) : [], status: 'active', hide_price: false,
+      search_text: '', created_at: ago(5 + k), updated_at: ago(1)
     }));
     DB.products.forEach(p => { if (p.price != null) p.cost = Math.round(p.price * 0.72); });
     const ean = d12 => d12 + ((10 - d12.split('').reduce((k, c, i) => k + (+c) * (i % 2 ? 3 : 1), 0) % 10) % 10);

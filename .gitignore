@@ -12,3 +12,4 @@ crossky/packaging/android-ios/ios/
 crossky/packaging/windows/app/
 crossky/packaging/windows/dist/
 sparat_sync.ini
+tools/render-parts/out/

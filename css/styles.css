@@ -875,3 +875,13 @@ details.pur[open]>summary{padding-bottom:4px}
 [data-skin=royal] .botfab .ic{color:#fff}
 /* the scanner's line is red, like a real one */
 [data-skin=royal] .scan-laser{background:var(--stripe);box-shadow:0 0 14px 2px var(--stripe)}
+
+/* the hero car (config heroCar) sits on the red stripe, which rises toward the reading direction */
+.hero-car{display:none}
+[data-skin=royal] .hero .wrap{position:relative}
+[data-skin=royal] .hero-car{display:block;position:absolute;z-index:2;inset-inline-end:-4px;bottom:-42px;width:min(47vw,440px);height:auto;pointer-events:none;rotate:5deg;rotate:atan2(36px,100vw);transform-origin:50% 100%;filter:drop-shadow(0 10px 14px rgba(2,10,46,.25))}
+[data-skin=royal] .hazard{background:linear-gradient(to bottom left,var(--asphalt) calc(50% - 2.5px),var(--stripe) calc(50% - 2.5px) calc(50% + 2.5px),transparent calc(50% + 2.5px))}
+[dir=ltr][data-skin=royal] .hazard,[dir=ltr] [data-skin=royal] .hazard{background:linear-gradient(to bottom right,var(--asphalt) calc(50% - 2.5px),var(--stripe) calc(50% - 2.5px) calc(50% + 2.5px),transparent calc(50% + 2.5px))}
+[dir=ltr][data-skin=royal] .hero-car{transform:scaleX(-1);rotate:-5deg;rotate:calc(-1 * atan2(36px,100vw))}
+@media (max-width:359px){[data-skin=royal] .hero-car{display:none}}
+@media (min-width:700px){[data-skin=royal] .hero-car{bottom:-44px}}

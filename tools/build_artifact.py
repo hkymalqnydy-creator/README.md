@@ -12,8 +12,8 @@ import os
 import shutil
 import sys
 
-WEB_DIRS = ['css', 'js']
-ICONS = ['icon.svg', 'favicon-64.png', 'apple-touch-icon.png', 'logo.svg', 'logo-ink.svg']
+WEB_DIRS = ['css', 'js', 'img']
+ICONS = ['icon.svg', 'favicon-64.png', 'apple-touch-icon.png', 'logo.svg', 'logo-ink.svg', 'hero-car.svg', 'hero-car.png']
 PAGE_CONFIG = """
 /* In-app page edition (tools/build_artifact.py): the Claude app's page frame reaches no outside server,
    so the demo runs, invoice photos are read by Claude and files are saved through the Claude app (js/embed.js). */

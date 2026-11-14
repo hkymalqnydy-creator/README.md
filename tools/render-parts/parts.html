@@ -1,0 +1,375 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>parts renderer</title></head>
+<body style="margin:0;background:#888">
+<canvas id="c"></canvas>
+<script id="fs" type="x-shader/x-fragment">#version 300 es
+// Studio renders of car parts for the demo catalog: each part is a signed-distance model, ray-marched,
+// lit by a soft key light, a sky fill and studio reflections, on a light sweep with contact shadows.
+precision highp float;
+uniform vec2 uRes; uniform int uScene; uniform vec3 uCam; uniform vec3 uTgt; uniform float uFov;
+out vec4 fragColor;
+#define PI 3.14159265
+mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
+float hash(vec3 p){p=fract(p*0.3183099+.1);p*=17.0;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+float noise(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);
+ return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+            mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);}
+float sdBox(vec3 p,vec3 b){vec3 q=abs(p)-b;return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.);}
+float sdRBox(vec3 p,vec3 b,float r){return sdBox(p,b-r)-r;}
+float sdCyl(vec3 p,float r,float h){vec2 d=abs(vec2(length(p.xz),p.y))-vec2(r,h);return min(max(d.x,d.y),0.)+length(max(d,0.));}
+float sdRCyl(vec3 p,float r,float h,float e){vec2 d=abs(vec2(length(p.xz),p.y))-vec2(r-e,h-e);return min(max(d.x,d.y),0.)+length(max(d,0.))-e;}
+float sdTor(vec3 p,float R,float r){vec2 q=vec2(length(p.xz)-R,p.y);return length(q)-r;}
+float sdHex(vec3 p,float r,float h){const vec3 k=vec3(-0.8660254,0.5,0.57735);p=abs(p);p.xz-=2.*min(dot(k.xy,p.xz),0.)*k.xy;
+ vec2 d=vec2(length(p.xz-vec2(clamp(p.x,-k.z*r,k.z*r),r))*sign(p.z-r),p.y-h);return min(max(d.x,d.y),0.)+length(max(d,0.));}
+float sdSph(vec3 p,float r){return length(p)-r;}
+float sdSector(vec2 p,float r1,float r2,float a){float r=length(p);float dr=max(r1-r,r-r2);vec2 q=vec2(abs(p.x),p.y);return max(dr,dot(q,vec2(cos(a),-sin(a))));}
+vec2 U(vec2 a,vec2 b){return a.x<b.x?a:b;}
+
+/* ---------- 0 brake pads ---------- */
+vec2 pad(vec3 q,bool flip){
+ if(flip) q.y=1.85-q.y;
+ vec2 p2=vec2(q.x,q.z+12.25);
+ float back=max(sdSector(p2,9.0,15.5,0.43),abs(q.y-0.275)-0.275);
+ for(int s=-1;s<=1;s+=2){float an=0.47*float(s);vec2 c=vec2(sin(an),cos(an))*13.7;vec3 e=q-vec3(c.x,0.275,c.y-12.25);
+   back=min(back,sdCyl(e,1.25,0.275));back=max(back,-sdCyl(e,0.5,0.6));}
+ float a=0.39-0.05*clamp((q.y-0.55)/1.3,0.,1.);
+ float fr=max(sdSector(p2,9.5,15.0,a),abs(q.y-1.2)-0.65)-0.03;
+ fr=max(fr,-sdBox(q-vec3(0.,1.85,0.),vec3(0.17,0.75,9.)));
+ return U(vec2(back,2.),vec2(fr,4.));
+}
+vec2 scPads(vec3 p){vec3 a=p-vec3(-5.,0.,2.5);a.xz*=rot(0.35);vec3 b=p-vec3(6.5,0.,-4.);b.xz*=rot(-0.6);return U(pad(a,false),pad(b,true));}
+
+/* ---------- 1 oil filters ---------- */
+vec3 fA(vec3 p){return p-vec3(-4.6,0.,-1.);}
+vec3 fB(vec3 p){vec3 q=p-vec3(5.8,4.6,3.2);q.xz*=rot(-0.65);return vec3(q.x,5.75-q.z,q.y);}   // lying, base toward +z
+float fBody(vec3 s){float ang=atan(s.z,s.x);float fl=smoothstep(9.3,9.7,s.y)*(0.5+0.5*cos(26.*ang));return sdRCyl(s-vec3(0.,5.75,0.),4.6,5.75,0.6)+0.16*fl;}
+vec2 filt(vec3 s,float id){
+ vec2 r=vec2(fBody(s),id);
+ float holes=sdCyl(s,1.05,0.45);
+ for(int i=0;i<6;i++){float a=float(i)*PI/3.;holes=min(holes,sdCyl(s-vec3(cos(a)*2.4,0.,sin(a)*2.4),0.42,0.35));}
+ r.x=max(r.x,-holes);
+ r=U(r,vec2(sdTor(s-vec3(0.,-0.02,0.),3.75,0.3),3.));
+ return r;}
+vec2 scFilters(vec3 p){return U(filt(fA(p),7.),filt(fB(p),24.));}
+
+/* ---------- 2 rear shocks ---------- */
+vec2 shock(vec3 q){
+ vec3 y=q.yxz;
+ vec2 r=vec2(sdRCyl(y-vec3(0.,-4.,0.),2.0,8.0,0.25),2.);
+ r=U(r,vec2(sdCyl(y-vec3(0.,6.,0.),0.62,2.2),5.));
+ r=U(r,vec2(sdRCyl(y-vec3(0.,10.2,0.),1.85,2.2,0.3),2.));
+ for(int s=-1;s<=1;s+=2){vec3 e=q-vec3(float(s)*13.6,0.,0.);
+   r=U(r,vec2(sdTor(e.xzy,1.15,0.42),2.));
+   r=U(r,vec2(sdCyl(e.xzy,0.78,0.5),3.));
+   r=U(r,vec2(sdCyl(e.xzy,0.36,0.78),5.));}
+ return r;}
+vec2 scShocks(vec3 p){vec3 a=p-vec3(-1.,2.,-3.2);a.xz*=rot(0.32);vec3 b=p-vec3(1.5,2.,3.4);b.xz*=rot(0.22);b.yz*=rot(1.1);return U(shock(a),shock(b));}
+
+/* ---------- 3 front strut with coil spring ---------- */
+float helix(vec3 q,float R,float wr,float pitch,float x0,float x1){
+ float ang=atan(q.z,q.y);float rho=length(q.yz);
+ float t=(q.x-x0)/pitch-ang/(2.*PI);float k=floor(t+0.5);
+ float xh=x0+pitch*(ang/(2.*PI)+k);
+ float d=length(vec2(rho-R,(q.x-xh)*0.92))-wr;
+ return max(d,abs(q.x-(x0+x1)*0.5)-(x1-x0)*0.5-wr*0.5);}
+vec2 strut(vec3 q){
+ vec3 y=q.yxz;
+ vec2 r=vec2(sdRCyl(y-vec3(0.,-8.5,0.),2.45,7.5,0.3),2.);
+ r=U(r,vec2(sdCyl(y-vec3(0.,1.5,0.),0.95,2.6),5.));
+ r=U(r,vec2(sdRCyl(y-vec3(0.,-4.6,0.),6.6,0.24,0.1),2.));
+ r=U(r,vec2(sdRCyl(y-vec3(0.,8.3,0.),6.6,0.24,0.1),2.));
+ r=U(r,vec2(sdRCyl(y-vec3(0.,9.3,0.),4.6,0.8,0.35),3.));
+ r=U(r,vec2(sdCyl(y-vec3(0.,10.35,0.),5.4,0.25),10.));
+ for(int i=0;i<3;i++){float a=float(i)*2.*PI/3.+0.3;r=U(r,vec2(sdCyl(y-vec3(cos(a)*3.6,11.3,sin(a)*3.6),0.32,0.9),10.));}
+ r=U(r,vec2(helix(q,5.35,0.62,2.55,-4.35,8.05),23.));
+ float br=max(sdBox(q-vec3(-17.4,0.,0.),vec3(1.6,2.5,2.5)),-sdBox(q-vec3(-18.,0.,0.),vec3(1.5,1.75,3.)));
+ br=max(br,-sdCyl((q-vec3(-17.9,0.,0.)).xzy,0.55,3.));
+ return U(r,vec2(br,2.));}
+vec2 scStrut(vec3 p){vec3 a=p-vec3(0.,6.6,0.);a.xz*=rot(0.42);return strut(a);}
+
+/* ---------- 4 radiator ---------- */
+vec3 tRad(vec3 p){vec3 q=p;q.xz*=rot(-0.55);return q;}
+vec2 radiator(vec3 q){
+ float tube=smoothstep(0.32,0.05,abs(fract(q.y/1.15)-0.5));
+ vec2 r=vec2(sdBox(q-vec3(0.,19.,0.),vec3(25.5,16.8,1.15))-0.09*tube,6.);
+ for(int s=-1;s<=1;s+=2){float sx=float(s);
+   r=U(r,vec2(sdRBox(q-vec3(sx*28.,20.,0.),vec3(2.6,19.,2.3),0.6),18.));
+   r=U(r,vec2(sdCyl(q-vec3(sx*28.,0.6,0.),0.7,0.6),3.));}
+ r=U(r,vec2(sdCyl((q-vec3(-31.6,33.,0.)).yxz,1.7,2.0),18.));
+ r=U(r,vec2(sdCyl((q-vec3(31.6,7.,0.)).yxz,1.7,2.0),18.));
+ r=U(r,vec2(sdCyl(q-vec3(-28.,39.6,0.),1.5,0.8),18.));
+ r=U(r,vec2(sdRCyl(q-vec3(-28.,40.6,0.),1.95,0.35,0.15),5.));
+ return r;}
+vec2 scRadiator(vec3 p){return radiator(tRad(p));}
+
+/* ---------- 5 front headlight ---------- */
+vec2 headlight(vec3 q){
+ vec3 h=q-vec3(0.,6.5,0.);
+ float sweep=dot(h,normalize(vec3(0.42,0.,1.)));
+ vec2 r=vec2(max(sdRBox(h,vec3(16.,6.3,8.),2.2),sweep-6.8),2.);
+ // chrome face on the flat front, following the swept side
+ r=U(r,vec2(max(sdRBox(h-vec3(-1.6,0.3,8.0),vec3(14.,5.1,0.38),1.),sweep-7.2),22.));
+ // twin projectors: glass lens in a chrome ring
+ for(int i=0;i<2;i++){vec3 l=h-vec3(i==0?-8.:-1.2,0.2,7.4);
+   r=U(r,vec2(sdSph(l,2.7),15.));r=U(r,vec2(sdTor(l.xzy-vec3(0.,0.9,0.),3.05,0.45),5.));}
+ // LED daytime strip (top and outer edge) and the amber turn signal
+ r=U(r,vec2(sdRBox(h-vec3(-6.3,4.15,8.45),vec3(7.6,0.32,0.28),0.15),13.));
+ r=U(r,vec2(sdRBox(h-vec3(-14.,1.0,8.45),vec3(0.32,3.4,0.28),0.15),13.));
+ r=U(r,vec2(sdRBox(h-vec3(-6.,-3.75,8.45),vec3(6.2,0.36,0.3),0.15),14.));
+ return r;}
+vec2 scHead(vec3 p){vec3 q=p;q.xz*=rot(0.38);return headlight(q);}
+
+/* ---------- 6 rear LED lamp ---------- */
+float tailScale(float x){return mix(0.72,1.06,clamp((x+18.)/36.,0.,1.));}
+vec2 taillamp(vec3 q){
+ float sc=tailScale(q.x);
+ vec3 h=vec3(q.x,q.y/sc-4.8,q.z);           // taller toward the outer end, resting on its base
+ vec2 r=vec2(sdRBox(h,vec3(18.,4.8,5.),2.)*0.8,11.);
+ vec3 g=h-vec3(2.,0.2,5.0);
+ r=U(r,vec2((max(sdRBox(g,vec3(12.,2.7,0.32),1.7),-sdRBox(g,vec3(11.1,1.8,1.),1.25)))*0.8,12.));
+ r=U(r,vec2(sdRBox(h-vec3(2.,0.2,5.1),vec3(9.,0.24,0.22),0.1)*0.8,12.));
+ return r;}
+vec2 scTail(vec3 p){vec3 q=p;q.xz*=rot(-0.3);return taillamp(q);}
+
+/* ---------- 7 A/C compressor ---------- */
+vec2 compressor(vec3 a){
+ vec3 y=a.yxz;
+ vec2 r=vec2(sdRCyl(y-vec3(0.,-1.,0.),6.,7.5,1.),6.);
+ float ang=atan(a.z,a.y);
+ r=U(r,vec2(sdRCyl(y-vec3(0.,-10.,0.),5.7,1.6,0.6)-0.18*smoothstep(0.6,1.,abs(sin(ang*9.))),6.));
+ float gro=0.22*abs(sin((a.x-9.)*PI/0.45))*step(abs(a.x-9.),1.3);
+ r=U(r,vec2(sdRCyl(y-vec3(0.,9.,0.),6.6,1.6,0.25)+gro,2.));
+ vec3 c=y-vec3(0.,10.9,0.);
+ float plate=sdRCyl(c,4.8,0.35,0.15);
+ for(int i=0;i<3;i++){float b=float(i)*2.*PI/3.;plate=max(plate,-sdCyl(c-vec3(cos(b)*3.,0.,sin(b)*3.),0.6,1.));}
+ r=U(r,vec2(plate,5.));
+ r=U(r,vec2(sdCyl(c-vec3(0.,0.45,0.),1.1,0.4),10.));
+ for(int i=0;i<2;i++){for(int j=0;j<2;j++){
+   float b=j==0?0.62:PI-0.62;vec3 ce=vec3(-5.5+9.*float(i),cos(b)*6.5,sin(b)*6.5);vec3 e=(a-ce).yxz;
+   r=U(r,vec2(max(sdCyl(e,1.25,1.5),-sdCyl(e,0.55,2.)),6.));}}
+ r=U(r,vec2(sdRBox(a-vec3(-1.5,6.2,-1.),vec3(1.6,1.,1.1),0.3),3.));
+ return r;}
+vec2 scComp(vec3 p){vec3 a=p-vec3(0.,6.6,0.);a.xz*=rot(0.62);return compressor(a);}
+
+/* ---------- 8 clutch kit ---------- */
+vec2 pressurePlate(vec3 q){
+ float ang=atan(q.z,q.x),rr=length(q.xz);
+ vec2 r=vec2(sdRCyl(q-vec3(0.,1.6,0.),12.,1.6,0.5),10.);
+ r.x=max(r.x,-sdCyl(q-vec3(0.,1.6,0.),4.8,3.));
+ for(int i=0;i<3;i++){float b=float(i)*2.*PI/3.+0.5;r=U(r,vec2(max(sdRCyl(q-vec3(cos(b)*12.6,0.25,sin(b)*12.6),2.,0.25,0.1),-sdCyl(q-vec3(cos(b)*13.,0.25,sin(b)*13.),0.55,1.)),10.));}
+ float f=sdRCyl(q-vec3(0.,3.3,0.),9.,0.2,0.1);
+ f=max(f,-sdCyl(q,4.3,5.));
+ float cell=fract(ang*18./(2.*PI));float dc=min(cell,1.-cell)*(2.*PI/18.)*rr;
+ f=max(f,-max(dc-0.22,rr-7.8));
+ r=U(r,vec2(f,5.));
+ return r;}
+vec2 clutchDisc(vec3 q){
+ float ang=atan(q.z,q.x),rr=length(q.xz);
+ vec2 r=vec2(max(sdRCyl(q-vec3(0.,0.45,0.),10.5,0.45,0.2),-sdCyl(q,5.9,2.)),20.);
+ float cell=fract(ang*16./(2.*PI))-0.5;vec2 hp=vec2(cell*(2.*PI/16.)*rr,rr-8.2);
+ r.x=max(r.x,-(length(hp)-0.38));
+ r=U(r,vec2(sdCyl(q-vec3(0.,0.5,0.),6.2,0.22),10.));
+ for(int i=0;i<6;i++){float b=float(i)*PI/3.+0.26;vec3 s=q-vec3(cos(b)*4.3,1.0,sin(b)*4.3);s.xz*=rot(b);
+   r=U(r,vec2(sdCyl(s.xzy,0.55,1.15)+0.06*sin(s.z*14.),23.));}
+ r=U(r,vec2(max(sdCyl(q-vec3(0.,1.3,0.),1.9,1.2),-sdCyl(q,0.95,3.)),10.));
+ return r;}
+vec2 scClutch(vec3 p){vec3 a=p-vec3(-7.,0.,-4.);a.xz*=rot(0.3);vec3 b=p-vec3(9.,0.,5.5);b.xz*=rot(-0.4);return U(pressurePlate(a),clutchDisc(b));}
+
+/* ---------- 9 spark plugs ---------- */
+vec2 plug(vec3 q){
+ vec3 y=q.yxz;
+ vec2 r=vec2(sdCyl(y-vec3(0.,-6.2,0.),0.36,0.45),5.);
+ r=U(r,vec2(sdCyl(y-vec3(0.,-5.5,0.),0.24,0.35),5.));
+ float rib=0.06*abs(sin((y.y+5.)*PI/0.42))*step(y.y,-2.6);
+ r=U(r,vec2(sdRCyl(y-vec3(0.,-2.6,0.),0.56,2.4,0.2)+rib,9.));
+ r=U(r,vec2(sdHex(y-vec3(0.,0.55,0.),0.82,0.6),10.));
+ r=U(r,vec2(sdCyl(y-vec3(0.,1.45,0.),0.74,0.35),10.));
+ r=U(r,vec2(sdCyl(y-vec3(0.,2.85,0.),0.62,1.05)+0.07*abs(sin((y.y-1.8)*PI/0.14)),10.));
+ r=U(r,vec2(sdCyl(y-vec3(0.,4.05,0.),0.12,0.2),5.));
+ r=U(r,vec2(sdBox(y-vec3(0.42,4.12,0.),vec3(0.1,0.3,0.12)),5.));
+ r=U(r,vec2(sdBox(y-vec3(0.2,4.4,0.),vec3(0.3,0.06,0.12)),5.));
+ return r;}
+vec2 scPlugs(vec3 p){
+ vec2 r=vec2(1e5,0.);
+ for(int i=0;i<4;i++){float fi=float(i);vec3 q=p-vec3(-0.8+fi*0.55,0.86,-4.2+fi*2.8);q.xz*=rot(0.2-fi*0.07);q.yz*=rot(fi*1.3);r=U(r,plug(q));}
+ return r;}
+
+/* ---------- 10 engine oil, 4 litres ---------- */
+vec3 tJug(vec3 p){vec3 q=p;q.xz*=rot(0.42);return q;}
+vec2 jug(vec3 q){
+ vec3 h=q-vec3(0.,12.,0.);
+ float body=sdRBox(h,vec3(8.,12.,4.4),1.6);
+ body=max(body,-sdRBox(h-vec3(4.,8.6,0.),vec3(2.,2.,6.),0.9));
+ vec2 r=vec2(body,19.);
+ r=U(r,vec2(sdCyl(q-vec3(-4.6,24.6,0.),1.9,0.9),19.));
+ r=U(r,vec2(sdRCyl(q-vec3(-4.6,25.9,0.),2.25,0.75,0.25),21.));
+ return r;}
+vec2 scJug(vec3 p){return jug(tJug(p));}
+
+/* ---------- 11 battery ---------- */
+vec3 tBat(vec3 p){vec3 q=p;q.xz*=rot(0.5);return q;}
+vec2 battery(vec3 q){
+ vec3 h=q-vec3(0.,8.75,0.);
+ vec2 r=vec2(sdRBox(h,vec3(13.,8.75,8.75),0.8),18.);
+ r=U(r,vec2(sdRBox(h-vec3(0.,7.9,0.),vec3(13.2,0.9,8.95),0.5),25.));
+ r=U(r,vec2(sdCyl(q-vec3(-9.5,18.3,-5.4),0.95,0.9),16.));
+ r=U(r,vec2(sdCyl(q-vec3(9.5,18.3,-5.4),0.85,0.9),16.));
+ r=U(r,vec2(sdRBox(q-vec3(-9.5,18.05,-2.6),vec3(1.7,0.6,1.35),0.4),17.));
+ r=U(r,vec2(sdRBox(q-vec3(0.,17.95,3.4),vec3(6.,0.35,0.95),0.3),3.));
+ return r;}
+vec2 scBattery(vec3 p){return battery(tBat(p));}
+
+/* ---------- scene ---------- */
+vec4 bound(){ // centre and radius per scene, for a quick skip of empty space
+ if(uScene==0) return vec4(0.,1.,0.,22.); if(uScene==1) return vec4(0.,6.,0.,16.); if(uScene==2) return vec4(0.,2.,0.,22.);
+ if(uScene==3) return vec4(0.,6.6,0.,24.); if(uScene==4) return vec4(0.,20.,0.,44.); if(uScene==5) return vec4(0.,6.5,0.,22.);
+ if(uScene==6) return vec4(0.,5.,0.,24.); if(uScene==7) return vec4(0.,6.6,0.,17.); if(uScene==8) return vec4(1.,2.,0.,26.);
+ if(uScene==9) return vec4(0.,1.,0.,14.); if(uScene==10) return vec4(0.,13.,0.,18.); return vec4(0.,9.,0.,20.);}
+bool gFull=false; // the bounding-sphere shortcut is only for the first ray: shadows and occlusion need true distances
+vec2 map(vec3 p){
+ vec2 r=vec2(p.y,1.);
+ vec4 b=bound();float bd=length(p-b.xyz)-b.w;
+ if(!gFull&&bd>1.) return U(r,vec2(bd,0.));
+ vec2 o;
+ if(uScene==0) o=scPads(p); else if(uScene==1) o=scFilters(p); else if(uScene==2) o=scShocks(p); else if(uScene==3) o=scStrut(p);
+ else if(uScene==4) o=scRadiator(p); else if(uScene==5) o=scHead(p); else if(uScene==6) o=scTail(p); else if(uScene==7) o=scComp(p);
+ else if(uScene==8) o=scClutch(p); else if(uScene==9) o=scPlugs(p); else if(uScene==10) o=scJug(p); else o=scBattery(p);
+ return U(r,o);}
+
+/* ---------- materials ---------- */
+struct M{vec3 a;float m;float r;vec3 e;};
+vec3 lin(vec3 c){return pow(c,vec3(2.2));}
+M mat(float id,vec3 p,vec3 n){
+ M o=M(vec3(0.5),0.,0.5,vec3(0.));
+ if(id==2.){o.a=vec3(0.022);o.r=0.24;}
+ else if(id==3.){o.a=vec3(0.028);o.r=0.78;}
+ else if(id==4.){float nz=noise(p*9.)*0.6+noise(p*37.)*0.4;o.a=vec3(0.06+0.07*nz);o.r=0.92;}
+ else if(id==5.){o.a=vec3(0.95);o.m=1.;o.r=0.07;}
+ else if(id==6.){o.a=vec3(0.86,0.87,0.88);o.m=1.;o.r=0.34;
+   if(uScene==4){vec3 q=tRad(p);if(abs(q.x)<25.5&&q.y>2.2&&q.y<35.8){float tube=smoothstep(0.32,0.05,abs(fract(q.y/1.15)-0.5));
+     float fin=0.5+0.5*sin(q.x*13.+q.y*0.3);o.a*=mix(0.32+0.25*fin,1.,tube);o.r=mix(0.55,0.3,tube);}}}
+ else if(id==7.||id==24.){vec3 s=id==7.?fA(p):fB(p);float ang=atan(s.z,s.x);
+   o.a=lin(vec3(0.184,0.329,0.902));o.r=0.16;
+   if(s.y>3.0&&s.y<7.9){o.a=vec3(0.82);o.r=0.3;
+     if(s.y>7.05&&s.y<7.3) o.a=lin(vec3(0.91,0.21,0.18));
+     if(s.y<3.55) o.a=lin(vec3(0.06,0.1,0.27));
+     float row=step(4.4,s.y)*step(s.y,4.75)+step(5.15,s.y)*step(s.y,5.9);
+     float cols=step(0.45,fract(ang*7.3))*step(abs(sin(ang*1.6)),0.75);
+     if(row*cols>0.5) o.a=vec3(0.06,0.08,0.16);}
+   if(s.y<0.3&&length(s.xz)<4.15){o.a=vec3(0.82,0.8,0.72);o.m=1.;o.r=0.3;}}
+ else if(id==9.){o.a=vec3(0.88);o.r=0.14;}
+ else if(id==10.){o.a=vec3(0.86,0.84,0.76);o.m=1.;o.r=0.26;}
+ else if(id==11.){o.a=lin(vec3(0.42,0.02,0.03));o.r=0.06;
+   if(uScene==6){vec3 q=p;q.xz*=rot(-0.3);vec3 h=vec3(q.x,q.y/tailScale(q.x)-4.8,q.z);
+     if(h.x<-10.6){o.a=vec3(0.78,0.8,0.82);o.r=0.08;}                       // reverse light: clear lens
+     else if(n.z>0.3) o.a*=0.7+0.3*step(0.5,fract(h.y*1.6));}}               // fine optic lines on the face
+ else if(id==12.){o.a=vec3(0.2,0.,0.);o.r=0.2;o.e=vec3(6.,0.3,0.22);}
+ else if(id==13.){o.a=vec3(0.8);o.r=0.2;o.e=vec3(3.2,3.4,3.6);}
+ else if(id==14.){o.a=lin(vec3(1.,0.55,0.08));o.r=0.15;o.e=vec3(0.6,0.25,0.02);}
+ else if(id==15.){o.a=vec3(0.01,0.016,0.035);o.r=0.02;}
+ else if(id==16.){o.a=vec3(0.55,0.56,0.58);o.m=1.;o.r=0.45;}
+ else if(id==17.){o.a=lin(vec3(0.8,0.06,0.06));o.r=0.35;}
+ else if(id==18.){o.a=vec3(0.03);o.r=0.45;
+   if(uScene==11){vec3 q=tBat(p)-vec3(0.,8.75,0.);if(n.z>0.6||n.z<-0.6){
+     if(q.y<4.8&&q.y>-6.5&&abs(q.x)<11.6){o.a=lin(vec3(0.184,0.329,0.902));o.r=0.25;
+       if(q.y>1.6&&q.y<2.6) o.a=vec3(0.85);
+       if(q.y>-4.6&&q.y<-4.2) o.a=lin(vec3(0.91,0.21,0.18));}}}
+   if(uScene==4){o.a=vec3(0.035);o.r=0.55;}}
+ else if(id==19.){vec3 q=tJug(p)-vec3(0.,12.,0.);o.a=vec3(0.025);o.r=0.16;
+   if(n.z>0.5&&abs(q.x)<6.6&&q.y<4.5&&q.y>-9.5){o.a=lin(vec3(0.184,0.329,0.902));o.r=0.22;
+     if(q.y>0.4&&q.y<1.6) o.a=vec3(0.85);
+     if(q.y>-6.4&&q.y<-5.9) o.a=lin(vec3(0.91,0.21,0.18));
+     if(q.y>-3.8&&q.y<-1.2&&abs(q.x)<4.5) o.a=vec3(0.88);}}
+ else if(id==20.){float nz=noise(p*6.)*0.5+noise(p*29.)*0.5;o.a=lin(vec3(0.33,0.27,0.22))*(0.7+0.5*nz);o.r=0.9;}
+ else if(id==21.){o.a=vec3(0.95,0.72,0.3);o.m=1.;o.r=0.22;}
+ else if(id==22.){o.a=vec3(0.97);o.m=1.;o.r=0.04;}
+ else if(id==23.){o.a=lin(vec3(0.184,0.329,0.902));o.r=0.3;}
+ else if(id==25.){o.a=vec3(0.05);o.r=0.35;}
+ return o;}
+
+/* ---------- light ---------- */
+vec3 env(vec3 d){
+ float t=clamp(d.y*0.5+0.5,0.,1.);
+ vec3 c=mix(vec3(0.32,0.34,0.38),vec3(0.95,0.97,1.0),smoothstep(0.25,0.95,t));
+ c+=vec3(4.)*smoothstep(0.84,0.93,dot(d,normalize(vec3(-0.6,0.72,0.35))));
+ c+=vec3(1.6)*smoothstep(0.88,0.95,dot(d,normalize(vec3(0.85,0.4,-0.25))));
+ c+=vec3(0.9)*smoothstep(0.9,0.97,dot(d,normalize(vec3(0.2,0.3,0.95))));
+ return c;}
+vec2 march(vec3 ro,vec3 rd){float t=0.;for(int i=0;i<300;i++){vec2 h=map(ro+rd*t);if(abs(h.x)<0.0008*t+0.0005)return vec2(t,h.y);t+=h.x*0.75;if(t>600.)break;}return vec2(-1.,0.);}
+vec3 nrm(vec3 p){const vec2 e=vec2(1.,-1.)*0.0015;return normalize(e.xyy*map(p+e.xyy).x+e.yyx*map(p+e.yyx).x+e.yxy*map(p+e.yxy).x+e.xxx*map(p+e.xxx).x);}
+float shadow(vec3 ro,vec3 rd){float res=1.,t=0.05;for(int i=0;i<64;i++){float h=map(ro+rd*t).x;res=min(res,9.*h/t);t+=clamp(h,0.05,3.);if(res<0.003||t>120.)break;}return clamp(res,0.,1.);}
+float ao(vec3 p,vec3 n){float o=0.,s=1.;for(int i=0;i<6;i++){float h=0.06+0.5*float(i);float d=map(p+n*h).x;o+=(h-d)*s;s*=0.75;}return clamp(1.-0.45*o,0.,1.);}
+vec3 aces(vec3 x){return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.,1.);}
+void main(){
+ vec2 uv=gl_FragCoord.xy/uRes;
+ vec3 bg=mix(vec3(0.892,0.906,0.934),vec3(0.972,0.977,0.988),smoothstep(0.,1.,uv.y));
+ vec2 sp=(2.*gl_FragCoord.xy-uRes)/uRes.y;
+ vec3 ww=normalize(uTgt-uCam),uu=normalize(cross(ww,vec3(0.,1.,0.))),vv=cross(uu,ww);
+ vec3 rd=normalize(sp.x*uu+sp.y*vv+uFov*ww);
+ vec2 h=march(uCam,rd);
+ gFull=true;
+ vec3 L=normalize(vec3(-0.5,0.82,0.42));
+ vec3 col=bg;
+ if(h.x>0.){
+   vec3 p=uCam+rd*h.x;
+   if(h.y==1.){ // floor: a shadow catcher on the light sweep
+     float sh=shadow(p+vec3(0.,0.01,0.),L);float oc=ao(p,vec3(0.,1.,0.));
+     col=bg*mix(0.62,1.,sh)*mix(0.55,1.,oc);
+   } else {
+     vec3 n=nrm(p);vec3 v=-rd;M m=mat(h.y,p,n);
+     float sh=shadow(p+n*0.02,L);float oc=ao(p,n);
+     float dif=clamp(dot(n,L),0.,1.)*sh;
+     vec3 hv=normalize(L+v);float nh=clamp(dot(n,hv),0.,1.);
+     float a2=max(m.r*m.r,0.002);float D=a2/(PI*pow(nh*nh*(a2-1.)+1.,2.));
+     vec3 F0=mix(vec3(0.04),m.a,m.m);float nv=clamp(dot(n,v),0.,1.);
+     vec3 F=F0+(1.-F0)*pow(1.-nv,5.);
+     vec3 r=reflect(rd,n);
+     vec3 envc=mix(env(r),vec3(0.62),clamp(m.r*1.3,0.,1.));
+     float refl_sh=mix(1.,shadow(p+n*0.03,r),0.85);
+     vec3 diff=m.a*(1.-m.m)*(dif*vec3(2.6,2.5,2.4)+(0.45+0.35*n.y)*vec3(0.62,0.66,0.74)*oc+vec3(0.18)*clamp(-n.y,0.,1.)*oc);
+     vec3 spec=F*envc*oc*refl_sh+F*D*dif*vec3(2.2)*0.25;
+     vec3 c=diff+spec+m.e;
+     col=pow(aces(c*0.95),vec3(1./2.2));
+   }
+ }
+ fragColor=vec4(col,1.);
+}
+</script>
+<script>
+const cv = document.getElementById('c');
+let gl, prog, loc;
+function init(w, h) {
+  cv.width = w; cv.height = h;
+  gl = cv.getContext('webgl2', { preserveDrawingBuffer: true, antialias: false });
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, '#version 300 es\nin vec2 p;void main(){gl_Position=vec4(p,0.,1.);}');
+  gl.compileShader(vs);
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fs, document.getElementById('fs').textContent.trim());
+  gl.compileShader(fs);
+  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(fs));
+  prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const pl = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(pl); gl.vertexAttribPointer(pl, 2, gl.FLOAT, false, 0, 0);
+  loc = n => gl.getUniformLocation(prog, n);
+  gl.enable(gl.SCISSOR_TEST);
+}
+// draws the image in horizontal bands so no single draw runs too long
+window.renderScene = async (s, w, h, cam, tgt, fovDeg, bands) => {
+  if (!gl || cv.width !== w || cv.height !== h) init(w, h);
+  gl.viewport(0, 0, w, h);
+  gl.uniform2f(loc('uRes'), w, h); gl.uniform1i(loc('uScene'), s);
+  gl.uniform3f(loc('uCam'), ...cam); gl.uniform3f(loc('uTgt'), ...tgt);
+  gl.uniform1f(loc('uFov'), 1 / Math.tan(fovDeg * Math.PI / 360));
+  const bh = Math.ceil(h / bands);
+  for (let i = 0; i < bands; i++) {
+    gl.scissor(0, i * bh, w, bh); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.finish();
+    await new Promise(r => setTimeout(r, 0));
+  }
+  return cv.toDataURL('image/png');
+};
+</script>
+</body></html>

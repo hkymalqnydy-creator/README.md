@@ -28,6 +28,7 @@
 ```
 python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand branding/crossky/png --out crossky \
   --skin royal --color '#2F54E6' --logo branding/crossky/svg/wordmark-white.svg --logo-ink branding/crossky/svg/wordmark-ink.svg \
+  --hero-car branding/crossky/svg/hero-car.svg --demo-extra branding/crossky/demo.json \
   --site-url https://hkymalqnydy-creator.github.io/README.md/crossky/
 ```
 

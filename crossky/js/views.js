@@ -373,7 +373,7 @@
         <div class="hero-row"><button type="button" class="plate" data-act="car"><span class="plate-band">${I('car')}</span>
           <span class="plate-main"><small>${esc(t('myCar'))}</small><strong>${esc(car ? SP.carText(car) : t('setCar'))}</strong></span>
           <span class="plate-edit">${car ? esc(t('change')) : I('plus')}</span></button>
-          <div class="pulse" id="pulse" aria-live="polite"></div></div></div></section><div class="hazard"></div>
+          <div class="pulse" id="pulse" aria-live="polite"></div></div>${SP.CFG.heroCar ? `<img class="hero-car" src="${esc(SP.CFG.heroCar)}" alt="" aria-hidden="true">` : ''}</div></section><div class="hazard"></div>
       <main class="wrap" id="home">${SP.demo ? `<a class="banner warn demo-b" href="#mine">${I('info')}<span>${esc(t('demoB', { e: SP.CFG.demoEmail || 'owner@demo.app' }))}</span></a>` : ''}${installBanner()}
         ${notice ? `<div class="banner note">${I('megaphone')}<span>${esc(notice)}</span></div>` : ''}
         <a class="banner vinb" href="#vin">${I('barcode')}<span><b>${esc(t('vinCta'))}</b><small>${esc(t('vinSub'))}</small></span>${I('chevL', 'dirx')}</a>

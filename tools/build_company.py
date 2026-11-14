@@ -16,7 +16,7 @@ import re
 import shutil
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WEB = ['index.html', 'privacy.html', 'sw.js', 'css', 'js', 'LICENSE.txt']
+WEB = ['index.html', 'privacy.html', 'sw.js', 'css', 'js', 'img', 'LICENSE.txt']
 
 
 def read(p):
@@ -59,6 +59,8 @@ def main():
     ap.add_argument('--color', default='#0d2038', help='brand colour for the splash screen, browser bar and app shells')
     ap.add_argument('--logo', default='', help='wordmark SVG for the blue bar and splash (white); it replaces the name in the bar')
     ap.add_argument('--logo-ink', default='', help='wordmark SVG for paper and light screens (invoice, about page)')
+    ap.add_argument('--hero-car', default='', help='picture of a car for the blue hero (SVG or PNG with a clear background)')
+    ap.add_argument('--demo-extra', default='', help='JSON list of the edition\'s own demo parts with real photos (see branding/crossky/demo.json)')
     ap.add_argument('--site-url', default='', help='public address of this edition, for link previews (WhatsApp) and share links')
     ap.add_argument('--brands', default='KR,JP', help='brands shown until the owner picks them in the app: origin countries (KR,JP) or brand ids (toyota,kia); "all" for every brand')
     a = ap.parse_args()
@@ -101,6 +103,21 @@ def main():
     for src, dst in ((a.logo, 'logo.svg'), (a.logo_ink, 'logo-ink.svg')):
         if src:
             copy(os.path.abspath(src), os.path.join(out, 'icons', dst))
+    hero_car = ''
+    if a.hero_car:
+        hero_car = 'icons/hero-car' + os.path.splitext(a.hero_car)[1].lower()
+        copy(os.path.abspath(a.hero_car), os.path.join(out, hero_car))
+    # the edition's own parts: their photos go to img/demo/, the list into config.js
+    extra = []
+    if a.demo_extra:
+        base = os.path.dirname(os.path.abspath(a.demo_extra))
+        for x in json.loads(read(a.demo_extra)):
+            imgs = []
+            for rel in x.get('imgs', []):
+                dst = 'img/demo/' + os.path.basename(rel)
+                copy(os.path.join(base, rel), os.path.join(out, dst))
+                imgs.append(dst)
+            extra.append(dict(x, imgs=imgs))
     svg = os.path.join(os.path.dirname(brand), 'svg', 'icon.svg')
     if os.path.exists(svg):
         copy(svg, os.path.join(out, 'icons', 'icon.svg'))
@@ -117,6 +134,8 @@ window.SPARAT_CONFIG = {
   skin: %(jskin)s,                 // look: '' (market) or 'royal' (brand blue)
   logo: %(jlogo)s,                 // wordmark for the blue bar (it replaces the name there)
   logoInk: %(jink)s,              // wordmark for paper and light screens
+  heroCar: %(jcar)s,              // picture of a car in the blue hero (skin royal)
+  demoExtra: %(jextra)s,      // the edition's own demo parts, with real photos
   defaultCountry: %(jcountry)s,
   defaultLang: '',          // '' = follow the phone's language; or 'ar', 'en', 'fr', 'es', 'de', 'tr', 'ru', 'zh'
   demo: %(demo)s,             // demo data on the device while no server is set
@@ -125,7 +144,8 @@ window.SPARAT_CONFIG = {
   // aiScan: false          // stop the app from trying the AI invoice reader (supabase/functions/scan-invoice)
 };
 """ % {'name': name, 'jname': json.dumps(name), 'jcountry': json.dumps(a.country), 'demo': 'false' if a.no_demo else 'true', 'jemail': json.dumps(a.email), 'jbrands': json.dumps(brands), 'jsite': json.dumps(site), 'jskin': json.dumps(a.skin),
-       'jlogo': json.dumps('icons/logo.svg' if a.logo else ''), 'jink': json.dumps('icons/logo-ink.svg' if a.logo_ink else '')})
+       'jlogo': json.dumps('icons/logo.svg' if a.logo else ''), 'jink': json.dumps('icons/logo-ink.svg' if a.logo_ink else ''),
+       'jcar': json.dumps(hero_car), 'jextra': json.dumps(extra, ensure_ascii=False)})
 
     m = json.loads(read(os.path.join(ROOT, 'manifest.webmanifest')))
     m.update({'name': name, 'short_name': name, 'description': '%s · %s. %s' % (name, a.tagline_ar, a.tagline_en), 'background_color': a.color, 'theme_color': a.color,
@@ -163,6 +183,10 @@ window.SPARAT_CONFIG = {
 
     # its own offline caches, so it never clears another app's caches on the same web address
     s = read(os.path.join(out, 'sw.js')).replace("'sparat-", "'%s-" % slug).replace("startsWith('sparat-')", "startsWith('%s-')" % slug)
+    # the edition's own pictures belong to the shell too, so the bar and the hero look right when opened offline
+    own = [f for f in ('icons/logo.svg', 'icons/logo-ink.svg', hero_car) if f and os.path.exists(os.path.join(out, f))]
+    if own:
+        s = sub(s, "'icons/icon.svg', 'icons/icon-192.png'];", "'icons/icon.svg', 'icons/icon-192.png', %s];" % ', '.join("'%s'" % f for f in own))
     write(os.path.join(out, 'sw.js'), s)
 
     # Android / iPhone (Capacitor) and Windows (Electron)
