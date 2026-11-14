@@ -53,10 +53,26 @@ def main():
     ap.add_argument('--tagline-ar', default='قطع غيار السيارات الكورية واليابانية')
     ap.add_argument('--tagline-en', default='Korean & Japanese car parts')
     ap.add_argument('--no-demo', action='store_true')
+    ap.add_argument('--brands', default='KR,JP', help='brands shown until the owner picks them in the app: origin countries (KR,JP) or brand ids (toyota,kia); "all" for every brand')
     a = ap.parse_args()
     name, slug = a.name.strip(), re.sub(r'[^a-z0-9]+', '', a.name.lower()) or 'company'
     app_id = a.app_id or 'ly.%s.app' % slug
     out = os.path.abspath(a.out)
+    data = read(os.path.join(ROOT, 'js', 'data.js'))
+    known = re.findall(r"^\s*'?([a-z0-9-]+)\|[^|\n]*\|[^|\n]*\|([A-Z]{2})\|", data, re.M)  # id|Latin|Arabic|origin|models
+    want = [x.strip() for x in a.brands.split(',') if x.strip()]
+    if a.brands.strip().lower() == 'all':
+        brands = []
+    elif all(re.fullmatch(r'[A-Z]{2}', x) for x in want):
+        brands = [i for i, o in known if o in want]
+    else:
+        ids = {i for i, o in known}
+        bad = [x for x in want if x not in ids]
+        if bad:
+            raise SystemExit('unknown brand ids: %s' % ', '.join(bad))
+        brands = want
+    if a.brands.strip().lower() != 'all' and not brands:
+        raise SystemExit('no brands match %r' % a.brands)
     brand = os.path.abspath(a.brand)
     if os.path.exists(out):
         shutil.rmtree(out)
@@ -86,10 +102,11 @@ window.SPARAT_CONFIG = {
   defaultCountry: %(jcountry)s,
   defaultLang: '',          // '' = follow the phone's language; or 'ar', 'en', 'fr', 'es', 'de', 'tr', 'ru', 'zh'
   demo: %(demo)s,             // demo data on the device while no server is set
-  demoEmail: %(jemail)s       // demo owner login (password 123456)
+  demoEmail: %(jemail)s,      // demo owner login (password 123456)
+  brands: %(jbrands)s  // brands shown until the owner picks them (Owner panel → Company settings); [] = all
   // aiScan: false          // stop the app from trying the AI invoice reader (supabase/functions/scan-invoice)
 };
-""" % {'name': name, 'jname': json.dumps(name), 'jcountry': json.dumps(a.country), 'demo': 'false' if a.no_demo else 'true', 'jemail': json.dumps(a.email)})
+""" % {'name': name, 'jname': json.dumps(name), 'jcountry': json.dumps(a.country), 'demo': 'false' if a.no_demo else 'true', 'jemail': json.dumps(a.email), 'jbrands': json.dumps(brands)})
 
     m = json.loads(read(os.path.join(ROOT, 'manifest.webmanifest')))
     m.update({'name': name, 'short_name': name, 'description': '%s · %s. %s' % (name, a.tagline_ar, a.tagline_en), 'background_color': '#0d2038',

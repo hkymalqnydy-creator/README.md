@@ -29,6 +29,8 @@
 python3 tools/build_company.py --name Corssky --email owner@corssky.ly --brand branding/corssky/png --out corssky
 ```
 
+الماركات المعروضة من البداية كورية ويابانية (`--brands KR,JP`)، وتقدر تحط ماركات معينة (`--brands toyota,kia`) أو `--brands all`. صاحب الشركة يغيّرها بعدين من التطبيق.
+
 الدليل: [`docs/دليل-نسخة-الشركة.md`](docs/دليل-نسخة-الشركة.md).
 
 ## التشغيل (مرة واحدة)
