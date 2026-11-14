@@ -1,0 +1,21 @@
+{
+  "name": "crossky-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CROSSKY for Android and iPhone (Capacitor wrapper around the web app)",
+  "scripts": {
+    "web": "node scripts/copy-web.js",
+    "android": "npm run web && npx cap add android && npx cap sync android && npx @capacitor/assets generate --android",
+    "ios": "npm run web && npx cap add ios && npx cap sync ios && npx @capacitor/assets generate --ios",
+    "sync": "npm run web && npx cap sync"
+  },
+  "dependencies": {
+    "@capacitor/core": "latest",
+    "@capacitor/android": "latest",
+    "@capacitor/ios": "latest"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "latest",
+    "@capacitor/assets": "latest"
+  }
+}

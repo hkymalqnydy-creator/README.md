@@ -1,7 +1,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 const fs = require('fs'), path = require('path');
 fs.mkdirSync(path.join(__dirname, 'shots'), { recursive: true });
-const SITE = process.env.SITE || path.resolve(__dirname, '../..'), ORIGIN = 'https://corssky.test/';
+const SITE = process.env.SITE || path.resolve(__dirname, '../..'), ORIGIN = 'https://crossky.test/';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.py': 'text/plain' };
 const errors = []; let step = 0;
 /* Stand-ins for the CDN libraries, with the same calls the app makes (ZXing for iPhone-style scanning, Tesseract for reading on the device). */
@@ -20,7 +20,7 @@ const log = s => console.log(`${++step}. ${s}`);
     const u = new URL(route.request().url());
     if (u.origin + '/' === ORIGIN) {
       let p = u.pathname === '/' ? '/index.html' : decodeURIComponent(u.pathname);
-      if (p === '/config.js') return route.fulfill({ contentType: 'text/javascript', body: "window.SPARAT_CONFIG={mode:'company',appName:'Corssky',demo:true,demoEmail:'owner@corssky.ly',defaultCountry:'LY',noServiceWorker:true,siteUrl:'https://corssky.test/'};" });
+      if (p === '/config.js') return route.fulfill({ contentType: 'text/javascript', body: "window.SPARAT_CONFIG={mode:'company',appName:'CROSSKY',demo:true,demoEmail:'owner@crossky.ly',defaultCountry:'LY',noServiceWorker:true,siteUrl:'https://crossky.test/'};" });
       const f = path.join(SITE, p);
       return fs.existsSync(f) ? route.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }) : route.fulfill({ status: 404, body: '' });
     }
@@ -42,7 +42,7 @@ const log = s => console.log(`${++step}. ${s}`);
   const ask = async q => { const n = await page.locator('.msg.bot').count(); await page.fill('#ci', q); await page.press('#ci', 'Enter'); await page.waitForFunction(k => document.querySelectorAll('.msg.bot:not(.typing)').length > k, n); return (await page.locator('.msg.bot').last().innerText()).trim(); };
   try {
     await page.goto(ORIGIN); await see('#gnew .card');
-    must((await text('.topbar .brand')).includes('Corssky'), 'brand name'); must((await text('.hero h1')).includes('الكوري والياباني'), 'hero title from settings');
+    must((await text('.topbar .brand')).includes('CROSSKY'), 'brand name'); must((await text('.hero h1')).includes('الكوري والياباني'), 'hero title from settings');
     must(await page.locator('.demo-b').count() === 1, 'demo banner'); must(await page.locator('.cartbtn').count() === 1, 'cart button'); must(await page.locator('#botfab').count() === 1, 'assistant button');
     const tiles = await page.locator('.btile').allInnerTexts();
     must(tiles.some(x => x.includes('هيونداي')) && !tiles.some(x => x.includes('مرسيدس')), 'only Korean/Japanese brands: ' + tiles.join('|'));
@@ -70,24 +70,24 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.waitForURL(/#mine/); await see('#pf'); must((await page.inputValue('#pn')) === 'ورشة الأمل', 'profile saved at sign-up'); log('customer sign-up saves name and phone');
     must(await page.locator('a[href="#new-shop"]').count() === 0, 'no shop registration for customers');
 
-    await login('owner@corssky.ly', '123456'); await see('.admin-entry'); log('owner signs in with full control');
+    await login('owner@crossky.ly', '123456'); await see('.admin-entry'); log('owner signs in with full control');
     await go('admin-company'); await see('#cbn');
-    await page.fill('#cbn', 'Corssky Parts'); await page.fill('#cht', 'كل قطع الكوري والياباني'); await page.click('#cpm input[value="approved"]');
+    await page.fill('#cbn', 'CROSSKY Parts'); await page.fill('#cht', 'كل قطع الكوري والياباني'); await page.click('#cpm input[value="approved"]');
     await page.click('#cgo'); await page.waitForTimeout(500); await shot('04-settings');
-    await go(''); await see('.hero h1'); must((await text('.hero h1')) === 'كل قطع الكوري والياباني' && (await text('.topbar .brand')).includes('Corssky Parts'), 'settings applied'); log('owner changed name, title and price mode');
+    await go(''); await see('.hero h1'); must((await text('.hero h1')) === 'كل قطع الكوري والياباني' && (await text('.topbar .brand')).includes('CROSSKY Parts'), 'settings applied'); log('owner changed name, title and price mode');
     must(await page.locator('#gnew .price.locked').count() === 0, 'owner still sees prices');
 
     await go('mine'); await page.click('#lo'); await page.waitForTimeout(400); await go(''); await see('#gnew .card');
     must(await page.locator('#gnew .price.locked').count() >= 4, 'guest sees locked prices'); log('guest: ' + await text('#gnew .price.locked'));
     await login('cust@test.ly', 'secret123'); await see('.mcard .banner.warn'); log('customer waits for approval: ' + (await text('.mcard .banner.warn')).slice(0, 30));
     await go(''); await see('#gnew .card'); must((await text('#gnew .price.locked')).includes('المعتمدين'), 'approved-only label');
-    await login('owner@corssky.ly', '123456'); await go('admin-customers'); await see('[data-c]');
+    await login('owner@crossky.ly', '123456'); await go('admin-customers'); await see('[data-c]');
     await page.locator('.arow', { hasText: 'ورشة الأمل' }).locator('[data-c]').click(); await page.waitForTimeout(400);
     must(await page.locator('.arow', { hasText: 'ورشة الأمل' }).locator('.pill.ok').count() === 1, 'approved'); log('owner approved the workshop'); await shot('05-customers');
     await login('cust@test.ly', 'secret123'); await go(''); await see('#gnew .card');
     const lk = await page.locator('#gnew .price.locked').allInnerTexts(); must(!lk.some(x => x.includes('المعتمدين')) && await page.locator('#gnew .price.num').count() >= 5, 'approved customer sees prices: ' + lk.join('|')); log('approved customer now sees prices (owner-hidden parts stay hidden)');
 
-    await login('owner@corssky.ly', '123456'); await go('admin-sync'); await see('#ifile', 4000).catch(() => {}); await page.waitForTimeout(400);
+    await login('owner@crossky.ly', '123456'); await go('admin-sync'); await see('#ifile', 4000).catch(() => {}); await page.waitForTimeout(400);
     await page.setInputFiles('#ifile', path.join(__dirname, 'import.csv')); await page.waitForFunction(() => /1/.test((document.querySelector('#istat b') || {}).textContent || ''), null, { timeout: 8000 });
     log('Excel/CSV import: ' + await text('#istat b'));
     const upd = await page.evaluate(() => { const p = window.__mockdb.products.find(x => x.sku === 'HY-58101'); const q = window.__mockdb.products.find(x => x.sku === 'NEW-001'); return [p.price, p.qty, q && q.title, q && q.make]; });
@@ -101,7 +101,7 @@ const log = s => console.log(`${++step}. ${s}`);
     a = await ask('شن عندكم زيوت'); must(a.includes('كل أنواع الزيوت'), 'new rule'); log('owner added an auto-reply and the assistant uses it');
     await page.click('#bclr'); await page.waitForTimeout(200);
     // ----- sales system -----
-    await login('owner@corssky.ly', '123456'); await see('.pos-tile'); must(await page.locator('.pos-tile').count() === 6, 'owner has 6 sales tiles: ' + (await page.locator('.pos-tile').allInnerTexts()).join('|'));
+    await login('owner@crossky.ly', '123456'); await see('.pos-tile'); must(await page.locator('.pos-tile').count() === 6, 'owner has 6 sales tiles: ' + (await page.locator('.pos-tile').allInnerTexts()).join('|'));
     await go('staff'); await see('#sadd2'); await page.click('#sadd2'); await see('#se');
     await page.fill('#se', 'seller2@test.ly'); await page.fill('#sn2', 'سالم'); must(await page.locator('.perm-list input[value="sales"]').isChecked(), 'sell permission pre-ticked');
     must(await page.locator('.perm-list input[value="purchases"]').count() === 1 && !(await page.locator('.perm-list input[value="purchases"]').isChecked()), 'receiving permission offered, off by default');
@@ -126,7 +126,7 @@ const log = s => console.log(`${++step}. ${s}`);
     for (let i = 0; i < 200; i++) { if (+(await text('.pline .stepper b')) > after) break; await page.click('.pline [data-d="1"]'); }
     await page.click('#psave'); await see('#perr'); await page.waitForFunction(() => document.querySelector('#perr').textContent.length > 3);
     log('overselling blocked: ' + await text('#perr')); await page.click('#pnew');
-    await login('owner@corssky.ly', '123456'); await go('reports'); await see('.astat'); log('owner report: ' + (await text('.astat')).replace(/\s+/g, ' '));
+    await login('owner@crossky.ly', '123456'); await go('reports'); await see('.astat'); log('owner report: ' + (await text('.astat')).replace(/\s+/g, ' '));
     await shot('10-reports');
     await go('invoices'); await page.click('[data-r="all"]'); await see('.inv-row'); must(await page.locator('.inv-row').count() >= 4, 'owner sees all invoices');
     await page.click('.inv-row'); await see('#iret'); await page.click('#iret'); await see('[data-ok]'); await page.click('[data-ok]'); await see('.inv-stamp');
@@ -211,9 +211,9 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('#rpos'); await page.waitForURL(/#pos/); await see('.pline'); must(await page.locator('.pline').count() === 3, 'three lines on the sale'); log('"open as a sale" put the 3 parts on the point of sale');
     await page.click('#pnew'); await go('receive'); await see('#rclr'); await page.click('#rclr'); await see('[data-ok]'); await page.click('[data-ok]'); await page.waitForTimeout(200);
     // a salesperson without the receiving permission
-    await login('seller@corssky.ly', '123456'); must(!(await page.locator('.pos-tile').allInnerTexts()).join().includes('استلام'), 'no receive tile for seller');
+    await login('seller@crossky.ly', '123456'); must(!(await page.locator('.pos-tile').allInnerTexts()).join().includes('استلام'), 'no receive tile for seller');
     await go('receive'); await see('.empty'); log('salesperson without permission cannot receive stock');
-    await login('owner@corssky.ly', '123456');
+    await login('owner@crossky.ly', '123456');
     await go(''); await page.click('[data-act="lang"]'); await page.click('[data-l="en"]'); await see('.hero h1');
     must((await page.locator('.tabs .tab').allInnerTexts()).join('|').includes('Account'), 'english tabs'); log('English UI: ' + (await page.locator('.tabs .tab').allInnerTexts()).join(' | '));
     await shot('07-en');

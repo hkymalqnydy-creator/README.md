@@ -6,9 +6,9 @@ packaging/android-ios/android/
 packaging/android-ios/ios/
 packaging/windows/app/
 packaging/windows/dist/
-corssky/packaging/android-ios/www/
-corssky/packaging/android-ios/android/
-corssky/packaging/android-ios/ios/
-corssky/packaging/windows/app/
-corssky/packaging/windows/dist/
+crossky/packaging/android-ios/www/
+crossky/packaging/android-ios/android/
+crossky/packaging/android-ios/ios/
+crossky/packaging/windows/app/
+crossky/packaging/windows/dist/
 sparat_sync.ini

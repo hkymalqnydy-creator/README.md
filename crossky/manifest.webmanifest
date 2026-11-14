@@ -1,0 +1,80 @@
+{
+  "id": "./",
+  "name": "CROSSKY",
+  "short_name": "CROSSKY",
+  "description": "CROSSKY · قطع غيار السيارات الكورية واليابانية. Korean & Japanese car parts",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2F54E6",
+  "theme_color": "#2F54E6",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": [
+    "shopping",
+    "business",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "نقطة البيع",
+      "short_name": "البيع",
+      "url": "./#pos",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "استلام بضاعة",
+      "short_name": "استلام",
+      "url": "./#receive",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "رقم الشاصي (VIN)",
+      "short_name": "VIN",
+      "url": "./#vin",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

@@ -1,54 +1,8 @@
-/* Sparat offline support: app files network-first, libraries and fonts stale-while-revalidate,
-   product photos cache-first (bounded). Database and VIN lookups always go to the network. */
-const VERSION = 'corssky-v4';
-const LIB = 'corssky-lib-v1';
-const IMG = 'corssky-img-v1';
-const SHELL = ['./', 'index.html', 'css/styles.css', 'config.js', 'js/data.js', 'js/i18n.js', 'js/vin.js', 'js/icons.js',
-  'js/demo.js', 'js/core.js', 'js/views.js', 'js/views2.js', 'js/company.js', 'js/pos.js', 'js/scan.js', 'js/embed.js', 'js/boot.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
-
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
-});
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k.startsWith('corssky-') && ![VERSION, LIB, IMG].includes(k)).map(k => caches.delete(k))))
-    .then(() => self.clients.claim()));
-});
-
-async function trim(cache, max) {
-  const keys = await cache.keys();
-  for (let i = 0; i < keys.length - max; i++) await cache.delete(keys[i]);
-}
-
-self.addEventListener('fetch', e => {
-  const req = e.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-
-  if (url.origin === self.location.origin) {
-    e.respondWith(fetch(req).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
-      return res;
-    }).catch(() => caches.match(req).then(hit => hit || caches.match('index.html'))));
-    return;
-  }
-  /* the on-device invoice reader keeps its own large files in IndexedDB: no second copy here */
-  if (/tesseract/i.test(url.pathname)) return;
-  if (url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'unpkg.com' || url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    e.respondWith(caches.open(LIB).then(async c => {
-      const hit = await c.match(req);
-      const net = fetch(req).then(res => { if (res.ok || res.type === 'opaque') c.put(req, res.clone()); return res; }).catch(() => hit);
-      return hit || net;
-    }));
-    return;
-  }
-  if (url.pathname.includes('/storage/v1/object/public/')) {
-    e.respondWith(caches.open(IMG).then(async c => {
-      const hit = await c.match(req);
-      if (hit) return hit;
-      const res = await fetch(req);
-      if (res.ok) { c.put(req, res.clone()); trim(c, 400); }
-      return res;
-    }));
-  }
-});
+/* The app moved to ../crossky/. This takes the place of the old offline worker of this address: it deletes the old
+   caches, removes itself and reloads open pages, which then follow the redirect in index.html. */
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil((async () => {
+  for (const k of await caches.keys()) if (k.startsWith('corssky-')) await caches.delete(k);
+  await self.registration.unregister();
+  for (const c of await self.clients.matchAll({ type: 'window' })) c.navigate(c.url);
+})()));

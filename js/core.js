@@ -4,6 +4,7 @@
   const CFG = window.SPARAT_CONFIG || {};
   const D = window.SP_DATA, L = window.SP_I18N, VIN = window.SP_VIN, I = window.SP_I;
   const SP = window.SP = { CFG, D, L, VIN, I };
+  if (/^[a-z]+$/.test(CFG.skin || '')) document.documentElement.setAttribute('data-skin', CFG.skin);
 
   /* ---------- helpers ---------- */
   const $ = (s, r = document) => r.querySelector(s);

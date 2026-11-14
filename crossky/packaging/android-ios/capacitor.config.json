@@ -1,0 +1,15 @@
+{
+  "appId": "ly.crossky.app",
+  "appName": "CROSSKY",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#2F54E6"
+  },
+  "ios": {
+    "backgroundColor": "#2F54E6",
+    "contentInset": "never"
+  }
+}

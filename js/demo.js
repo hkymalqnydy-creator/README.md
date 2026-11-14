@@ -20,14 +20,17 @@
   /* Picture for demo parts: the category icon on a soft gradient. */
   const PAL = [['#fff4e3', '#ffd9a3', '#a85a00'], ['#e8f1f6', '#c4dbe8', '#0d5b74'], ['#eef0e6', '#d6dcc4', '#4b5a1e'], ['#f3ecf8', '#ddcdea', '#5a3b85'], ['#f1f1ef', '#dcdcd6', '#3b3f45']];
   const ICON = { brakes: 'c_brakes', electrical: 'c_elec', engine: 'c_engine', lights: 'c_light', oils: 'c_oil', suspension: 'c_susp', cooling: 'c_cool', tires: 'c_tire', body: 'c_body', ac: 'c_ac', transmission: 'c_gear', interior: 'c_int' };
+  /* the brand-blue look (config skin 'royal') keeps its pictures in the same family of blues */
+  const PAL_ROYAL = [['#eef2ff', '#d3ddff', '#2f54e6'], ['#f2f5fb', '#dde4f1', '#24366f'], ['#e8f0ff', '#c6d6ff', '#2343d2'], ['#f4f6fb', '#e1e6ef', '#3b4566']];
   function art(cat, k) {
-    const IC = window.SP_IC || {}, [a, b, c] = PAL[k % PAL.length], icon = IC[ICON[cat]] || IC.wrench || '';
+    const pal = (window.SPARAT_CONFIG || {}).skin === 'royal' ? PAL_ROYAL : PAL;
+    const IC = window.SP_IC || {}, [a, b, c] = pal[k % pal.length], icon = IC[ICON[cat]] || IC.wrench || '';
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/><ellipse cx="200" cy="248" rx="110" ry="14" fill="#000" opacity=".08"/><g transform="translate(110 50) scale(7.5)" fill="none" stroke="${c}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icon}</g></svg>`;
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   }
 
   function seedCompany(DB) {
-    const C = window.SPARAT_CONFIG || {}, app = C.appName || 'Corssky', email = C.demoEmail || 'owner@demo.app';
+    const C = window.SPARAT_CONFIG || {}, app = C.appName || 'CROSSKY', email = C.demoEmail || 'owner@demo.app';
     const owner = { id: uuid(), email, password: '123456' };
     DB.users.push(owner); DB.admins.push(owner.id);
     const ago = m => new Date(Date.now() - m * 60000).toISOString();

@@ -3,7 +3,9 @@
 with the company's name, icons, app ids and settings. The result is a complete project: web app, database setup,
 invoice-reader function, sync bridge, Android/iPhone/Windows packaging and the guide.
 
-  python3 tools/build_company.py --name Corssky --email owner@corssky.ly --brand branding/corssky/png --out corssky
+  python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand branding/crossky/png --out crossky \
+      --skin royal --color '#2F54E6' --logo branding/crossky/svg/wordmark-white.svg --logo-ink branding/crossky/svg/wordmark-ink.svg \
+      --site-url https://hkymalqnydy-creator.github.io/README.md/crossky/
 
 --demo (default on) lets the app run without a server, with sample data kept on the device; it switches itself off
 as soon as supabaseUrl and supabaseKey are filled in config.js."""
@@ -44,17 +46,27 @@ def sub(text, old, new, count=1):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--name', required=True, help='company / app name, e.g. Corssky')
+    ap.add_argument('--name', required=True, help='company / app name, e.g. CROSSKY')
     ap.add_argument('--email', required=True, help='owner e-mail used by the demo (password 123456)')
-    ap.add_argument('--brand', required=True, help='folder with the brand PNGs (see branding/corssky/make_assets.py)')
+    ap.add_argument('--brand', required=True, help='folder with the brand PNGs (see branding/crossky/make_assets.py)')
     ap.add_argument('--out', required=True, help='output folder (replaced)')
     ap.add_argument('--country', default='LY')
     ap.add_argument('--app-id', default='', help='Android/iOS id, default ly.<name>.app')
     ap.add_argument('--tagline-ar', default='قطع غيار السيارات الكورية واليابانية')
     ap.add_argument('--tagline-en', default='Korean & Japanese car parts')
     ap.add_argument('--no-demo', action='store_true')
+    ap.add_argument('--skin', default='', help='look of the edition: "" (market look) or "royal" (brand blue, see css/styles.css)')
+    ap.add_argument('--color', default='#0d2038', help='brand colour for the splash screen, browser bar and app shells')
+    ap.add_argument('--logo', default='', help='wordmark SVG for the blue bar and splash (white); it replaces the name in the bar')
+    ap.add_argument('--logo-ink', default='', help='wordmark SVG for paper and light screens (invoice, about page)')
+    ap.add_argument('--site-url', default='', help='public address of this edition, for link previews (WhatsApp) and share links')
     ap.add_argument('--brands', default='KR,JP', help='brands shown until the owner picks them in the app: origin countries (KR,JP) or brand ids (toyota,kia); "all" for every brand')
     a = ap.parse_args()
+    if not re.fullmatch(r'#[0-9a-fA-F]{6}', a.color):
+        raise SystemExit('--color must look like #2F54E6')
+    site = a.site_url.strip()
+    if site and not site.endswith('/'):
+        site += '/'
     name, slug = a.name.strip(), re.sub(r'[^a-z0-9]+', '', a.name.lower()) or 'company'
     app_id = a.app_id or 'ly.%s.app' % slug
     out = os.path.abspath(a.out)
@@ -86,6 +98,9 @@ def main():
     for f in os.listdir(brand):
         if f.endswith('.png') and not f.startswith('app-'):
             copy(os.path.join(brand, f), os.path.join(out, 'icons', f))
+    for src, dst in ((a.logo, 'logo.svg'), (a.logo_ink, 'logo-ink.svg')):
+        if src:
+            copy(os.path.abspath(src), os.path.join(out, 'icons', dst))
     svg = os.path.join(os.path.dirname(brand), 'svg', 'icon.svg')
     if os.path.exists(svg):
         copy(svg, os.path.join(out, 'icons', 'icon.svg'))
@@ -98,7 +113,10 @@ window.SPARAT_CONFIG = {
   appName: %(jname)s,
   supabaseUrl: '',          // e.g. 'https://abcdefghijkl.supabase.co'
   supabaseKey: '',          // the anon / publishable key
-  siteUrl: '',              // public address of the app, e.g. 'https://parts.example.ly/' (used in share links and e-mails)
+  siteUrl: %(jsite)s,              // public address of the app, e.g. 'https://parts.example.ly/' (used in share links and e-mails)
+  skin: %(jskin)s,                 // look: '' (market) or 'royal' (brand blue)
+  logo: %(jlogo)s,                 // wordmark for the blue bar (it replaces the name there)
+  logoInk: %(jink)s,              // wordmark for paper and light screens
   defaultCountry: %(jcountry)s,
   defaultLang: '',          // '' = follow the phone's language; or 'ar', 'en', 'fr', 'es', 'de', 'tr', 'ru', 'zh'
   demo: %(demo)s,             // demo data on the device while no server is set
@@ -106,10 +124,11 @@ window.SPARAT_CONFIG = {
   brands: %(jbrands)s  // brands shown until the owner picks them (Owner panel → Company settings); [] = all
   // aiScan: false          // stop the app from trying the AI invoice reader (supabase/functions/scan-invoice)
 };
-""" % {'name': name, 'jname': json.dumps(name), 'jcountry': json.dumps(a.country), 'demo': 'false' if a.no_demo else 'true', 'jemail': json.dumps(a.email), 'jbrands': json.dumps(brands)})
+""" % {'name': name, 'jname': json.dumps(name), 'jcountry': json.dumps(a.country), 'demo': 'false' if a.no_demo else 'true', 'jemail': json.dumps(a.email), 'jbrands': json.dumps(brands), 'jsite': json.dumps(site), 'jskin': json.dumps(a.skin),
+       'jlogo': json.dumps('icons/logo.svg' if a.logo else ''), 'jink': json.dumps('icons/logo-ink.svg' if a.logo_ink else '')})
 
     m = json.loads(read(os.path.join(ROOT, 'manifest.webmanifest')))
-    m.update({'name': name, 'short_name': name, 'description': '%s · %s. %s' % (name, a.tagline_ar, a.tagline_en), 'background_color': '#0d2038',
+    m.update({'name': name, 'short_name': name, 'description': '%s · %s. %s' % (name, a.tagline_ar, a.tagline_en), 'background_color': a.color, 'theme_color': a.color,
               'categories': ['shopping', 'business', 'productivity']})
     m['shortcuts'] = [
         {'name': 'نقطة البيع', 'short_name': 'البيع', 'url': './#pos', 'icons': [{'src': 'icons/icon-192.png', 'sizes': '192x192'}]},
@@ -126,6 +145,15 @@ window.SPARAT_CONFIG = {
     h = sub(h, '<meta name="apple-mobile-web-app-title" content="سبيرات">', '<meta name="apple-mobile-web-app-title" content="%s">' % name)
     h = sub(h, '<meta property="og:title" content="سبيرات · Sparat">', '<meta property="og:title" content="%s">' % name)
     h = sub(h, 'aria-label="سبيرات"', 'aria-label="%s"' % name)
+    # splash screen and browser bar in the brand colour, with the wordmark when there is one
+    h = sub(h, '<meta name="theme-color" content="#15181d">', '<meta name="theme-color" content="%s">' % a.color)
+    h = sub(h, '.boot{min-height:100vh;display:grid;place-items:center;background:#15181d}', '.boot{min-height:100vh;display:grid;place-items:center;background:%s}' % a.color)
+    if a.logo:
+        h = sub(h, '<span class="brand-mark" aria-label="%s"></span>' % name, '<img class="boot-logo" src="icons/logo.svg" alt="%s">' % name)
+        h = sub(h, '  .boot .brand-mark{', '  .boot-logo{width:min(56vw,260px);height:auto;animation:pulse 1.1s ease-in-out infinite alternate}\n  .boot .brand-mark{')
+    # link previews (WhatsApp, Facebook) need absolute addresses
+    if site:
+        h = sub(h, '<meta property="og:image" content="icons/og.png">', '<meta property="og:image" content="%sicons/og.png">\n<meta property="og:url" content="%s">' % (site, site))
     h = sub(h, 'لاستخدام سبيرات · Please enable JavaScript to use Sparat.', 'لاستخدام %s · Please enable JavaScript to use %s.' % (name, name))
     write(os.path.join(out, 'index.html'), h)
 
@@ -146,8 +174,8 @@ window.SPARAT_CONFIG = {
             copy(os.path.join(brand, f), os.path.join(pk, 'android-ios', 'assets', f[4:]))
     cap = json.loads(read(os.path.join(pk, 'android-ios', 'capacitor.config.json')))
     cap.update({'appId': app_id, 'appName': name})
-    cap.setdefault('android', {})['backgroundColor'] = '#0d2038'
-    cap.setdefault('ios', {})['backgroundColor'] = '#0d2038'
+    cap.setdefault('android', {})['backgroundColor'] = a.color
+    cap.setdefault('ios', {})['backgroundColor'] = a.color
     write(os.path.join(pk, 'android-ios', 'capacitor.config.json'), json.dumps(cap, ensure_ascii=False, indent=2) + '\n')
     pj = json.loads(read(os.path.join(pk, 'android-ios', 'package.json')))
     pj.update({'name': slug + '-mobile', 'description': '%s for Android and iPhone (Capacitor wrapper around the web app)' % name})
@@ -157,7 +185,7 @@ window.SPARAT_CONFIG = {
     wj['build'].update({'appId': app_id.replace('.app', '.desktop'), 'productName': name})
     wj['build']['nsis']['shortcutName'] = name
     write(os.path.join(pk, 'windows', 'package.json'), json.dumps(wj, ensure_ascii=False, indent=2) + '\n')
-    wm = read(os.path.join(pk, 'windows', 'main.js')).replace("title: 'Sparat'", "title: %s" % json.dumps(name)).replace("'#15181d'", "'#0d2038'").replace('Sparat for Windows', '%s for Windows' % name)
+    wm = read(os.path.join(pk, 'windows', 'main.js')).replace("title: 'Sparat'", "title: %s" % json.dumps(name)).replace("'#15181d'", "'%s'" % a.color).replace('Sparat for Windows', '%s for Windows' % name)
     write(os.path.join(pk, 'windows', 'main.js'), wm)
 
     # guide

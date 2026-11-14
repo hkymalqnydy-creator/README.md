@@ -13,7 +13,7 @@
 - **للإدارة**: أول حساب يُنشأ يصبح المدير. يوثّق المحلات، ويعدّل أي محل، ويضع إعلاناً في الرئيسية.
 - **الأمان**: قواعد صلاحيات داخل قاعدة البيانات (RLS)، فلا يقدر أحد يعدّل محل غيره حتى لو تلاعب بالتطبيق.
 
-## نسخة الشركة الواحدة (مثال: [`corssky/`](corssky/))
+## نسخة الشركة الواحدة (مثال: [`crossky/`](crossky/))
 
 نفس الكود يشتغل كتطبيق لشركة واحدة وفروعها (`mode: 'company'` في `config.js`)، ويضيف:
 
@@ -26,7 +26,9 @@
 تبني نسخة باسم أي شركة وأيقوناتها بأمر واحد:
 
 ```
-python3 tools/build_company.py --name Corssky --email owner@corssky.ly --brand branding/corssky/png --out corssky
+python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand branding/crossky/png --out crossky \
+  --skin royal --color '#2F54E6' --logo branding/crossky/svg/wordmark-white.svg --logo-ink branding/crossky/svg/wordmark-ink.svg \
+  --site-url https://hkymalqnydy-creator.github.io/README.md/crossky/
 ```
 
 الماركات المعروضة من البداية كورية ويابانية (`--brands KR,JP`)، وتقدر تحط ماركات معينة (`--brands toyota,kia`) أو `--brands all`. صاحب الشركة يغيّرها بعدين من التطبيق.

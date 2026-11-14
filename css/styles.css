@@ -800,3 +800,78 @@ details.pur[open]>summary{padding-bottom:4px}
   .invoice{border:0;border-radius:0;padding:0}
   .wrap{max-width:none!important;padding:0!important}
 }
+
+/* ---------- an edition's wordmark (config logo / logoInk): it is the name, so it stands alone ---------- */
+.brand-wm{display:block;height:21px;width:auto;max-width:46vw}
+.inv-head>div:first-child:not(.inv-no){flex:1;display:grid}
+.inv-head img.inv-wm{display:block;width:auto;height:28px;max-width:62%;border-radius:0;object-fit:contain;margin-bottom:4px}
+.about-wm{display:block;width:auto;height:34px;max-width:70vw;margin-bottom:4px}
+
+/* ---------- skin "royal": a company edition in its brand blue (config skin: 'royal') ----------
+   Plan: the app looks like the company's box. Royal-blue bar and hero with the white wordmark; the hero ends in a
+   slanted cut with a thin red stripe, like the box's corner, and that stripe is the one bold thing. Below it, calm
+   silver and white with blue accents. Simpler than the market edition: no texture, no hazard stripes, no stats line,
+   rounded tiles instead of hexagons. */
+:root[data-skin="royal"]{
+  --royal:#2F54E6; --stripe:#E8362F;
+  --asphalt:#2F54E6; --signal:#2F54E6; --on-signal:#fff;
+  --bg:#EEF1F7; --surface:#fff; --ink:#101B45; --muted:#56607F; --line:#DCE2EE; --chip:#E6EBF5;
+  --overlay:rgba(255,255,255,.94); --on-dark:#fff; --on-dark-2:#DCE4FF;
+  --sign:#fff; --sign-ink:#101B45; --sign-muted:#56607F;
+  --shadow:0 1px 2px rgba(16,27,69,.06),0 12px 26px -16px rgba(16,27,69,.4);
+  --hexpat:none;
+}
+@media (prefers-color-scheme:dark){
+  :root[data-skin="royal"]:not([data-theme="light"]){
+    --asphalt:#2747D8; --signal:#7F9BFF; --on-signal:#0B1435; --bg:#0A1028; --surface:#131B3B; --ink:#E9EDFB; --muted:#9DA8CC;
+    --line:#26315B; --chip:#1C2650; --overlay:rgba(14,20,46,.9); --on-dark:#fff; --on-dark-2:#CDD7FF;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 26px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-skin="royal"][data-theme="dark"]{
+  --asphalt:#2747D8; --signal:#7F9BFF; --on-signal:#0B1435; --bg:#0A1028; --surface:#131B3B; --ink:#E9EDFB; --muted:#9DA8CC;
+  --line:#26315B; --chip:#1C2650; --overlay:rgba(14,20,46,.9); --on-dark:#fff; --on-dark-2:#CDD7FF;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 26px -16px rgba(0,0,0,.8);
+}
+/* bar */
+[data-skin=royal] .topbar{background:var(--asphalt)}
+[data-skin=royal] .topbar .brand-mark{background:#fff;color:var(--royal);clip-path:none;border-radius:10px}
+[data-skin=royal] .citypill{border-color:rgba(255,255,255,.38)}
+[data-skin=royal] .topbar .badge,[data-skin=royal] .cartbtn .badge{background:var(--stripe);color:#fff}
+[data-skin=royal] .topbar :focus-visible,[data-skin=royal] .hero :focus-visible{outline-color:#fff}
+/* hero: flat blue, one big search, the car plate */
+[data-skin=royal] .hero{background:var(--asphalt);padding:10px 0 26px}
+[data-skin=royal] .hero h1{font-size:clamp(30px,8.2vw,50px);line-height:1.16;max-width:14ch}
+[data-skin=royal] .hero h1 em{color:inherit}
+[data-skin=royal] .hero p{color:var(--on-dark-2);margin:8px 0 20px}
+[data-skin=royal] .searchbox{border-radius:16px;padding:6px;padding-inline-start:14px;box-shadow:0 16px 30px -18px rgba(5,16,70,.7)}
+[data-skin=royal] .searchbox .go{background:var(--royal);color:#fff;border-radius:12px;height:46px;padding:0 20px;box-shadow:none}
+[data-skin=royal] .plate{border:0;border-radius:14px;box-shadow:0 14px 26px -18px rgba(5,16,70,.75);min-height:56px}
+[data-skin=royal] .plate-band{background:var(--royal);color:#fff;border:0;padding:0 14px}
+[data-skin=royal] .plate-edit{border-inline-start:1px solid var(--line);color:var(--royal)}
+[data-skin=royal] .pulse{display:none}
+/* the box corner: the blue ends on a slant, with a thin red stripe along it */
+[data-skin=royal] .hazard{height:36px;background:linear-gradient(to bottom right,var(--asphalt) calc(50% - 2.5px),var(--stripe) calc(50% - 2.5px) calc(50% + 2.5px),transparent calc(50% + 2.5px))}
+/* tiles: rounded squares, blue icons; "all categories" is the solid one */
+[data-skin=royal] .hex,[data-skin=royal] .hex::before{clip-path:none;border-radius:18px}
+[data-skin=royal] .hex{width:62px;height:62px;background:var(--line)}
+[data-skin=royal] .hex::before{inset:1px;border-radius:17px}
+[data-skin=royal] .hex .ic{color:var(--signal)}
+[data-skin=royal] .cat:hover .hex::before,[data-skin=royal] .cat:active .hex::before{background:var(--signal)}
+[data-skin=royal] .cat:hover .hex .ic,[data-skin=royal] .cat:active .hex .ic{color:var(--on-signal)}
+[data-skin=royal] .hex.dark{background:var(--asphalt)}
+[data-skin=royal] .hex.dark .ic{color:#fff}
+[data-skin=royal] .hexav{clip-path:none;border-radius:16px;color:#fff}
+[data-skin=royal] .brand-mark{clip-path:none;border-radius:10px}
+[data-skin=royal] .btile:hover{border-color:var(--signal)}
+/* the chassis-number card: light, so the page has one blue block, the hero */
+[data-skin=royal] .banner.vinb{background:var(--surface);background-image:none;color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow)}
+[data-skin=royal] .banner.vinb>.ic:first-child{color:var(--signal)}
+[data-skin=royal] .banner.vinb small{color:var(--muted)}
+/* buttons, tabs, the assistant */
+[data-skin=royal] .btn-signal{box-shadow:0 10px 22px -12px rgba(47,84,230,.85)}
+[data-skin=royal] .tab.on{color:var(--signal)}
+[data-skin=royal] .botfab{background:var(--asphalt);box-shadow:0 12px 28px -10px rgba(16,27,69,.55),0 0 0 2px #fff}
+[data-skin=royal] .botfab .ic{color:#fff}
+/* the scanner's line is red, like a real one */
+[data-skin=royal] .scan-laser{background:var(--stripe);box-shadow:0 0 14px 2px var(--stripe)}

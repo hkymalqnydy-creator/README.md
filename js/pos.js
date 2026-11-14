@@ -226,7 +226,7 @@
     const draw = v => {
       shell(bar(t('invT', { n: v.no }), canPrint ? `<button type="button" class="iconbtn" onclick="window.print()" aria-label="${esc(t('invPrint'))}">${I('copy')}</button>` : '') + `<main class="wrap invoice-wrap">
         <article class="invoice${v.status === 'returned' ? ' returned' : ''}" id="invoice">
-          <header class="inv-head">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : `<span class="brand-mark">${I('nut')}</span>`}<div><b>${esc(app)}</b><small>${esc([br.name, br.city, br.phone ? SP.prettyPhone(br.phone, S.country) : ''].filter(Boolean).join(' · '))}</small></div>
+          <header class="inv-head">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : SP.CFG.logoInk ? '' : `<span class="brand-mark">${I('nut')}</span>`}<div>${!st.logo && SP.CFG.logoInk ? `<img class="inv-wm" src="${esc(SP.CFG.logoInk)}" alt="${esc(app)}">` : `<b>${esc(app)}</b>`}<small>${esc([br.name, br.city, br.phone ? SP.prettyPhone(br.phone, S.country) : ''].filter(Boolean).join(' · '))}</small></div>
             <div class="inv-no"><small>${esc(t('invT', { n: '' }).trim())}</small><b class="num">${esc(v.no)}</b></div></header>
           ${v.status === 'returned' ? `<p class="inv-stamp">${esc(t('invReturned'))}</p>` : ''}
           <dl class="inv-meta"><div><dt>${esc(t('invDate'))}</dt><dd>${esc(when(v.created_at))}</dd></div><div><dt>${esc(t('invStaff'))}</dt><dd>${esc(v.staff_name || '—')}</dd></div>

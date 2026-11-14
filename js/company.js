@@ -226,7 +226,7 @@
   SP.route(/^about$/, async (m, n) => {
     if (gate(n)) return;
     const st = S.settings || {};
-    shell(bar(t('about')) + `<main class="wrap form-wrap"><div class="bhead">${st.logo ? `<img class="about-logo" src="${esc(st.logo)}" alt="">` : `<span class="brand-mark big">${I('nut')}</span>`}<span><b>${esc(appName())}</b>${st.tagline ? `<small>${esc(st.tagline)}</small>` : ''}</span></div>
+    shell(bar(t('about')) + `<main class="wrap form-wrap"><div class="bhead">${st.logo ? `<img class="about-logo" src="${esc(st.logo)}" alt="">` : CFG.logoInk ? '' : `<span class="brand-mark big">${I('nut')}</span>`}<span>${!st.logo && CFG.logoInk ? `<img class="about-wm" src="${esc(CFG.logoInk)}" alt="${esc(appName())}">` : `<b>${esc(appName())}</b>`}${st.tagline ? `<small>${esc(st.tagline)}</small>` : ''}</span></div>
       ${st.about ? `<div class="about-text">${esc(st.about).replace(/\n/g, '<br>')}</div>` : ''}${SP.contactCta()}
       <h2 class="lbl optg">${esc(t('branches'))}</h2><div class="shops" id="sl"><div class="sk sk-row"></div></div></main>`);
     S.branches = null;

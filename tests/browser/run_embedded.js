@@ -1,11 +1,12 @@
 // In-app page edition (tools/build_artifact.py): the app as a page inside the Claude app. Served here under the page
 // frame's content security policy (from the artifacts guide), with stand-ins for the Claude app's "sample" (ask Claude,
 // with images) and "downloads" capabilities. Needs a built company edition:
-//   python3 tools/build_company.py --name Corssky --email owner@corssky.ly --brand branding/corssky/png --out corssky
-//   SITE=corssky CHROME=/path/to/chrome node tests/browser/run_embedded.js
+//   python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand branding/crossky/png --out crossky --skin royal \
+//     --logo branding/crossky/svg/wordmark-white.svg --logo-ink branding/crossky/svg/wordmark-ink.svg   (the full line is in README.md)
+//   SITE=crossky CHROME=/path/to/chrome node tests/browser/run_embedded.js
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 const fs = require('fs'), os = require('os'), path = require('path'), { execFileSync } = require('child_process');
-const ROOT = path.resolve(__dirname, '../..'), SITE = path.resolve(process.env.SITE || path.join(ROOT, 'corssky'));
+const ROOT = path.resolve(__dirname, '../..'), SITE = path.resolve(process.env.SITE || path.join(ROOT, 'crossky'));
 const PAGE = fs.mkdtempSync(path.join(os.tmpdir(), 'page-'));
 execFileSync('python3', [path.join(ROOT, 'tools', 'build_artifact.py'), SITE, PAGE], { stdio: 'inherit' });
 const ORIGIN = 'https://page.test/';
@@ -64,11 +65,13 @@ const log = (() => { let n = 0; return s => console.log(`${++n}. ${s}`); })();
   fs.mkdirSync(path.join(__dirname, 'shots'), { recursive: true });
   try {
     await page.goto(ORIGIN); await see('#gnew .card', 15000);
-    must((await text('.topbar .brand')).includes('Corssky'), 'brand');
+    const brandName = (await text('.topbar .brand')) || (await page.getAttribute('.topbar .brand img', 'alt')) || '';
+    must(brandName.includes('CROSSKY'), 'brand ' + brandName);
+    must(await page.evaluate(() => [...document.querySelectorAll('.topbar .brand img')].every(i => i.complete && i.naturalWidth > 0)), 'the logo in the bar loads');
     must(await page.locator('.banner.inst').count() === 0, 'no install banner inside the Claude app');
     const cfg = await page.evaluate(() => window.SPARAT_CONFIG);
     must(cfg.embedded && cfg.noServiceWorker && cfg.demo && !cfg.supabaseUrl, 'page config'); log('opens as a page with the demo, fonts unreachable, no install banner');
-    await go('login'); await see('#ae'); await page.fill('#ae', 'owner@corssky.ly'); await page.fill('#ap', '123456'); await page.click('#ago');
+    await go('login'); await see('#ae'); await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago');
     await page.waitForURL(/#mine/); await page.waitForTimeout(400);
     // barcode: no camera in the page frame, straight to photo or typing
     await go('pos'); await see('#pscan'); await page.click('#pscan'); await see('#scm');

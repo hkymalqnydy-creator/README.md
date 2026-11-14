@@ -1,0 +1,33 @@
+{
+  "name": "crossky-windows",
+  "productName": "CROSSKY",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CROSSKY desktop app for Windows",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "latest",
+    "electron-builder": "latest"
+  },
+  "build": {
+    "appId": "ly.crossky.desktop",
+    "productName": "CROSSKY",
+    "files": [
+      "main.js",
+      "app/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "app/icons/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "CROSSKY"
+    }
+  }
+}

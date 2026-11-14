@@ -3,7 +3,7 @@
 (a claude.ai artifact). That page frame reaches no outside server and has no camera or service worker, so the copy
 runs the demo, reads invoice photos with Claude (js/embed.js), and saves files through the Claude app.
 
-  python3 tools/build_artifact.py corssky /tmp/corssky-page        # a company edition built by build_company.py
+  python3 tools/build_artifact.py crossky /tmp/crossky-page        # a company edition built by build_company.py
   python3 tools/build_artifact.py . /tmp/sparat-page               # the marketplace edition
 
 Publish every file of the output folder as one artifact, then declare its capabilities:
@@ -13,7 +13,7 @@ import shutil
 import sys
 
 WEB_DIRS = ['css', 'js']
-ICONS = ['icon.svg', 'favicon-64.png', 'apple-touch-icon.png']
+ICONS = ['icon.svg', 'favicon-64.png', 'apple-touch-icon.png', 'logo.svg', 'logo-ink.svg']
 PAGE_CONFIG = """
 /* In-app page edition (tools/build_artifact.py): the Claude app's page frame reaches no outside server,
    so the demo runs, invoice photos are read by Claude and files are saved through the Claude app (js/embed.js). */

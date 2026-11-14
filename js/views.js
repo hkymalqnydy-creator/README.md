@@ -39,8 +39,11 @@
   }
   const bar = (title, actions, o = {}) => `<header class="topbar"><div class="wrap">${o.noBack ? '' : `<button type="button" class="iconbtn" data-act="back" aria-label="${esc(t('back'))}">${I('back', 'dirx')}</button>`}<h1 class="tb-title">${esc(title)}</h1><div class="tb-actions">${actions || ''}</div></div></header>`;
   function homeBar() {
-    const st = S.settings || {};
-    return `<header class="topbar"><div class="wrap"><a class="brand" href="#">${st.logo ? `<img class="brand-logo" src="${esc(st.logo)}" alt="">` : `<span class="brand-mark">${I('nut')}</span>`}<span>${esc(t('app'))}</span></a>
+    const st = S.settings || {}, wm = !st.logo && SP.CFG.logo;
+    /* the owner's uploaded logo with the name; else the edition's wordmark (it is the name); else the mark and the name */
+    const brand = st.logo ? `<img class="brand-logo" src="${esc(st.logo)}" alt=""><span>${esc(t('app'))}</span>`
+      : wm ? `<img class="brand-wm" src="${esc(wm)}" alt="${esc(t('app'))}">` : `<span class="brand-mark">${I('nut')}</span><span>${esc(t('app'))}</span>`;
+    return `<header class="topbar"><div class="wrap"><a class="brand" href="#">${brand}</a>
       <button type="button" class="citypill" data-act="loc" aria-label="${esc(t('country'))}"><span class="fl" aria-hidden="true">${SP.flag(S.country)}</span><span>${esc(S.city || SP.countryName(S.country))}</span>${I('chevD')}</button>
       ${SP.cartBtn ? SP.cartBtn() : ''}<button type="button" class="iconbtn" data-act="lang" aria-label="${esc(t('language'))}">${I('globe')}</button></div></header>`;
   }
@@ -371,7 +374,7 @@
           <span class="plate-main"><small>${esc(t('myCar'))}</small><strong>${esc(car ? SP.carText(car) : t('setCar'))}</strong></span>
           <span class="plate-edit">${car ? esc(t('change')) : I('plus')}</span></button>
           <div class="pulse" id="pulse" aria-live="polite"></div></div></div></section><div class="hazard"></div>
-      <main class="wrap" id="home">${SP.demo ? `<a class="banner warn demo-b" href="#mine">${I('info')}<span>${esc(t('demoB'))}</span></a>` : ''}${installBanner()}
+      <main class="wrap" id="home">${SP.demo ? `<a class="banner warn demo-b" href="#mine">${I('info')}<span>${esc(t('demoB', { e: SP.CFG.demoEmail || 'owner@demo.app' }))}</span></a>` : ''}${installBanner()}
         ${notice ? `<div class="banner note">${I('megaphone')}<span>${esc(notice)}</span></div>` : ''}
         <a class="banner vinb" href="#vin">${I('barcode')}<span><b>${esc(t('vinCta'))}</b><small>${esc(t('vinSub'))}</small></span>${I('chevL', 'dirx')}</a>
         <section class="sec"><div class="sec-h"><h2>${esc(t('cats'))}</h2><a class="more" href="#cats">${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div>

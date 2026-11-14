@@ -64,8 +64,8 @@ set role authenticated; select set_config('request.jwt.claim.sub', '66666666-666
 insert into public.shops (name, city) values ('Rival', 'طرابلس');
 reset role;
 set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
-insert into public.shops (name, city) values ('Corssky فرع مصراتة', 'مصراتة');
-select 'M17 admin can still add a branch' t, count(*) from public.shops where name = 'Corssky فرع مصراتة';
+insert into public.shops (name, city) values ('CROSSKY فرع مصراتة', 'مصراتة');
+select 'M17 admin can still add a branch' t, count(*) from public.shops where name = 'CROSSKY فرع مصراتة';
 reset role;
 
 -- sync with the sales system
