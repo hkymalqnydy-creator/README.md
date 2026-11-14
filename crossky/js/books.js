@@ -57,7 +57,10 @@
     pnlFacts: ["{n} · خصومات {d}", "{n} · discounts {d}"], pnlReturned: ["المرتجعات: {n} بقيمة {m}، مش محسوبة في المبيعات.", "Returns: {n} worth {m}, not counted in sales."],
     pnlBySeller: ["حسب البايع", "By seller"], pnlSold: ["{n} · مبيعات {m}", "{n} · sales {m}"], pnlProfitOf: ["ربح {m}", "Profit {m}"], pnlLossOf: ["خسارة {m}", "Loss {m}"],
     pnlDebts: ["الديون (لحد اليوم)", "Debts (as of today)"], pnlReceivable: ["على الزبائن", "Customers owe us"], pnlPayable: ["علينا للموردين", "We owe suppliers"],
-    pnlEmpty: ["ما فيش مبيعات ولا مصروفات في الفترة هذي.", "No sales or expenses in this period."]
+    pnlEmpty: ["ما فيش مبيعات ولا مصروفات في الفترة هذي.", "No sales or expenses in this period."],
+    stkPhoto: ["صوّر فاتورة الشراء", "Photograph a purchase invoice"], stkPhotoSub: ["القطع تدخل بأسمائها وكمياتها وأرقام الأصناف", "Parts go in with names, quantities and codes"],
+    stkScanSub: ["امسح القطع اللي وصلت", "Scan the parts that arrived"], stkLowIs: ["«قرب يخلص» = {n} حبات أو أقل.", "“Running low” = {n} units or fewer."],
+    stkLowSet: ["تغيّر الرقم من لوحة الإدارة ← التحكم.", "Change it in Admin → Controls."]
   });
 
   const CATS = ['rent', 'salaries', 'utilities', 'transport', 'maintenance', 'other'];
@@ -100,6 +103,7 @@
     if (!ok) { shell(bar(title) + `<main class="wrap">${empty('lock', t('noPermT'), t('errPerm'))}</main>`); return false; }
     return true;
   }
+  SP.bk = { span, tz, when, dayText, money, amountOf, who, stat, chips };
   const canStock = () => SP.can('products') || SP.can('purchases') || SP.can('reports');
   const canBuyers = () => SP.can('invoices') || SP.can('reports');
 
@@ -161,6 +165,8 @@
     S.stkF = S.stkF || 'all';
     const costs = SP.can('costs'), edit = SP.can('products');
     shell(bar(t('stkT'), SP.can('purchases') ? `<a class="iconbtn" href="#receive" aria-label="${esc(t('rcvT'))}">${I('plus')}</a>` : '') + `<main class="wrap mine">
+      ${SP.can('purchases') ? `<div class="rcv-actions stk-actions"><label class="rcv-big" id="sphoto">${I('receipt')}<b>${esc(t('stkPhoto'))}</b><small>${esc(t('stkPhotoSub'))}</small><input type="file" accept="image/*" class="sr" id="spf"></label>
+        <button type="button" class="rcv-big" id="sscan">${I('scan')}<b>${esc(t('rcvScan'))}</b><small>${esc(t('stkScanSub'))}</small></button></div>` : ''}
       <div id="ssum"><div class="sk sk-block"></div></div>
       ${chips(S.stkF, [['all', 'stkAll'], ['low', 'stkLow'], ['out', 'stkOut']], 'f')}
       <form class="searchbox flat" id="sqf" role="search">${I('search')}<input type="search" value="${esc(S.stkQ || '')}" placeholder="${esc(t('posSearchPh'))}" aria-label="${esc(t('search'))}"></form>
@@ -168,17 +174,23 @@
       <div id="sll"><div class="sk sk-row"></div></div><div class="center"><button type="button" class="btn btn-ghost more-btn" id="more" hidden></button></div>
       <div id="smv"></div></main>`);
     $$('[data-f]').forEach(b => { b.onclick = () => { S.stkF = b.dataset.f; SP.render(); }; });
+    /* a photo or a scan from here continues on the receiving screen (js/scan.js) */
+    if ($('#spf')) $('#spf').onchange = e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) { SP.pendingInvoice = f; SP.go('receive'); } };
+    if ($('#sscan')) $('#sscan').onclick = () => { SP.pendingScan = true; SP.go('receive'); };
+    let low = 3;
     $('#sqf').onsubmit = e => { e.preventDefault(); S.stkQ = $('#sqf input').value.trim(); SP.render(); };
     const items = [];
     const row = p => {
-      const q = p.qty, cls = q === 0 ? 'out' : q != null && q <= 3 ? 'low' : '';
+      const q = p.qty, cls = q === 0 ? 'out' : q != null && q <= low ? 'low' : '';
       return `<button type="button" class="arow stk-row" data-id="${esc(p.id)}"${edit ? '' : ' disabled'}><span class="qty-chip ${cls} num" title="${esc(t('posQty'))}">${q == null ? '—' : esc(SP.fmtNum(q))}</span>
         <span class="ar-main"><b>${esc(p.title)}</b><small>${[p.sku || p.part_no, p.branch_name].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small></span>
         <span class="stk-val">${p.price != null ? `<b class="num">${esc(money(p.price))}</b>` : ''}${costs && p.cost != null ? `<small class="num">${esc(t('stkCostIs', { m: money(p.cost) }))}</small>` : ''}</span></button>`;
     };
     const drawSummary = s => {
+      low = s.low_level != null ? +s.low_level : 3;
       $('#ssum').innerHTML = `<div class="astats">${stat('stkParts', SP.fmtNum(s.parts || 0))}${stat('stkUnits', SP.fmtNum(s.units || 0))}${costs ? stat('stkValueCost', money(s.value_cost)) : ''}${stat('stkValuePrice', money(s.value_price))}</div>
-        ${costs ? `<p class="hint">${esc(t('stkExpected', { m: money((+s.value_price || 0) - (+s.value_cost || 0)) }))}${s.cost_missing ? ' ' + esc(t('stkCostMissing', { n: s.cost_missing })) : ''}</p>` : ''}`;
+        ${costs ? `<p class="hint">${esc(t('stkExpected', { m: money((+s.value_price || 0) - (+s.value_cost || 0)) }))}${s.cost_missing ? ' ' + esc(t('stkCostMissing', { n: s.cost_missing })) : ''}</p>` : ''}
+        ${S.stkF === 'low' ? `<p class="hint">${esc(t('stkLowIs', { n: SP.fmtNum(low) }))}${S.admin ? ' ' + esc(t('stkLowSet')) : ''}</p>` : ''}`;
       $$('[data-c]').forEach(x => { const v = x.dataset.c === 'low' ? s.low : x.dataset.c === 'out' ? s.out : 0; x.textContent = v ? SP.fmtNum(v) : ''; });
     };
     const drawMoves = list => {

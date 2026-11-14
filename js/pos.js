@@ -36,6 +36,14 @@
     perm_customers: ["اعتماد وإدارة الزبائن", "Approve and manage customers"], perm_reports: ["التقارير", "Reports"], perm_costs: ["رؤية التكلفة والأرباح", "See cost prices and profit"],
     perm_expenses: ["تسجيل المصروفات", "Record expenses"], perm_settings: ["إعدادات الشركة", "Company settings"], costL: ["سعر التكلفة", "Cost price"], costHint: ["لا يظهر إلا للمالك ومن عنده صلاحية التكلفة.", "Visible only to the owner and staff allowed to see costs."]
   });
+  Object.assign(SP.L.T, {
+    posOverLimit: ["التخفيض أكبر من المسموح ليك: {n}٪ من سعر البيع.", "That’s more off than you’re allowed: {n}% of the list price."],
+    posBelowCost: ["ما ينفعش تبيع «{t}» بأقل من سعر التكلفة.", "“{t}” can’t be sold below its cost."],
+    posBelowCostInv: ["الفاتورة بعد التخفيض أقل من التكلفة. قلّل التخفيض.", "After the discount the invoice is below cost. Give less off."],
+    posLimitHint: ["أقصى تخفيض ليك {n}٪ (لحد {m})", "You can take off up to {n}% ({m})"],
+    staffMaxDisc: ["أقصى تخفيض ٪", "Most off, %"], staffMaxDiscHint: ["فاضي = بدون حد. يحسب التخفيض وتنزيل سعر القطعة مع بعض.", "Empty = no limit. Counts the discount and lower line prices together."],
+    staffBadLimit: ["اكتب نسبة من 0 لـ 100، أو خليه فاضي", "Enter 0 to 100, or leave it empty"], staffLimitShort: ["لحد {n}٪ تخفيض", "up to {n}% off"]
+  });
   const PERMS = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings'];
   const PAYS = ['cash', 'card', 'transfer', 'credit'];
 
@@ -63,6 +71,12 @@
     if (x) return t('posStock', { t: x[1], n: x[2] });
     x = /part has no price: (.+)$/.exec(m);
     if (x) return t('posNoPrice', { t: x[1] });
+    /* the owner's rules (supabase/setup.sql section 12) */
+    x = /discount over limit: ([\d.]+)/.exec(m);
+    if (x) return t('posOverLimit', { n: SP.fmtNum(+x[1]) });
+    x = /below cost: (.+)$/.exec(m);
+    if (x) return t('posBelowCost', { t: x[1] });
+    if (/below cost/.test(m)) return t('posBelowCostInv');
     if (/not authorized/.test(m)) return t('errPerm');
     return SP.errText(e);
   }
@@ -152,6 +166,9 @@
       const sub = st.lines.reduce((k, l) => k + (Number(l.price) || 0) * l.qty, 0), disc = Math.min(Number(st.discount) || 0, sub);
       return { sub, disc, total: sub - disc };
     }
+    /* this employee's discount limit (the owner has none); it counts what is taken off the list prices */
+    const limit = () => !S.admin && S.perms && S.perms.max_discount != null ? +S.perms.max_discount : null;
+    const listSum = () => st.lines.reduce((k, l) => k + (Number(l.base != null ? l.base : l.price) || 0) * l.qty, 0);
     function draw() {
       const cur = st.lines[0] ? curOf(st.lines[0]) : SP.currencyOf(S.country), tt = totals();
       $('#plines').innerHTML = st.lines.length ? st.lines.map((l, i) => `<div class="pline" data-i="${i}"><span class="pl-main"><b>${esc(l.title)}</b><small>${esc([l.sku, l.stock != null ? t('posInStock', { n: l.stock }) : ''].filter(Boolean).join(' · '))}</small></span>
@@ -160,6 +177,7 @@
         : `<p class="muted-p pos-empty">${esc(t('posNoItems'))}</p>`;
       $('#psum').innerHTML = st.lines.length ? `<div class="mcard psum"><div class="prow"><span>${esc(t('posSubtotal'))}</span><b class="num">${esc(money(tt.sub, cur))}</b></div>
         ${SP.can('discounts') ? `<div class="prow"><label for="pdisc">${esc(t('posDiscount'))}</label><input id="pdisc" class="input num" inputmode="decimal" dir="ltr" value="${esc(st.discount || '')}"></div>` : ''}
+        ${limit() != null && (SP.can('discounts') || SP.can('prices')) ? `<p class="hint pos-limit" id="plim">${esc(t('posLimitHint', { n: SP.fmtNum(limit()), m: money(listSum() * limit() / 100, cur) }))}</p>` : ''}
         <div class="prow big"><span>${esc(t('posTotal'))}</span><b class="num">${esc(money(tt.total, cur))}</b></div>
         <fieldset class="field"><legend>${esc(t('posPay'))}</legend><div class="seg">${PAYS.map((k, i) => `<input type="radio" name="pp" id="pp${i}" value="${k}"${(st.pay || 'cash') === k ? ' checked' : ''}><label for="pp${i}">${esc(t('pay_' + k))}</label>`).join('')}</div></fieldset>
         ${st.pay === 'credit' ? `<div class="prow"><label for="ppaid">${esc(t('posPaid'))}</label><input id="ppaid" class="input num" inputmode="decimal" dir="ltr" value="${esc(st.paid || '')}"></div>` : ''}
@@ -174,11 +192,14 @@
       $$('.pl-price').forEach(inp => inp.oninput = () => { const l = st.lines[+inp.closest('.pline').dataset.i]; const v = SP.digits(inp.value).replace(',', '.'); l.price = v === '' ? null : Number(v); savePos(st); redrawTotals(); });
       if ($('#psave')) $('#psave').onclick = save;
       if ($('#pnew')) $('#pnew').onclick = () => { st.lines = []; st.discount = st.paid = st.cname = st.cphone = st.note = ''; st.pay = 'cash'; savePos(st); draw(); };
+      if (st.lines.length) redrawTotals();
     }
     function redrawTotals() {
       const cur = st.lines[0] ? curOf(st.lines[0]) : SP.currencyOf(S.country), tt = totals(), rows = $$('#psum .prow b');
       if (rows[0]) rows[0].textContent = money(tt.sub, cur);
       if (rows[rows.length - 1]) rows[rows.length - 1].textContent = money(tt.total, cur);
+      const lim = limit(), pl = $('#plim');
+      if (pl && lim != null) pl.classList.toggle('over', listSum() - tt.total > listSum() * lim / 100 + 0.004);
     }
     $('#plines').onclick = e => {
       const b = e.target.closest('[data-d]');
@@ -236,7 +257,7 @@
           <dl class="inv-tot">${+v.discount ? `<div><dt>${esc(t('posSubtotal'))}</dt><dd class="num">${esc(money(v.subtotal, cur))}</dd></div><div><dt>${esc(t('posDiscount'))}</dt><dd class="num">− ${esc(money(v.discount, cur))}</dd></div>` : ''}
             <div class="big"><dt>${esc(t('posTotal'))}</dt><dd class="num">${esc(money(v.total, cur))}</dd></div>
             ${v.payment === 'credit' ? `<div><dt>${esc(t('posPaid'))}</dt><dd class="num">${esc(money(v.paid, cur))}</dd></div><div><dt>${esc(t('posRemain'))}</dt><dd class="num">${esc(money(v.total - v.paid, cur))}</dd></div>` : ''}</dl>
-          ${v.note ? `<p class="inv-note">${esc(v.note)}</p>` : ''}</article>
+          ${v.note ? `<p class="inv-note">${esc(v.note)}</p>` : ''}${st.invoice_footer ? `<p class="inv-foot">${esc(st.invoice_footer)}</p>` : ''}</article>
         <div class="form-actions noprint">${canPrint ? `<button type="button" class="btn btn-ink" onclick="window.print()">${I('copy')} ${esc(t('invPrint'))}</button>` : ''}
           <a class="btn btn-wa" id="ish" href="${esc(waHref(v))}" target="_blank" rel="noopener">${I('chat')} ${esc(t('invShare'))}</a>
           ${SP.can('returns') && v.status === 'done' ? `<button type="button" class="btn btn-danger" id="iret">${I('back', 'dirx')} ${esc(t('invReturn'))}</button>` : ''}
@@ -326,6 +347,7 @@
       <div class="row2"><div class="field"><label for="sn2">${esc(t('staffName'))}</label><input id="sn2" class="input" maxlength="80" value="${esc(v.name)}"></div>
         <div class="field"><label for="sbr">${esc(t('posBranch'))}</label><select id="sbr" class="input">${opt('', t('staffAllBranches'), v.branch_id || '')}${branches.map(b => opt(b.id, b.name, v.branch_id || '')).join('')}</select></div></div>
       <fieldset class="field"><legend>${esc(t('staffPerms'))}</legend><div class="perm-list">${PERMS.map(p => `<label class="switch"><input type="checkbox" value="${p}"${(v.perms || []).includes(p) ? ' checked' : ''}><span></span>${esc(t('perm_' + p))}</label>`).join('')}</div></fieldset>
+      <div class="field"><label for="smd">${esc(t('staffMaxDisc'))}</label><input id="smd" class="input num" dir="ltr" inputmode="decimal" maxlength="6" value="${v.max_discount == null ? '' : esc(+v.max_discount)}"><span class="hint">${esc(t('staffMaxDiscHint'))}</span></div>
       <label class="switch"><input type="checkbox" id="sac"${v.active !== false ? ' checked' : ''}><span></span>${esc(t('staffActive'))}</label>
       <p class="form-err" id="serr2" role="alert"></p>
       <div class="sheet-actions"><button class="btn btn-signal">${I('check')} ${esc(t('saveChanges'))}</button>${v.id ? `<button type="button" class="btn btn-danger" id="sdel2">${I('trash')} ${esc(t('staffDel'))}</button>` : ''}</div></form>`, { label: t('staffT') });
@@ -333,8 +355,10 @@
       e.preventDefault();
       const email = $('#se', s.el).value.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { $('#serr2', s.el).textContent = t('badEmail'); return; }
+      const lr = SP.digits($('#smd', s.el).value).replace(/[٫,]/g, '.').replace(/[\s٪%]/g, ''), lim = lr === '' ? null : Number(lr);
+      if (lim != null && !(lim >= 0 && lim <= 100)) { $('#serr2', s.el).textContent = t('staffBadLimit'); $('#smd', s.el).classList.add('invalid'); $('#smd', s.el).focus(); return; }
       try {
-        await P.saveStaff({ p_email: email, p_name: $('#sn2', s.el).value.trim(), p_perms: $$('.perm-list input:checked', s.el).map(x => x.value), p_branch: $('#sbr', s.el).value || null, p_active: $('#sac', s.el).checked });
+        await P.saveStaff({ p_email: email, p_name: $('#sn2', s.el).value.trim(), p_perms: $$('.perm-list input:checked', s.el).map(x => x.value), p_branch: $('#sbr', s.el).value || null, p_active: $('#sac', s.el).checked, p_max_discount: lim });
         SP.toast(t('staffSaved')); s.close(); onSaved();
       } catch (x) { $('#serr2', s.el).textContent = SP.errText(x); }
     };
@@ -354,7 +378,7 @@
     const bname = id => (branches.find(b => b.id === id) || {}).name || t('staffAllBranches');
     $('#sl').innerHTML = list.length ? list.map((v, i) => `<button type="button" class="arow staff-row" data-i="${i}"><span class="hexav"><span>${esc(SP.initial(v.name || v.email))}</span></span>
         <span class="ar-main"><b>${esc(v.name || v.email)} ${!v.active ? `<span class="pill demo">${esc(t('staffOff'))}</span>` : !v.user_id ? `<span class="pill demo">${esc(t('staffWaiting'))}</span>` : ''}</b>
-        <small class="ltr">${esc(v.email)}</small><small>${esc(bname(v.branch_id))} · ${esc((v.perms || []).map(p => t('perm_' + p)).join('، ') || '—')}</small></span>${I('chevL', 'dirx')}</button>`).join('')
+        <small class="ltr">${esc(v.email)}</small><small>${esc([bname(v.branch_id), (v.perms || []).map(p => t('perm_' + p)).join('، ') || '—', v.max_discount != null ? t('staffLimitShort', { n: SP.fmtNum(+v.max_discount) }) : ''].filter(Boolean).join(' · '))}</small></span>${I('chevL', 'dirx')}</button>`).join('')
       : empty('user', t('staffT'), t('noStaff'));
     const again = () => SP.render();
     $('#sl').onclick = e => { const b = e.target.closest('[data-i]'); if (b) staffSheet(list[+b.dataset.i], branches, again); };

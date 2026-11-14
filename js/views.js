@@ -28,7 +28,8 @@
     let nav = $('#tabs');
     if (!nav) { nav = document.createElement('nav'); nav.id = 'tabs'; nav.className = 'tabs'; document.body.appendChild(nav); }
     nav.setAttribute('aria-label', t('nav'));
-    const T = [['home', '', 'home', 'tabHome'], ['cats', 'cats', 'grid', 'tabCats'], ['shops', 'shops', 'store', SP.company ? 'tabBranches' : 'tabShops'], ['favs', 'favs', 'heart', 'tabFavs'], ['mine', 'mine', 'user', SP.company ? 'tabAccount' : 'tabMine']];
+    const T = [['home', '', 'home', 'tabHome'], ['cats', 'cats', 'grid', 'tabCats'], ['shops', 'shops', 'store', SP.company ? 'tabBranches' : 'tabShops'], ['favs', 'favs', 'heart', 'tabFavs'], ['mine', 'mine', 'user', SP.company ? 'tabAccount' : 'tabMine']]
+      .filter(x => !(x[0] === 'shops' && SP.hideBranches && SP.hideBranches()));
     nav.innerHTML = `<div class="tabs-in">${T.map(([id, h, ic, k]) => `<a class="tab${SP.tab === id ? ' on' : ''}" href="#${h}"${SP.tab === id ? ' aria-current="page"' : ''}>${I(ic)}<span>${esc(t(k))}</span></a>`).join('')}</div>`;
   }
   function shell(html, o = {}) {
@@ -77,7 +78,7 @@
         <div class="ribbons">${p.status === 'sold' ? `<span class="ribbon sold">${esc(t('soldOut'))}</span>` : ''}${fits ? `<span class="ribbon">${esc(t('fitsYourCar'))}</span>` : ''}</div>
         <span class="cond ${esc(p.cond)}">${esc(SP.condName(p.cond, true))}</span></div>
       <div class="card-body">${p.part_no ? `<span class="pn">${esc(p.part_no)}</span>` : ''}<h3 class="card-title">${esc(p.title)}</h3>
-        <p class="fit">${esc(SP.fitText(p))}</p>${SP.priceHTML(p.price, cur, p.price_hidden)}${p.shop ? `<p class="card-shop">${esc(p.shop.name)} · ${esc(p.shop.city)}</p>` : ''}</div></a>
+        <p class="fit">${esc(SP.fitText(p))}</p>${SP.priceHTML(p.price, cur, p.price_hidden)}${p.shop && !(SP.hideBranches && SP.hideBranches()) ? `<p class="card-shop">${esc(p.shop.name)} · ${esc(p.shop.city)}</p>` : ''}</div></a>
       <button type="button" class="fav${on ? ' on' : ''}" data-act="fav" data-id="${p.id}" aria-pressed="${on}" aria-label="${esc(t(on ? 'favRemove' : 'favAdd'))}">${I('heart', on ? 'f' : '')}</button></article>`;
   }
   const cards = items => items.map(card).join('');
@@ -375,7 +376,7 @@
           <span class="plate-edit">${car ? esc(t('change')) : I('plus')}</span></button>
           <div class="pulse" id="pulse" aria-live="polite"></div></div>${SP.CFG.heroCar ? `<img class="hero-car" src="${esc(SP.CFG.heroCar)}" alt="" aria-hidden="true">` : ''}</div></section><div class="hazard"></div>
       <main class="wrap" id="home">${SP.demo ? `<a class="banner warn demo-b" href="#mine">${I('info')}<span>${esc(t('demoB', { e: SP.CFG.demoEmail || 'owner@demo.app' }))}</span></a>` : ''}${installBanner()}
-        ${notice ? `<div class="banner note">${I('megaphone')}<span>${esc(notice)}</span></div>` : ''}
+        ${SP.closedBanner ? SP.closedBanner() : ''}${notice ? `<div class="banner note">${I('megaphone')}<span>${esc(notice)}</span></div>` : ''}
         <a class="banner vinb" href="#vin">${I('barcode')}<span><b>${esc(t('vinCta'))}</b><small>${esc(t('vinSub'))}</small></span>${I('chevL', 'dirx')}</a>
         <section class="sec"><div class="sec-h"><h2>${esc(t('cats'))}</h2><a class="more" href="#cats">${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div>
           <div class="cats">${D.CATS.slice(0, 7).map(c => `<a class="cat" ${sf({ cat: c.id })}><span class="hex">${I(c.icon)}</span><span>${esc(SP.catName(c.id, true))}</span></a>`).join('')}
@@ -384,7 +385,7 @@
           <div class="hscroll">${brands.map(b => `<a class="btile" href="#b-${b.id}"><span class="fl" aria-hidden="true">${SP.flag(b.origin)}</span><span>${esc(SP.brandName(b.id))}</span></a>`).join('')}</div></section>
         ${car ? `<section class="sec"><div class="sec-h"><h2>${esc(t('fitsYourCar'))} <small>${esc(SP.carText(car))}</small></h2><a class="more" ${sf({ fit: true })}>${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div><div class="grid" id="gfit">${skel(4)}</div></section>` : ''}
         <section class="sec"><div class="sec-h"><h2>${esc(t('newArrivals'))}</h2><a class="more" ${sf({})}>${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div><div class="grid" id="gnew">${skel(8)}</div></section>
-        <section class="sec" id="secshops"><div class="sec-h"><h2>${esc(t('shops'))}</h2><a class="more" href="#shops">${esc(t('allShops'))} ${I('chevL', 'dirx')}</a></div><div class="hscroll" id="hshops"></div></section>
+        <section class="sec" id="secshops"${SP.hideBranches && SP.hideBranches() ? ' hidden' : ''}><div class="sec-h"><h2>${esc(t('shops'))}</h2><a class="more" href="#shops">${esc(t('allShops'))} ${I('chevL', 'dirx')}</a></div><div class="hscroll" id="hshops"></div></section>
         ${SP.company && SP.contactCta ? SP.contactCta() : `<section class="cta"><h2>${esc(t('ctaT'))}</h2><p>${esc(t('ctaB'))}</p><a class="btn btn-signal" href="#mine">${I('store')} ${esc(t('ctaBtn'))}</a></section>`}
       </main>`);
     wireInstall($('#home'));
@@ -470,7 +471,9 @@
     return (p.price == null ? t('waMsgNoPrice', { title: p.title, pn, car }) : t('waMsg', { title: p.title, pn, price: SP.priceText(p.price, cur), car })) + '\n' + SP.siteUrl() + '#p-' + p.id;
   }
   function drawProduct(p, n) {
-    const sh = p.shop || {}, cur = sh.currency || SP.currencyOf(S.country), on = S.favs.has(p.id);
+    const hideBr = !!(SP.hideBranches && SP.hideBranches()), closed = !!(SP.shopClosed && SP.shopClosed());
+    const sh = hideBr ? { ...(p.shop || {}), id: null, name: (S.settings && S.settings.brand_name) || SP.CFG.appName || t('app'), city: '', area: '', whatsapp: SP.contactNumber ? SP.contactNumber() : '', phone: (S.settings && S.settings.contact_phone) || '' } : p.shop || {};
+    const cur = sh.currency || SP.currencyOf(S.country), on = S.favs.has(p.id);
     const mine = S.user && (S.user.id === p.owner_id || S.admin || (SP.can && SP.can('products')));
     const fit = SP.fitsCar(p, S.car);
     const imgs = p.imgs.length ? p.imgs.map((u, i) => `<div class="slide">${SP.imgTag(u, '', p.title + ' ' + (i + 1))}</div>`).join('') : `<div class="slide noimg">${I(catIcon(p.cat))}<span>${esc(t('noImgs'))}</span></div>`;
@@ -482,12 +485,13 @@
       <div class="pd-info wrap"><div class="pd-tags"><span class="cchip ${esc(p.cond)}">${esc(SP.condName(p.cond))}</span><span class="cchip">${esc(SP.catName(p.cat))}</span>${p.part_no ? `<span class="pn">${esc(p.part_no)}</span>` : ''}</div>
         <h1 class="pd-title">${esc(p.title)}</h1>
         <div class="pd-price">${SP.priceHTML(p.price, cur, p.price_hidden)}${p.nego ? `<span class="nego">${esc(t('nego'))}</span>` : ''}</div>
+        ${closed && S.settings.orders_enabled && p.status !== 'sold' ? SP.closedBanner() : ''}
         <div class="fitbox">${I('car')}<span><small>${esc(t('fitsOn'))}</small><strong>${esc(SP.fitText(p))}</strong>
           ${fit === true ? `<em class="ok">${I('check')} ${esc(t('fitsYours', { car: SP.carText(S.car) }))}</em>` : fit === false ? `<em class="no">${I('warn')} ${esc(t('notYours', { car: SP.carText(S.car) }))}</em>` : ''}</span></div>
-        <dl class="specs"><div><dt>${esc(t('qty'))}</dt><dd>${p.qty == null ? esc(t('inStock')) : esc(SP.fmtNum(p.qty))}</dd></div>
+        <dl class="specs${hideBr ? ' odd' : ''}"><div><dt>${esc(t('qty'))}</dt><dd>${p.qty == null ? esc(t('inStock')) : esc(SP.fmtNum(p.qty))}</dd></div>
           <div><dt>${esc(t('partNo'))}</dt><dd class="mono">${esc(p.part_no || '—')}</dd></div>
           <div><dt>${esc(t('listed'))}</dt><dd>${esc(SP.ago(p.created_at))}</dd></div>
-          <div><dt>${esc(t('city'))}</dt><dd>${esc(sh.city || '—')}</dd></div></dl>
+          ${hideBr ? '' : `<div><dt>${esc(t('city'))}</dt><dd>${esc(sh.city || '—')}</dd></div>`}</dl>
         ${p.descr ? `<section class="pd-desc"><h2>${esc(t('fromShop'))}</h2><p>${esc(p.descr)}</p></section>` : ''}
         ${sh.id ? `<a class="pd-shop" href="#s-${sh.id}">${avatar(sh)}<span class="ps-main"><span class="ps-name">${esc(sh.name)}${vb(sh)}</span><span class="ps-meta">${I('pin')} ${esc(sh.city)}${sh.area ? ' · ' + esc(sh.area) : ''}</span></span>${I('chevL', 'dirx')}</a>` : ''}
         ${mine ? `<div class="manage"><span class="manage-t">${I('shield')} ${esc(t('youPart'))}</span>
@@ -496,7 +500,7 @@
           <button type="button" class="btn btn-danger sm" id="pdel">${I('trash')} ${esc(t('del'))}</button></div>` : ''}
         <section class="pd-more" id="pmore" hidden><h2>${esc(t('moreShop'))}</h2><div class="grid" id="pmg"></div></section>
       </div></div>
-      <div class="actionbar"><div class="wrap">${p.status === 'sold' ? `<p class="note">${esc(t('soldNote'))}</p>` : (S.settings.orders_enabled ? `<button type="button" class="btn btn-signal" id="padd">${I('plus')} ${esc(t('addCart'))}</button>` : '') + (wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('whatsapp'))}</a>` : '') + (tel ? `<a class="btn btn-ghost" href="${esc(tel)}">${I('phone')} ${esc(t('call'))}</a>` : '') + (!wa && !tel ? `<p class="note">${esc(t('noNumber'))}</p>` : '')}</div></div>`, { actionbar: true });
+      <div class="actionbar"><div class="wrap">${p.status === 'sold' ? `<p class="note">${esc(t('soldNote'))}</p>` : (S.settings.orders_enabled && !closed ? `<button type="button" class="btn btn-signal" id="padd">${I('plus')} ${esc(t('addCart'))}</button>` : '') + (wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('whatsapp'))}</a>` : '') + (tel ? `<a class="btn btn-ghost" href="${esc(tel)}">${I('phone')} ${esc(t('call'))}</a>` : '') + (!wa && !tel ? `<p class="note">${esc(t('noNumber'))}</p>` : '')}</div></div>`, { actionbar: true });
     const gt = $('#gt'), gc = $('#gc');
     if (gc) gt.addEventListener('scroll', SP.debounce(() => { gc.textContent = (Math.round(Math.abs(gt.scrollLeft) / gt.clientWidth) + 1) + '/' + p.imgs.length; }, 60), { passive: true });
     if ($('#padd')) $('#padd').onclick = () => { SP.cart.add(p.id); SP.toast(t('addedCart')); };
@@ -533,6 +537,7 @@
   /* ---------- shops ---------- */
   SP.route(/^shops$/, async (m, n) => {
     if (gate(n)) return;
+    if (SP.hideBranches && SP.hideBranches()) return SP.branchesHidden(n);
     shell(bar(t(SP.company ? 'branches' : 'shops'), `<button type="button" class="iconbtn" data-act="loc" aria-label="${esc(t('chooseCity'))}">${I('pin')}</button>`, { noBack: true }) +
       `<main class="wrap"><form class="searchbox flat" id="shq" role="search" style="margin-top:16px">${I('search')}<input type="search" name="q" value="${esc(S.shq || '')}" placeholder="${esc(t('shopsPh'))}" aria-label="${esc(t('search'))}"></form>
       <div class="res-head"><span class="rcount" id="rc"></span><span class="rcount">${SP.flag(S.country)} ${esc(S.city || SP.countryName(S.country))}</span></div>
@@ -554,6 +559,7 @@
 
   SP.route(/^s-([0-9a-f-]{36})$/, async (m, n) => {
     if (gate(n)) return;
+    if (SP.hideBranches && SP.hideBranches()) return SP.branchesHidden(n);
     const id = m[1];
     let s = S.scache.get(id);
     if (!s) shell(bar(t('shop')) + `<div class="sk" style="height:150px;border-radius:0"></div><div class="wrap"><div class="sk sk-block"></div></div>`);

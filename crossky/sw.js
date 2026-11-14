@@ -1,10 +1,10 @@
 /* Sparat offline support: app files network-first, libraries and fonts stale-while-revalidate,
    product photos cache-first (bounded). Database and VIN lookups always go to the network. */
-const VERSION = 'crossky-v6';
+const VERSION = 'crossky-v7';
 const LIB = 'crossky-lib-v1';
 const IMG = 'crossky-img-v1';
 const SHELL = ['./', 'index.html', 'css/styles.css', 'config.js', 'js/data.js', 'js/i18n.js', 'js/vin.js', 'js/icons.js',
-  'js/demo.js', 'js/core.js', 'js/views.js', 'js/views2.js', 'js/company.js', 'js/pos.js', 'js/books.js', 'js/scan.js', 'js/embed.js', 'js/boot.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/logo.svg', 'icons/logo-ink.svg', 'icons/hero-car.svg'];
+  'js/demo.js', 'js/core.js', 'js/views.js', 'js/views2.js', 'js/company.js', 'js/pos.js', 'js/books.js', 'js/control.js', 'js/scan.js', 'js/embed.js', 'js/boot.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/logo.svg', 'icons/logo-ink.svg', 'icons/hero-car.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

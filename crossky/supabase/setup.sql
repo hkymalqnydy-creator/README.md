@@ -81,6 +81,14 @@ create table if not exists public.settings (
   updated_at timestamptz not null default now()
 );
 insert into public.settings (id) values (1) on conflict (id) do nothing;
+-- owner controls (section 12): what customers see, selling below cost, the running-low level, the invoice footer
+alter table public.settings add column if not exists hide_qty       boolean not null default false;
+alter table public.settings add column if not exists hide_branches  boolean not null default false;
+alter table public.settings add column if not exists shop_closed    boolean not null default false;
+alter table public.settings add column if not exists closed_msg     text    not null default '' check (char_length(closed_msg) <= 300);
+alter table public.settings add column if not exists no_below_cost  boolean not null default false;
+alter table public.settings add column if not exists low_stock      integer not null default 3 check (low_stock between 0 and 1000);
+alter table public.settings add column if not exists invoice_footer text    not null default '' check (char_length(invoice_footer) <= 300);
 
 -- ---------- 2) دوال مساعدة ----------
 create or replace function public.norm_ar(t text)
@@ -261,6 +269,8 @@ create table if not exists public.staff (
   active     boolean not null default true,
   created_at timestamptz not null default now()
 );
+-- the most this employee may take off an invoice, as a % of it (null = no limit)
+alter table public.staff add column if not exists max_discount numeric(5,2) check (max_discount is null or (max_discount >= 0 and max_discount <= 100));
 create or replace function public.has_perm(p text)
 returns boolean language sql stable security definer set search_path = public as $$
   select public.is_admin() or exists (select 1 from public.staff where user_id = auth.uid() and active and p = any (perms));
@@ -300,10 +310,12 @@ language sql stable security definer set search_path = public as $$
   with ctx as (
     select public.is_admin() as adm, auth.uid() as me, public.customer_approved() as appr,
            public.is_staff() as stf, public.has_perm('costs') as costs,
-           coalesce((select price_mode from public.settings where id = 1), 'all') as mode
+           coalesce((select price_mode from public.settings where id = 1), 'all') as mode,
+           coalesce((select hide_qty from public.settings where id = 1), false) as hideq
   )
-  select (to_jsonb(p) - 'search_text' - 'price' - 'cost') || jsonb_build_object(
+  select (to_jsonb(p) - 'search_text' - 'price' - 'cost' - 'qty') || jsonb_build_object(
            'price', case when v.ok then p.price end,
+           'qty', case when ctx.hideq and not (ctx.adm or ctx.stf or (ctx.me is not null and ctx.me = p.owner_id)) then null else p.qty end,
            'cost', case when ctx.costs then p.cost end,
            'price_hidden', (p.price is not null and not v.ok),
            'shop', jsonb_build_object(
@@ -528,6 +540,7 @@ declare
   v_price numeric; v_qty integer; v_make text; v_cat text; v_cond text; v_bar text;
   n_ins integer := 0; n_upd integer := 0; n_skip integer := 0; n_err integer := 0;
 begin
+  perform set_config('sparat.ctx', 'sync', true);
   if jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows) > 2000 then
     raise exception 'p_rows must be a JSON array of at most 2000 items';
   end if;
@@ -581,21 +594,26 @@ end $$;
 
 create or replace function public.sync_products(p_key text, p_rows jsonb, p_shop uuid default null) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
-declare h text;
+declare h text; r jsonb;
 begin
   select sync_key_hash into h from public.app_secrets where id = 1;
   if coalesce(h, '') = '' or coalesce(p_key, '') = '' or encode(extensions.digest(p_key, 'sha256'), 'hex') <> h then
     raise exception 'invalid sync key' using errcode = '42501';
   end if;
-  return public.upsert_products_internal(p_rows, p_shop);
+  r := public.upsert_products_internal(p_rows, p_shop);
+  perform public.log_act('sync', '', '', null, r);
+  return r;
 end $$;
 
 -- رفع ملف Excel/CSV من لوحة الإدارة (بدون مفتاح، للإدارة فقط)
 create or replace function public.import_products(p_rows jsonb, p_shop uuid default null) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
+declare r jsonb;
 begin
   if not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
-  return public.upsert_products_internal(p_rows, p_shop);
+  r := public.upsert_products_internal(p_rows, p_shop);
+  perform public.log_act('import', '', '', null, r);
+  return r;
 end $$;
 revoke execute on function public.upsert_products_internal(jsonb, uuid) from public, anon, authenticated;
 grant execute on function public.import_products(jsonb, uuid) to authenticated;
@@ -628,10 +646,12 @@ create or replace function public.my_perms() returns jsonb language sql stable s
     'staff', exists (select 1 from public.staff where user_id = auth.uid() and active),
     'perms', coalesce((select to_jsonb(perms) from public.staff where user_id = auth.uid() and active), '[]'::jsonb),
     'branch', (select branch_id from public.staff where user_id = auth.uid() and active),
+    'max_discount', (select max_discount from public.staff where user_id = auth.uid() and active),
     'name', (select name from public.staff where user_id = auth.uid()));
 $$;
 
-create or replace function public.save_staff(p_email text, p_name text, p_perms text[], p_branch uuid default null, p_active boolean default true)
+drop function if exists public.save_staff(text, text, text[], uuid, boolean);
+create or replace function public.save_staff(p_email text, p_name text, p_perms text[], p_branch uuid default null, p_active boolean default true, p_max_discount numeric default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_email text := lower(btrim(coalesce(p_email, ''))); v_perms text[]; r jsonb;
 begin
@@ -639,10 +659,11 @@ begin
   if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid email' using errcode = '22023'; end if;
   v_perms := array(select distinct x from unnest(coalesce(p_perms, '{}')) x
                    where x in ('sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'customers', 'reports', 'costs', 'settings', 'purchases', 'expenses'));
-  insert into public.staff as st (email, name, perms, branch_id, active, user_id)
-  values (v_email, left(coalesce(p_name, ''), 80), v_perms, p_branch, coalesce(p_active, true), (select id from auth.users where lower(email) = v_email limit 1))
+  if p_max_discount is not null and (p_max_discount < 0 or p_max_discount > 100) then raise exception 'bad discount limit' using errcode = '22023'; end if;
+  insert into public.staff as st (email, name, perms, branch_id, active, user_id, max_discount)
+  values (v_email, left(coalesce(p_name, ''), 80), v_perms, p_branch, coalesce(p_active, true), (select id from auth.users where lower(email) = v_email limit 1), p_max_discount)
   on conflict (email) do update set name = excluded.name, perms = excluded.perms, branch_id = excluded.branch_id,
-    active = excluded.active, user_id = coalesce(st.user_id, excluded.user_id)
+    active = excluded.active, user_id = coalesce(st.user_id, excluded.user_id), max_discount = excluded.max_discount
   returning to_jsonb(st.*) into r;
   return r;
 end $$;
@@ -740,8 +761,12 @@ declare
   v_me uuid := auth.uid(); v_staff public.staff; v_branch uuid; v_it jsonb; v_p public.products; v_qty integer; v_price numeric;
   v_sub numeric := 0; v_disc numeric := coalesce(public.try_num(p->>'discount'), 0); v_lines jsonb := '[]'::jsonb;
   v_pay text := coalesce(nullif(p->>'payment', ''), 'cash'); v_cur text; v_name text; v_id uuid; v_paid numeric;
+  v_list numeric := 0; v_costsum numeric := 0; v_units integer := 0; v_adm boolean := public.is_admin(); v_nbc boolean;
 begin
   if v_me is null or not public.has_perm('sales') then raise exception 'not authorized' using errcode = '42501'; end if;
+  perform set_config('sparat.ctx', 'sale', true);
+  -- the owner's rules bind the staff, not the owner
+  v_nbc := not v_adm and coalesce((select no_below_cost from public.settings where id = 1), false);
   select * into v_staff from public.staff where user_id = v_me and active;
   v_branch := coalesce(v_staff.branch_id, nullif(p->>'branch', '')::uuid);
   if jsonb_typeof(p->'items') is distinct from 'array' or jsonb_array_length(p->'items') = 0 or jsonb_array_length(p->'items') > 200 then
@@ -755,7 +780,9 @@ begin
     if v_p.id is null then raise exception 'part not found' using errcode = 'P0001'; end if;
     v_price := case when public.has_perm('prices') and public.try_num(v_it->>'price') is not null then public.try_num(v_it->>'price') else v_p.price end;
     if v_price is null or v_price < 0 then raise exception 'part has no price: %', v_p.title using errcode = 'P0001'; end if;
+    if v_nbc and v_p.cost is not null and v_price < v_p.cost then raise exception 'below cost: %', v_p.title using errcode = 'P0001'; end if;
     if v_p.qty is not null and v_p.qty < v_qty then raise exception 'not enough stock: % (available %)', v_p.title, v_p.qty using errcode = 'P0001'; end if;
+    v_list := v_list + coalesce(v_p.price, v_price) * v_qty; v_costsum := v_costsum + coalesce(v_p.cost, 0) * v_qty; v_units := v_units + v_qty;
     update public.products set
       qty = case when qty is null then null else qty - v_qty end,
       status = case when qty is not null and qty - v_qty <= 0 then 'sold' else status end
@@ -767,6 +794,11 @@ begin
   end loop;
   if v_disc < 0 or v_disc > v_sub then raise exception 'bad discount' using errcode = '22023'; end if;
   if v_disc > 0 and not public.has_perm('discounts') then raise exception 'not authorized to give discounts' using errcode = '42501'; end if;
+  -- the limit counts everything taken off the list prices: a lower price on a line and the discount on the invoice
+  if not v_adm and v_staff.max_discount is not null and v_list - (v_sub - v_disc) > round(v_list * v_staff.max_discount / 100, 2) then
+    raise exception 'discount over limit: %', v_staff.max_discount using errcode = 'P0001';
+  end if;
+  if v_nbc and v_sub - v_disc < v_costsum then raise exception 'below cost' using errcode = 'P0001'; end if;
   select currency into v_cur from public.shops where id = v_branch;
   v_name := coalesce(nullif(v_staff.name, ''), (select email from auth.users where id = v_me), '');
   v_paid := coalesce(public.try_num(p->>'paid'), case when v_pay = 'credit' then 0 else v_sub - v_disc end);
@@ -777,6 +809,9 @@ begin
   insert into public.invoice_items (invoice_id, product_id, sku, title, qty, price, cost, line_total)
   select v_id, (x->>'product_id')::uuid, x->>'sku', x->>'title', (x->>'qty')::integer, (x->>'price')::numeric, (x->>'cost')::numeric, (x->>'line_total')::numeric
   from jsonb_array_elements(v_lines) x;
+  perform public.log_act('sale', v_id::text, nullif(btrim(coalesce(p->>'customer_name', '')), ''), v_sub - v_disc,
+    jsonb_build_object('no', (select no from public.invoices where id = v_id), 'units', v_units, 'lines', jsonb_array_length(v_lines), 'discount', v_disc,
+                       'off_list', greatest(v_list - v_sub, 0), 'payment', v_pay, 'paid', greatest(v_paid, 0)));
   return public.get_invoice(v_id);
 end $$;
 
@@ -789,10 +824,13 @@ begin
   select status into v_status from public.invoices where id = p_id for update;
   if v_status is null then raise exception 'invoice not found' using errcode = 'P0001'; end if;
   if v_status = 'returned' then raise exception 'invoice already returned' using errcode = 'P0001'; end if;
+  perform set_config('sparat.ctx', 'return', true);
   update public.products p set qty = p.qty + a.n, status = case when p.qty + a.n > 0 then 'active' else p.status end
   from (select product_id, sum(qty) as n from public.invoice_items where invoice_id = p_id group by product_id) a
   where p.id = a.product_id and p.qty is not null;
   update public.invoices set status = 'returned', returned_at = now() where id = p_id;
+  perform public.log_act('return', p_id::text, (select nullif(btrim(customer_name), '') from public.invoices where id = p_id), (select total from public.invoices where id = p_id),
+    jsonb_build_object('no', (select no from public.invoices where id = p_id)));
   return public.get_invoice(p_id);
 end $$;
 
@@ -837,7 +875,7 @@ begin
 end $$;
 
 grant execute on function public.my_perms() to authenticated;
-grant execute on function public.save_staff(text, text, text[], uuid, boolean) to authenticated;
+grant execute on function public.save_staff(text, text, text[], uuid, boolean, numeric) to authenticated;
 grant execute on function public.delete_staff(uuid) to authenticated;
 grant execute on function public.get_invoice(uuid) to authenticated;
 grant execute on function public.create_invoice(jsonb) to authenticated;
@@ -875,6 +913,12 @@ create table if not exists public.purchase_items (
   cost        numeric(12,2)
 );
 create index if not exists purchase_items_p_idx on public.purchase_items (purchase_id);
+-- what a line changed, so the receipt can be taken back: the part's cost and price before it, the price it set, and whether it created the part
+alter table public.purchase_items add column if not exists prev_cost  numeric(12,2);
+alter table public.purchase_items add column if not exists prev_price numeric(12,2);
+alter table public.purchase_items add column if not exists set_price  numeric(12,2);
+alter table public.purchase_items add column if not exists created    boolean not null default false;
+create index if not exists purchase_items_prod_idx on public.purchase_items (product_id);
 alter table public.purchases enable row level security;
 alter table public.purchase_items enable row level security;
 drop policy if exists "sparat purchases read" on public.purchases;
@@ -889,8 +933,10 @@ declare
   v_me uuid := auth.uid(); v_staff public.staff; v_branch uuid; v_owner uuid; v_it jsonb; v_id uuid; v_qty integer;
   v_cost numeric; v_price numeric; v_pid uuid; v_total numeric := 0; n_new integer := 0; n_upd integer := 0; v_code text; v_title text; v_paid numeric;
   v_sku text; v_bar text; v_pn text; v_can_price boolean := public.has_perm('products');
+  v_pc numeric; v_pp numeric; v_made boolean; v_units integer := 0;
 begin
   if v_me is null or not public.has_perm('purchases') then raise exception 'not authorized' using errcode = '42501'; end if;
+  perform set_config('sparat.ctx', 'receive', true);
   if jsonb_typeof(p->'items') is distinct from 'array' or jsonb_array_length(p->'items') = 0 or jsonb_array_length(p->'items') > 300 then
     raise exception 'receipt needs 1 to 300 items' using errcode = '22023';
   end if;
@@ -923,7 +969,9 @@ begin
                (p.barcode = any (array[v_bar, v_sku, v_pn])) desc nulls last, (p.shop_id = v_branch) desc, p.created_at
       limit 1;
     end if;
+    v_made := false; v_pc := null; v_pp := null;
     if v_id is not null then
+      select cost, price into v_pc, v_pp from public.products where id = v_id for update;
       update public.products set qty = coalesce(qty, 0) + v_qty, cost = coalesce(v_cost, cost), price = coalesce(v_price, price), status = 'active'
       where id = v_id returning title into v_title;
       if v_title is null then raise exception 'part not found' using errcode = 'P0001'; end if;
@@ -937,10 +985,11 @@ begin
               'original', v_price, v_cost, v_qty, coalesce(nullif(left(lower(btrim(coalesce(v_it->>'make', ''))), 20), ''), 'any'),
               left(coalesce(v_it->>'model', ''), 60), coalesce(v_pn, v_sku, ''), 'active')
       returning id into v_id;
-      n_new := n_new + 1;
+      n_new := n_new + 1; v_made := true;
     end if;
-    insert into public.purchase_items (purchase_id, product_id, code, title, qty, cost) values (v_pid, v_id, v_code, v_title, v_qty, v_cost);
-    v_total := v_total + coalesce(v_cost, 0) * v_qty;
+    insert into public.purchase_items (purchase_id, product_id, code, title, qty, cost, prev_cost, prev_price, set_price, created)
+    values (v_pid, v_id, v_code, v_title, v_qty, v_cost, v_pc, v_pp, v_price, v_made);
+    v_total := v_total + coalesce(v_cost, 0) * v_qty; v_units := v_units + v_qty;
   end loop;
   -- paid less than the total: the rest is owed to the supplier, so the receipt needs the supplier's name
   v_paid := public.try_num(p->>'paid');
@@ -949,6 +998,10 @@ begin
     if v_paid < v_total and public.sup_key(p->>'supplier') is null then raise exception 'supplier needed for credit' using errcode = '22023'; end if;
   end if;
   update public.purchases set total = v_total, items_count = n_new + n_upd, paid = v_paid where id = v_pid;
+  perform public.log_act('receive', v_pid::text, nullif(btrim(coalesce(p->>'supplier', '')), ''), v_total,
+    jsonb_build_object('no', (select no from public.purchases where id = v_pid), 'units', v_units, 'new', n_new, 'updated', n_upd, 'paid', v_paid,
+                       'source', case when p->>'source' in ('photo', 'scan', 'manual') then p->>'source' end, 'auto', coalesce(p->>'auto', '') = 'true',
+                       'lines', (select jsonb_agg(jsonb_build_array(title, qty, cost) order by id) from (select * from public.purchase_items where purchase_id = v_pid order by id limit 100) x)));
   return jsonb_build_object('id', v_pid, 'no', (select no from public.purchases where id = v_pid), 'new', n_new, 'updated', n_upd, 'total', v_total);
 end $$;
 
@@ -1047,6 +1100,7 @@ $$;
 create or replace function public.stock_report(p_q text default null, p_filter text default 'all', p_limit integer default 50, p_offset integer default 0)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare v_costs boolean := public.has_perm('costs'); v_q text := nullif(btrim(coalesce(p_q, '')), ''); r jsonb;
+  v_low integer := coalesce((select low_stock from public.settings where id = 1), 3);
 begin
   if auth.uid() is null or not (public.has_perm('products') or public.has_perm('purchases') or public.has_perm('reports')) then
     raise exception 'not authorized' using errcode = '42501';
@@ -1055,10 +1109,10 @@ begin
        hit as (select * from base b
                where (v_q is null or public.norm_ar(b.title) like '%' || public.norm_ar(v_q) || '%' or upper(coalesce(b.sku, '')) like '%' || upper(v_q) || '%'
                       or upper(b.part_no) like '%' || upper(v_q) || '%' or coalesce(b.barcode, '') = v_q)
-                 and (coalesce(p_filter, 'all') not in ('low', 'out') or (p_filter = 'low' and b.qty between 1 and 3) or (p_filter = 'out' and b.qty = 0)))
+                 and (coalesce(p_filter, 'all') not in ('low', 'out') or (p_filter = 'low' and b.qty between 1 and v_low) or (p_filter = 'out' and b.qty = 0)))
   select jsonb_build_object(
     'summary', (select jsonb_build_object('parts', count(*), 'units', coalesce(sum(qty), 0),
-                  'low', count(*) filter (where qty between 1 and 3), 'out', count(*) filter (where qty = 0),
+                  'low', count(*) filter (where qty between 1 and v_low), 'low_level', v_low, 'out', count(*) filter (where qty = 0),
                   'value_price', coalesce(sum(qty * price) filter (where qty > 0 and price is not null), 0),
                   'value_cost', case when v_costs then coalesce(sum(qty * cost) filter (where qty > 0 and cost is not null), 0) end,
                   'cost_missing', case when v_costs then count(*) filter (where qty > 0 and cost is null) end) from base),
@@ -1089,11 +1143,14 @@ begin
   if v_new < 0 then raise exception 'stock cannot go below zero (available %)', v_old using errcode = '22023'; end if;
   if v_new > 999999 then raise exception 'bad quantity' using errcode = '22023'; end if;
   if v_new = v_old then raise exception 'nothing to change' using errcode = '22023'; end if;
+  perform set_config('sparat.ctx', 'stock', true);
   update public.products set qty = v_new,
     status = case when v_new = 0 then 'sold' else 'active' end
   where id = v_p.id;
   insert into public.stock_moves (product_id, title, branch_id, staff_id, staff_name, qty, reason, cost, note)
   values (v_p.id, v_p.title, v_p.shop_id, auth.uid(), public.me_name(), v_new - v_old, v_reason, v_p.cost, left(coalesce(p->>'note', ''), 300));
+  perform public.log_act('stock', v_p.id::text, v_p.title, case when v_p.cost is not null then (v_new - v_old) * v_p.cost end,
+    jsonb_build_object('from', v_old, 'to', v_new, 'reason', v_reason, 'note', nullif(left(coalesce(p->>'note', ''), 300), '')));
   return jsonb_build_object('id', v_p.id, 'qty', v_new, 'delta', v_new - v_old);
 end $$;
 
@@ -1319,3 +1376,270 @@ grant execute on function public.list_expenses(date, date, integer, integer) to 
 grant execute on function public.delete_expense(bigint) to authenticated;
 grant execute on function public.pnl_report(timestamptz, timestamptz, uuid, text) to authenticated;
 grant select on public.stock_moves, public.customer_payments, public.supplier_payments, public.expenses to authenticated;
+
+-- ---------- 12) تحكم المالك: سجل كل حركة، تغيير الأسعار بالجملة، إلغاء استلام، حدود الموظفين ----------
+-- The activity log: who did what, and when. Only the owner reads it, and nobody can change or delete it from the app.
+create table if not exists public.activity_log (
+  id          bigserial primary key,
+  created_at  timestamptz not null default now(),
+  actor_id    uuid references auth.users(id) on delete set null,
+  actor_name  text not null default '',
+  kind        text not null,
+  ref         text not null default '',
+  title       text not null default '',
+  amount      numeric(14,2),
+  detail      jsonb not null default '{}'::jsonb
+);
+create index if not exists activity_log_created_idx on public.activity_log (created_at desc, id desc);
+create index if not exists activity_log_actor_idx on public.activity_log (actor_id, created_at desc);
+alter table public.activity_log enable row level security;
+drop policy if exists "sparat activity read" on public.activity_log;
+create policy "sparat activity read" on public.activity_log for select to authenticated using (public.is_admin());
+revoke insert, update, delete, truncate on public.activity_log from anon, authenticated;
+grant select on public.activity_log to authenticated;
+
+-- writes one line; the app cannot call it, only the functions and triggers below
+create or replace function public.log_act(p_kind text, p_ref text, p_title text, p_amount numeric default null, p_detail jsonb default '{}'::jsonb)
+returns void language sql security definer set search_path = public as $$
+  insert into public.activity_log (actor_id, actor_name, kind, ref, title, amount, detail)
+  values (auth.uid(), coalesce(public.me_name(), ''), p_kind, left(coalesce(p_ref, ''), 80), left(coalesce(p_title, ''), 200), p_amount, coalesce(p_detail, '{}'::jsonb));
+$$;
+revoke execute on function public.log_act(text, text, text, numeric, jsonb) from public, anon, authenticated;
+
+-- parts edited by hand (the sales, receipts, stock counts, price changes and syncs above write their own line, and say so with sparat.ctx)
+create or replace function public.products_log() returns trigger language plpgsql security definer set search_path = public as $$
+declare v_d jsonb := '{}'::jsonb;
+begin
+  if coalesce(current_setting('sparat.ctx', true), '') <> '' then return null; end if;
+  if tg_op = 'INSERT' then
+    perform public.log_act('product_add', new.id::text, new.title, new.price, jsonb_strip_nulls(jsonb_build_object('qty', new.qty, 'cost', new.cost, 'code', coalesce(new.sku, nullif(new.part_no, '')))));
+  elsif tg_op = 'DELETE' then
+    perform public.log_act('product_del', old.id::text, old.title, old.price, jsonb_strip_nulls(jsonb_build_object('qty', old.qty, 'code', coalesce(old.sku, nullif(old.part_no, '')))));
+  else
+    if new.price is distinct from old.price then v_d := v_d || jsonb_build_object('price', jsonb_build_array(old.price, new.price)); end if;
+    if new.cost is distinct from old.cost then v_d := v_d || jsonb_build_object('cost', jsonb_build_array(old.cost, new.cost)); end if;
+    if new.qty is distinct from old.qty then v_d := v_d || jsonb_build_object('qty', jsonb_build_array(old.qty, new.qty)); end if;
+    if new.title is distinct from old.title then v_d := v_d || jsonb_build_object('title', jsonb_build_array(old.title, new.title)); end if;
+    if new.hide_price is distinct from old.hide_price then v_d := v_d || jsonb_build_object('hide_price', jsonb_build_array(old.hide_price, new.hide_price)); end if;
+    if new.status is distinct from old.status and new.qty is not distinct from old.qty then v_d := v_d || jsonb_build_object('status', jsonb_build_array(old.status, new.status)); end if;
+    if v_d <> '{}'::jsonb then perform public.log_act('product_edit', new.id::text, new.title, null, v_d); end if;
+  end if;
+  return null;
+end $$;
+drop trigger if exists products_log on public.products;
+create trigger products_log after insert or update or delete on public.products for each row execute function public.products_log();
+
+-- settings: which ones changed, and from what to what (long texts and lists only by name)
+create or replace function public.settings_log() returns trigger language plpgsql security definer set search_path = public as $$
+declare v_keys text[]; v_ch jsonb;
+begin
+  select array_agg(n.key order by n.key), jsonb_object_agg(n.key, case when n.key in ('about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'hero_sub') then null else jsonb_build_array(o.value, n.value) end)
+  into v_keys, v_ch
+  from jsonb_each(to_jsonb(new)) n join jsonb_each(to_jsonb(old)) o using (key)
+  where n.value is distinct from o.value and n.key <> 'updated_at';
+  if v_keys is not null then perform public.log_act('settings', '', array_to_string(v_keys, ','), null, jsonb_build_object('keys', to_jsonb(v_keys), 'changes', jsonb_strip_nulls(v_ch))); end if;
+  return null;
+end $$;
+drop trigger if exists settings_log on public.settings;
+create trigger settings_log after update on public.settings for each row execute function public.settings_log();
+
+-- staff: added, changed (not the account link made when they sign up) or removed
+create or replace function public.staff_log() returns trigger language plpgsql security definer set search_path = public as $$
+declare j jsonb;
+begin
+  if tg_op = 'UPDATE' and (to_jsonb(new) - 'user_id') = (to_jsonb(old) - 'user_id') then return null; end if;
+  j := to_jsonb(case when tg_op = 'DELETE' then old else new end);
+  perform public.log_act(case when tg_op = 'DELETE' then 'staff_del' else 'staff' end, j->>'id', coalesce(nullif(j->>'name', ''), j->>'email'), null,
+    jsonb_build_object('email', j->>'email', 'perms', j->'perms', 'active', j->'active', 'max_discount', j->'max_discount', 'new', tg_op = 'INSERT',
+                       'was', case when tg_op = 'UPDATE' then jsonb_build_object('perms', to_jsonb(old.perms), 'active', old.active, 'max_discount', old.max_discount) end));
+  return null;
+end $$;
+drop trigger if exists staff_log on public.staff;
+create trigger staff_log after insert or update or delete on public.staff for each row execute function public.staff_log();
+
+-- a customer approved or stopped
+create or replace function public.customers_log() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.approved is distinct from old.approved then
+    perform public.log_act('customer', new.user_id::text, coalesce(nullif(new.name, ''), new.phone, ''), null, jsonb_build_object('approved', new.approved, 'phone', new.phone));
+  end if;
+  return null;
+end $$;
+drop trigger if exists customers_log on public.customers;
+create trigger customers_log after update of approved on public.customers for each row execute function public.customers_log();
+
+-- money: payments from customers, payments to suppliers, expenses (written and deleted)
+create or replace function public.money_log() returns trigger language plpgsql security definer set search_path = public as $$
+declare j jsonb := to_jsonb(case when tg_op = 'DELETE' then old else new end);
+begin
+  perform public.log_act(
+    case tg_table_name when 'customer_payments' then 'pay_in' when 'supplier_payments' then 'pay_out' else 'expense' end || case when tg_op = 'DELETE' then '_del' else '' end,
+    j->>'id', case tg_table_name when 'customer_payments' then coalesce(nullif(j->>'customer_name', ''), j->>'cust_key') when 'supplier_payments' then j->>'supplier' else j->>'cat' end,
+    (j->>'amount')::numeric, jsonb_strip_nulls(jsonb_build_object('note', nullif(j->>'note', ''), 'by', nullif(j->>'staff_name', ''), 'day', j->>'spent_on', 'key', j->>'cust_key')));
+  return null;
+end $$;
+drop trigger if exists money_log on public.customer_payments;
+create trigger money_log after insert or delete on public.customer_payments for each row execute function public.money_log();
+drop trigger if exists money_log on public.supplier_payments;
+create trigger money_log after insert or delete on public.supplier_payments for each row execute function public.money_log();
+drop trigger if exists money_log on public.expenses;
+create trigger money_log after insert or delete on public.expenses for each row execute function public.money_log();
+
+-- the log, newest first, for the owner: by kind (sales, stock, prices, money, admin), person, dates or a word
+create or replace function public.list_activity(p_group text default null, p_actor uuid default null, p_from timestamptz default null, p_to timestamptz default null,
+                                                p_q text default null, p_limit integer default 50, p_offset integer default 0)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare r jsonb; v_q text := nullif(btrim(coalesce(p_q, '')), '');
+begin
+  if auth.uid() is null or not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
+  with hit as (
+    select a.* from public.activity_log a
+    where (p_from is null or a.created_at >= p_from) and (p_to is null or a.created_at < p_to)
+      and (p_actor is null or a.actor_id = p_actor)
+      and (v_q is null or public.norm_ar(a.title) like '%' || public.norm_ar(v_q) || '%' or a.detail->>'no' = v_q or public.norm_ar(a.actor_name) like '%' || public.norm_ar(v_q) || '%')
+      and (p_group is null or case p_group
+            when 'sales'  then a.kind in ('sale', 'return')
+            when 'stock'  then a.kind in ('receive', 'receipt_undo', 'stock', 'product_add', 'product_del', 'sync', 'import')
+                               or (a.kind = 'product_edit' and (a.detail ? 'qty' or a.detail ? 'title' or a.detail ? 'status'))
+            when 'prices' then a.kind in ('bulk_price', 'bulk_undo') or (a.kind = 'product_edit' and (a.detail ? 'price' or a.detail ? 'cost' or a.detail ? 'hide_price'))
+            when 'money'  then a.kind in ('pay_in', 'pay_in_del', 'pay_out', 'pay_out_del', 'expense', 'expense_del')
+            when 'admin'  then a.kind in ('staff', 'staff_del', 'settings', 'customer')
+            else true end))
+  select jsonb_build_object(
+    'total', (select count(*) from hit),
+    'items', coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at desc, x.id desc)
+                       from (select * from hit order by created_at desc, id desc limit least(greatest(coalesce(p_limit, 50), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) x), '[]'::jsonb),
+    'actors', coalesce((select jsonb_agg(jsonb_build_object('id', actor_id, 'name', name, 'count', n) order by n desc)
+                        from (select actor_id, (array_agg(actor_name order by created_at desc))[1] as name, count(*) as n from public.activity_log where actor_id is not null group by actor_id) t), '[]'::jsonb)
+  ) into r;
+  return r;
+end $$;
+
+-- taking a receipt back (a misread invoice photo, the wrong supplier): the parts go out again, the costs and prices it set go back,
+-- parts it created that nothing else uses are removed, and the receipt is deleted (the log keeps what it was).
+-- Staff can take back their own receipts for a day; the owner any receipt. Not when some of those parts were already sold.
+create or replace function public.undo_receipt(p_id uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_pu public.purchases; v_it record; v_bad text; n_back integer := 0; n_del integer := 0; v_lines jsonb;
+begin
+  if auth.uid() is null or not public.has_perm('purchases') then raise exception 'not authorized' using errcode = '42501'; end if;
+  select * into v_pu from public.purchases where id = p_id for update;
+  if v_pu.id is null then raise exception 'receipt not found' using errcode = 'P0001'; end if;
+  if not public.is_admin() and (v_pu.staff_id is distinct from auth.uid() or v_pu.created_at < now() - interval '24 hours') then
+    raise exception 'not authorized' using errcode = '42501';
+  end if;
+  perform set_config('sparat.ctx', 'undo', true);
+  perform 1 from public.products where id in (select product_id from public.purchase_items where purchase_id = p_id) for update;
+  select string_agg(p.title, '، ' order by p.title) into v_bad
+  from (select product_id, sum(qty) as n from public.purchase_items where purchase_id = p_id and product_id is not null group by product_id) a
+  join public.products p on p.id = a.product_id
+  where coalesce(p.qty, 0) < a.n;
+  if v_bad is not null then raise exception 'already sold: %', v_bad using errcode = 'P0001'; end if;
+  for v_it in select * from public.purchase_items where purchase_id = p_id and product_id is not null order by id desc loop
+    update public.products p set qty = p.qty - v_it.qty,
+      status = case when p.qty - v_it.qty <= 0 then 'sold' else p.status end,
+      cost  = case when v_it.cost is not null and p.cost = v_it.cost then v_it.prev_cost else p.cost end,
+      price = case when v_it.set_price is not null and p.price = v_it.set_price then v_it.prev_price else p.price end
+    where p.id = v_it.product_id;
+    n_back := n_back + 1;
+  end loop;
+  select jsonb_agg(jsonb_build_array(title, qty, cost) order by id) into v_lines from (select * from public.purchase_items where purchase_id = p_id order by id limit 100) x;
+  delete from public.products p using public.purchase_items it
+  where it.purchase_id = p_id and it.created and p.id = it.product_id and coalesce(p.qty, 0) = 0
+    and not exists (select 1 from public.invoice_items ii where ii.product_id = p.id)
+    and not exists (select 1 from public.purchase_items o where o.product_id = p.id and o.purchase_id <> p_id)
+    and not exists (select 1 from public.stock_moves m where m.product_id = p.id);
+  get diagnostics n_del = row_count;
+  perform public.log_act('receipt_undo', p_id::text, nullif(btrim(v_pu.supplier), ''), v_pu.total,
+    jsonb_build_object('no', v_pu.no, 'by', v_pu.staff_name, 'at', v_pu.created_at, 'parts', n_back, 'removed', n_del, 'lines', v_lines));
+  delete from public.purchases where id = p_id;
+  return jsonb_build_object('no', v_pu.no, 'parts', n_back, 'removed', n_del);
+end $$;
+
+-- changing many prices at once: by a percent, by an amount, or cost + a margin; for a brand, a category, a branch, a word or everything.
+-- Each change remembers the old prices, so the last ones can be put back.
+create sequence if not exists public.price_batch_seq;
+create table if not exists public.price_changes (
+  batch      bigint not null,
+  product_id uuid not null references public.products(id) on delete cascade,
+  old_price  numeric(12,2),
+  new_price  numeric(12,2),
+  primary key (batch, product_id)
+);
+alter table public.price_changes enable row level security;
+revoke all on public.price_changes from anon, authenticated;
+create or replace function public.bulk_price_rows(p jsonb) returns table (id uuid, title text, old numeric, cost numeric, new numeric)
+language sql stable security definer set search_path = public as $$
+  with a as (select coalesce(nullif(p->>'mode', ''), 'pct') as m, public.try_num(p->>'value') as v, coalesce(public.try_num(p->>'round'), 0) as rd,
+                    nullif(p->>'make', '') as mk, nullif(p->>'cat', '') as ct, nullif(p->>'shop', '')::uuid as sh, nullif(btrim(coalesce(p->>'q', '')), '') as q),
+       t as (select x.id, x.title, x.price as old, x.cost, a.rd,
+                    case a.m when 'pct' then x.price * (1 + a.v / 100) when 'add' then x.price + a.v else x.cost * (1 + a.v / 100) end as raw
+             from public.products x cross join a
+             where (a.mk is null or x.make = a.mk) and (a.ct is null or x.cat = a.ct) and (a.sh is null or x.shop_id = a.sh)
+               and (a.q is null or public.norm_ar(x.title) like '%' || public.norm_ar(a.q) || '%' or upper(coalesce(x.sku, '')) like upper(a.q) || '%' or upper(x.part_no) like upper(a.q) || '%')
+               and case when a.m = 'margin' then x.cost is not null else x.price is not null end)
+  -- rounded up to the step (a price of 47.30 with a step of 5 becomes 50), never below zero
+  select t.id, t.title, t.old, t.cost, greatest(case when t.rd > 0 then ceil(t.raw / t.rd) * t.rd else round(t.raw, 2) end, 0)::numeric(12,2) from t;
+$$;
+revoke execute on function public.bulk_price_rows(jsonb) from public, anon, authenticated;
+create or replace function public.bulk_price(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_mode text := coalesce(nullif(p->>'mode', ''), 'pct'); v_val numeric := public.try_num(p->>'value'); v_round numeric := coalesce(public.try_num(p->>'round'), 0);
+  v_batch bigint; v_n integer; r jsonb;
+begin
+  if auth.uid() is null or not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
+  if v_mode not in ('pct', 'add', 'margin') then raise exception 'bad mode' using errcode = '22023'; end if;
+  if v_val is null or (v_mode = 'pct' and (v_val = 0 or v_val <= -100 or v_val > 1000)) or (v_mode = 'add' and (v_val = 0 or abs(v_val) > 1000000))
+     or (v_mode = 'margin' and (v_val < 0 or v_val > 1000)) then raise exception 'bad value' using errcode = '22023'; end if;
+  if v_round not in (0, 0.25, 0.5, 1, 5, 10) then raise exception 'bad rounding' using errcode = '22023'; end if;
+  if coalesce(p->>'dry', '') = 'true' then
+    select jsonb_build_object('count', count(*) filter (where w.new is distinct from w.old), 'same', count(*) filter (where w.new is not distinct from w.old),
+             'below', count(*) filter (where w.cost is not null and w.new < w.cost and w.new is distinct from w.old),
+             'sample', coalesce((select jsonb_agg(jsonb_build_object('title', s.title, 'old', s.old, 'new', s.new) order by s.title)
+                                 from (select * from public.bulk_price_rows(p) z where z.new is distinct from z.old order by z.title limit 6) s), '[]'::jsonb))
+    into r from public.bulk_price_rows(p) w;
+    return r;
+  end if;
+  v_batch := nextval('public.price_batch_seq');
+  perform set_config('sparat.ctx', 'bulk', true);
+  insert into public.price_changes (batch, product_id, old_price, new_price)
+  select v_batch, w.id, w.old, w.new from public.bulk_price_rows(p) w where w.new is distinct from w.old;
+  get diagnostics v_n = row_count;
+  if v_n = 0 then raise exception 'nothing to change' using errcode = '22023'; end if;
+  update public.products x set price = c.new_price from public.price_changes c where c.batch = v_batch and c.product_id = x.id;
+  -- keep the last 20 changes for putting back
+  delete from public.price_changes where batch <= v_batch - 20;
+  perform public.log_act('bulk_price', v_batch::text, '', null, jsonb_strip_nulls(jsonb_build_object('mode', v_mode, 'value', v_val, 'round', v_round,
+    'make', nullif(p->>'make', ''), 'cat', nullif(p->>'cat', ''), 'shop', nullif(p->>'shop', ''), 'q', nullif(btrim(coalesce(p->>'q', '')), ''), 'count', v_n)));
+  return jsonb_build_object('batch', v_batch, 'count', v_n);
+end $$;
+-- puts back the prices of one change (parts whose price was changed again since keep the newer price)
+create or replace function public.undo_bulk_price(p_batch bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_n integer; v_all integer;
+begin
+  if auth.uid() is null or not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
+  select count(*) into v_all from public.price_changes where batch = p_batch;
+  if v_all = 0 then raise exception 'nothing to undo' using errcode = 'P0001'; end if;
+  perform set_config('sparat.ctx', 'bulk', true);
+  update public.products x set price = c.old_price from public.price_changes c
+  where c.batch = p_batch and c.product_id = x.id and x.price is not distinct from c.new_price;
+  get diagnostics v_n = row_count;
+  delete from public.price_changes where batch = p_batch;
+  perform public.log_act('bulk_undo', p_batch::text, '', null, jsonb_build_object('count', v_n, 'kept', v_all - v_n));
+  return jsonb_build_object('count', v_n, 'kept', v_all - v_n);
+end $$;
+create or replace function public.price_batches() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when public.is_admin() then coalesce((select jsonb_agg(x order by b desc) from (
+    select c.batch as b, jsonb_build_object('batch', c.batch, 'count', count(*), 'created_at', max(a.created_at), 'by', max(a.actor_name), 'detail', (array_agg(a.detail))[1]) as x
+    from public.price_changes c left join public.activity_log a on a.kind = 'bulk_price' and a.ref = c.batch::text
+    group by c.batch order by c.batch desc limit 5) t), '[]'::jsonb) end;
+$$;
+
+grant execute on function public.list_activity(text, uuid, timestamptz, timestamptz, text, integer, integer) to authenticated;
+grant execute on function public.undo_receipt(uuid) to authenticated;
+grant execute on function public.bulk_price(jsonb) to authenticated;
+grant execute on function public.undo_bulk_price(bigint) to authenticated;
+grant execute on function public.price_batches() to authenticated;

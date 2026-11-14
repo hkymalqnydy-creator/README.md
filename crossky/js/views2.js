@@ -378,7 +378,7 @@
     if (!S.admin) return shell(bar(t('admin')) + `<main class="wrap">${empty('lock', t('adminOnly'), t('notAdmin'))}</main>`);
     const st = S.settings || {};
     S.acc = S.acc || '';
-    shell(bar(t('admin')) + `<main class="wrap mine">${SP.adminTabs ? SP.adminTabs('admin') : ''}<div class="astats" id="ast">${'<div class="sk" style="height:74px"></div>'.repeat(4)}</div>
+    shell(bar(t('admin')) + `<main class="wrap mine">${SP.adminTabs ? SP.adminTabs('admin') : ''}${SP.company ? '<div id="atoday"></div>' : ''}<div class="astats" id="ast">${'<div class="sk" style="height:74px"></div>'.repeat(4)}</div>
       <section class="mcard"><h2 class="lbl">${esc(t('settingsT'))}</h2><form class="form" id="stf">
         <div class="field"><label for="saw">${esc(t('adminWa'))}</label><input id="saw" class="input" type="tel" dir="ltr" value="${esc(st.admin_wa || '')}" maxlength="30"><span class="hint">${esc(t('adminWaHint'))}</span></div>
         <div class="field"><label for="snt">${esc(t('notice'))}</label><textarea id="snt" class="input" maxlength="300" placeholder="${esc(t('noticePh'))}">${esc(st.notice || '')}</textarea></div>
@@ -391,6 +391,7 @@
       try { await api.saveSettings({ admin_wa: SP.digits($('#saw').value).trim(), notice: $('#snt').value.trim() }); SP.toast(t('settingsSaved')); }
       catch (x) { SP.toast(SP.errText(x)); } finally { b.classList.remove('busy'); }
     };
+    if (SP.adminToday) SP.adminToday($('#atoday'), n);
     api.stats({ country: S.acc || null }).then(x => {
       if (!SP.alive(n)) return;
       $('#ast').innerHTML = [['statShops', x.shops], ['statParts', x.products], ['statSold', x.sold], ['statNoImg', x.noimg], ['statCountries', x.countries]]

@@ -97,6 +97,7 @@
   const appName = () => (S.settings && S.settings.brand_name) || CFG.appName || t('app');
   const sf = o => `href="#search" data-sf="${esc(JSON.stringify(o))}"`;
   const contactNum = () => (S.settings && S.settings.contact_wa) || ((S.branches || []).find(b => b.whatsapp) || {}).whatsapp || '';
+  SP.contactNumber = contactNum;
   async function branches() {
     if (S.branches) return S.branches;
     try { S.branches = (await api.shops({ p_country: S.country, p_limit: 50 })).items; } catch (e) { S.branches = []; }
@@ -107,7 +108,8 @@
     if (!S.admin) { shell(bar(t('admin')) + `<main class="wrap">${empty('lock', t('adminOnly'), t('notAdmin'))}</main>`); return false; }
     return true;
   }
-  SP.adminTabs = cur => `<nav class="chips light admintabs" aria-label="${esc(t('admin'))}">${[['admin', 'adminMain'], ['admin-company', 'companySet'], ['admin-customers', 'customersT'], ['admin-bot', 'adminBot'], ['admin-sync', 'syncT']]
+  SP.adminTabs = cur => `<nav class="chips light admintabs" aria-label="${esc(t('admin'))}">${[['admin', 'adminMain'], ['admin-control', 'ctlT'], ['admin-log', 'logT'], ['admin-prices', 'bpT'],
+    ['admin-company', 'companySet'], ['admin-customers', 'customersT'], ['admin-bot', 'adminBot'], ['admin-sync', 'syncT']]
     .map(([h, k]) => `<a class="chip${cur === h ? ' on' : ''}" href="#${h}"${cur === h ? ' aria-current="page"' : ''}>${esc(t(k))}</a>`).join('')}</nav>`;
 
   /* ---------- header extras: basket button, assistant button, contact block ---------- */
@@ -193,7 +195,7 @@
           <div class="field"><label for="op">${esc(t('phoneNum'))}</label><input id="op" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(c.phone || '')}"></div></div>
           <div class="field"><label for="ox">${esc(t('cartNote'))}</label><textarea id="ox" class="input" maxlength="500" placeholder="${esc(t('cartNotePh'))}"></textarea></div>
           <p class="form-err" id="oerr" role="alert"></p>
-          <div class="form-actions"><a class="btn btn-wa" id="ogo" href="#cart" target="_blank" rel="noopener">${I('chat')} ${esc(t('sendOrder'))}</a><button type="button" class="btn btn-ghost" id="oclr">${I('trash')} ${esc(t('clearCart'))}</button></div></form>`;
+          ${SP.shopClosed && SP.shopClosed() ? SP.closedBanner() : ''}<div class="form-actions">${SP.shopClosed && SP.shopClosed() ? '' : `<a class="btn btn-wa" id="ogo" href="#cart" target="_blank" rel="noopener">${I('chat')} ${esc(t('sendOrder'))}</a>`}<button type="button" class="btn btn-ghost" id="oclr">${I('trash')} ${esc(t('clearCart'))}</button></div></form>`;
       $('#cl').onclick = e => {
         const b = e.target.closest('[data-d]');
         if (!b) return;
@@ -218,6 +220,8 @@
         if (note) lines.push(t('orderNote', { x: note }));
         return SP.waLink(num, lines.join('\n'), S.country);
       }
+      /* orders closed by the owner: the basket stays, nothing is sent */
+      if (!$('#ogo')) { $('#of').onsubmit = e => e.preventDefault(); return; }
       const link = () => { $('#ogo').setAttribute('href', orderLink() || '#cart'); };
       $('#of').oninput = link; link();
       $('#ogo').onclick = e => { if (!orderLink()) { e.preventDefault(); $('#oerr').textContent = t('noCompanyWa'); } };
@@ -329,7 +333,7 @@
   /* ---------- admin: company settings ---------- */
   SP.route(/^admin-company$/, (m, n) => {
     if (gate(n) || !adminGuard(n)) return;
-    const st = S.settings || {}, mode = st.price_mode || 'all';
+    const st = S.settings || {};
     let logo = st.logo || '';
     /* the colour of this edition's look (the royal skin is blue): shown when the owner has not picked one, and saved as "none" when picked back */
     const skinColor = (() => {
@@ -355,10 +359,7 @@
         <div class="row2"><div class="field"><label for="cwa">${esc(t('contactWaL'))}</label><input id="cwa" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(st.contact_wa || '')}"></div>
           <div class="field"><label for="cph">${esc(t('contactPhoneL'))}</label><input id="cph" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(st.contact_phone || '')}"></div></div>
         <div class="field"><label for="cad">${esc(t('addressL'))}</label><input id="cad" class="input" maxlength="200" value="${esc(st.address || '')}"></div></section>
-      <section class="mcard"><h2 class="lbl">${esc(t('priceModeL'))}</h2><div class="radios" id="cpm">${['all', 'members', 'approved', 'hidden'].map(k => `<label class="radio"><input type="radio" name="pm" value="${k}"${mode === k ? ' checked' : ''}><span>${esc(t('pm_' + k))}</span></label>`).join('')}</div>
-        <span class="hint">${esc(t('pmHint'))}</span>
-        <label class="switch"><input type="checkbox" id="cor"${st.orders_enabled ? ' checked' : ''}><span></span>${esc(t('ordersL'))}</label>
-        <label class="switch"><input type="checkbox" id="csu"${st.open_signup !== false ? ' checked' : ''}><span></span>${esc(t('signupL'))}</label><span class="hint">${esc(t('signupHint'))}</span></section>
+      <a class="admin-entry" href="#admin-control">${I('lock')}<span><b>${esc(t('ctlCustT'))}</b><small>${esc(t('ctlMoved'))}</small></span>${I('chevL', 'dirx')}</a>
       <section class="mcard"><h2 class="lbl">${esc(t('brandsL'))}</h2><div class="form-actions"><button type="button" class="btn btn-ghost sm" id="bkj">${esc(t('brandsKJ'))}</button><button type="button" class="btn btn-ghost sm" id="ball">${esc(t('brandsAll'))}</button></div>
         <div id="bgs">${group(SP.flag('KR') + ' ' + SP.countryName('KR'), by('KR'))}${group(SP.flag('JP') + ' ' + SP.countryName('JP'), by('JP'))}${group(t('moreBrands'), other)}</div></section>
       <p class="form-err" id="cerr" role="alert"></p><button class="btn btn-signal block" id="cgo">${I('check')} ${esc(t('saveSettings'))}</button></form></main>`);
@@ -379,7 +380,6 @@
         brand_name: $('#cbn').value.trim(), tagline: $('#ctg').value.trim(), logo: logo || '', accent: $('#cac').value || '',
         hero_title: $('#cht').value.trim(), hero_sub: $('#chs').value.trim(), notice: $('#cnt').value.trim(), about: $('#cab').value.trim(),
         contact_wa: SP.digits($('#cwa').value).trim(), contact_phone: SP.digits($('#cph').value).trim(), address: $('#cad').value.trim(),
-        price_mode: ($('#cpm input:checked') || {}).value || 'all', orders_enabled: $('#cor').checked, open_signup: $('#csu').checked,
         brands: picked.length === D.BRANDS.length ? [] : picked
       };
       if (v.accent.toLowerCase() === skinColor) v.accent = '';

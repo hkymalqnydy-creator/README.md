@@ -21,7 +21,8 @@
 - سلة طلب على واتساب الشركة، ومساعد رد آلي بقواعد يكتبها المالك، ونصوص جاهزة لـ WhatsApp Business.
 - منظومة مبيعات: نقطة بيع، فواتير وطباعة ومرتجعات، تقارير وأرباح، موظفين بصلاحيات تتحقق منها قاعدة البيانات.
 - حسابات: المخزن وقيمته وتعديلاته (تالف، ضايع، جرد)، ديون الزبائن والموردين ودفعاتهم، المصروفات، والأرباح والخسائر مع ربح كل بايع.
-- باركود بكاميرا الهاتف (أندرويد وآيفون) أو بجهاز باركود، واستلام بضاعة بتصوير فاتورة المورّد.
+- تحكم المالك: سجل كل حركة (مين عمل شنو ووقتاش، ما يتعدّلش ولا ينمسح)، تغيير الأسعار بالجملة مع الرجوع، حد تخفيض لكل موظف ومنع البيع تحت التكلفة، قفل الطلبات مؤقتاً وإخفاء الكميات والفروع عن الزبائن، وملخص اليوم.
+- باركود بكاميرا الهاتف (أندرويد وآيفون) أو بجهاز باركود، واستلام بضاعة بتصوير فاتورة المورّد: تدخل للمخزن بروحها (الاسم والكمية ورقم الصنف) وتقدر تتراجع.
 - ربط مع منظومة المبيعات الحالية: Excel/CSV، أو برنامج `tools/sync/sparat_sync.py`، أو API.
 
 تبني نسخة باسم أي شركة وأيقوناتها بأمر واحد:
@@ -60,7 +61,7 @@ python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand b
 | `js/data.js` | الدول والماركات والموديلات والأقسام |
 | `js/i18n.js` | النصوص بثماني لغات |
 | `js/vin.js` | قراءة رقم الشاصي |
-| `js/company.js`, `js/pos.js`, `js/scan.js`, `js/books.js` | نسخة الشركة، منظومة المبيعات، الباركود واستلام البضاعة، الحسابات |
+| `js/company.js`, `js/pos.js`, `js/scan.js`, `js/books.js`, `js/control.js` | نسخة الشركة، منظومة المبيعات، الباركود واستلام البضاعة، الحسابات، تحكم المالك وسجل الحركة |
 | `js/demo.js` | خادم تجريبي داخل المتصفح (للعرض والاختبارات) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | التثبيت والعمل بدون إنترنت |
 | `supabase/setup.sql` | الجداول والصلاحيات ودوال البحث والمبيعات والاستلام |
@@ -75,4 +76,4 @@ python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand b
 
 Static PWA (no build step) + Supabase (Postgres, Auth, Storage). Run `supabase/setup.sql` in the SQL editor, turn off "Confirm email" (or set up SMTP), set the Site URL, put the project URL and anon key in `config.js`, and host the folder on any static host. The first account to sign up becomes the admin.
 
-Company edition (`mode: 'company'`): one company with branches, owner-controlled price visibility and branding, WhatsApp orders, an auto-reply assistant, a sales system (POS, invoices, returns, reports, staff permissions enforced in the database), barcode scanning (native BarcodeDetector or ZXing on iPhone), receiving stock from a photographed supplier invoice (Claude vision via `supabase/functions/scan-invoice`, or on-device Tesseract), and sales-system sync (CSV/XLSX, `tools/sync`, or the `sync_products` RPC). Build a branded copy with `tools/build_company.py`.
+Company edition (`mode: 'company'`): one company with branches, owner-controlled price visibility and branding, WhatsApp orders, an auto-reply assistant, a sales system (POS, invoices, returns, reports, staff permissions enforced in the database), barcode scanning (native BarcodeDetector or ZXing on iPhone), receiving stock from a photographed supplier invoice that goes into stock by itself and can be taken back (Claude vision via `supabase/functions/scan-invoice`, or on-device Tesseract), owner controls (an append-only activity log, bulk price changes with undo, per-employee discount limits, no selling below cost, closing orders and hiding quantities or branches from customers), and sales-system sync (CSV/XLSX, `tools/sync`, or the `sync_products` RPC). Build a branded copy with `tools/build_company.py`.

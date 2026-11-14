@@ -87,8 +87,10 @@ const log = s => console.log(`${++step}. ${s}`);
 
     await login('owner@crossky.ly', '123456'); await see('.admin-entry'); log('owner signs in with full control');
     await go('admin-company'); await see('#cbn');
-    await page.fill('#cbn', 'CROSSKY Parts'); await page.fill('#cht', 'كل قطع الكوري والياباني'); await page.click('#cpm input[value="approved"]');
+    await page.fill('#cbn', 'CROSSKY Parts'); await page.fill('#cht', 'كل قطع الكوري والياباني');
     await page.click('#cgo'); await page.waitForTimeout(500); await shot('04-settings');
+    // who sees prices lives on the Controls tab, with closing orders and hiding quantities and branches
+    await go('admin-control'); await see('#cpm'); await page.click('#cpm input[value="approved"]'); await page.click('#kgo'); await page.waitForTimeout(500);
     await go(''); await see('.hero h1'); must((await text('.hero h1')) === 'كل قطع الكوري والياباني' && (await text('.topbar .brand')).includes('CROSSKY Parts'), 'settings applied'); log('owner changed name, title and price mode');
     must(await page.locator('#gnew .price.locked').count() === 0, 'owner still sees prices');
 
@@ -148,7 +150,8 @@ const log = s => console.log(`${++step}. ${s}`);
     await go('invoices'); await page.click('[data-r="all"]'); await see('.inv-row'); must(await page.locator('.inv-row').count() >= 4, 'owner sees all invoices');
     await page.click('.inv-row'); await see('#iret'); await page.click('#iret'); await see('[data-ok]'); await page.click('[data-ok]'); await see('.inv-stamp');
     const back = await page.evaluate(() => window.__mockdb.products.find(p => p.sku === 'KI-26300').qty); must(back === before, 'stock restored ' + back); log('owner returned the invoice; stock back to ' + back);
-    // ----- photographed invoice → review → stock -----
+    // ----- photographed invoice → review → stock (entering by itself is switched off here; run_controls.js tests it) -----
+    await page.evaluate(() => localStorage.setItem('sp_rcv_auto', '0'));
     await go('receive'); await see('#rpf', 6000).catch(() => {}); await see('#rscan');
     await page.evaluate(() => { window.SP_SCAN_ENGINE = async (f, say) => { say('ai'); await new Promise(r => setTimeout(r, 150)); return { supplier: 'الشركة الكورية للتوريد', engine: 'ai', items: [
       { code: 'HY-58101', title: 'فحمات أكسنت', qty: 10, unit_price: 100 }, { code: '', barcode: '8809999000017', title: 'حساس أكسجين سوناتا', qty: 3, unit_price: 210 }, { code: '58101-1RA00', title: 'فحمات (رقم الوكالة)', qty: '٢', unit_price: '١٠٠' }] }; }; });

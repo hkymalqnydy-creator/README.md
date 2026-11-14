@@ -87,7 +87,14 @@ const log = (() => { let n = 0; return s => console.log(`${++n}. ${s}`); })();
     await go('receive'); await see('#rscan');
     const h0 = await db(() => window.__mockdb.products.find(x => x.sku === 'HY-58101').qty), k0 = await db(() => window.__mockdb.products.find(x => x.sku === 'KI-26300').qty);
     await page.setInputFiles('#rpf', path.join(__dirname, 'part1.jpg'));
+    /* read by Claude, the invoice goes into stock by itself; taken back, its lines come back to check and enter by hand */
+    await see('.readcard.done', 10000);
+    const auto = await db(() => { const D = window.__mockdb; return [D.products.find(x => x.sku === 'HY-58101').qty, D.products.find(x => x.sku === 'KI-26300').qty, D.activity[D.activity.length - 1].detail.auto]; });
+    must(auto[0] === h0 + 10 && auto[1] === k0 + 4 && auto[2] === true, 'entered by itself ' + JSON.stringify(auto));
+    log('invoice photo read by Claude went into stock by itself; now taken back to check it by hand');
+    await page.click('#rundo'); await see('[data-ok]'); await page.click('[data-ok]');
     await page.waitForFunction(() => document.querySelectorAll('.rline').length === 3 && !document.querySelector('.rl-state:not(.ok):not(.new)'), null, { timeout: 10000 });
+    must(await db(() => window.__mockdb.products.find(x => x.sku === 'HY-58101').qty) === h0, 'taken back');
     const call = (await db(() => window.__calls))[0];
     must(call && call.images.length === 1 && call.images[0].startsWith('image/jpeg:') && call.tier === 'default' && call.prompt.startsWith('You are reading a photo'), 'asked Claude with the photo ' + JSON.stringify(call));
     must(await page.locator('.rline.ok').count() === 2 && await page.locator('.rline.new').count() === 1, 'two matched, one new');

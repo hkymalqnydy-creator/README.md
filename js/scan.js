@@ -39,7 +39,21 @@
     rcvCode: ["الكود / الباركود", "Code / barcode"], rcvName: ["اسم الصنف", "Item name"], rcvCost: ["سعر الشراء", "Unit cost"], rcvSell: ["سعر البيع", "Selling price"],
     rcvChange: ["غيّر القطعة", "Change part"], rcvPick: ["اختر القطعة من الكتالوج", "Pick the part from the catalog"], rcvAsNew: ["خليها قطعة جديدة", "Keep it as a new part"], rcvDel: ["احذف السطر", "Remove line"],
     rcvTotal: ["إجمالي الشراء", "Purchase total"], rcvUnits: ["عدد القطع", "Units"], rcvSave: ["أدخلها للمخزون", "Add to stock"], rcvToPos: ["افتحها كفاتورة بيع", "Open as a sale"],
-    rcvSaved: ["تم الاستلام رقم {n}: زادت كمية {u} صنف، وانضاف {a} صنف جديد", "Receipt {n} saved: {u} restocked, {a} new"], rcvToPosSkip: ["{n} صنف مش في الكتالوج ما انضافش للبيع", "{n} lines not in the catalog were left out of the sale"],
+    rcvSaved: ["تم الاستلام رقم {n}: زادت كمية {u} صنف، وانضاف {a} صنف جديد", "Receipt {n} saved: {u} restocked, {a} new"],
+    rcvAuto: ["أدخلها للمخزن بروحها بعد ما تتقرا", "Put it into stock by itself once read"],
+    rcvAutoHint: ["تصوّر الفاتورة والقطع تدخل بأسمائها وكمياتها وأرقام الأصناف، وتقدر تتراجع لو فيه غلط.", "Photograph the invoice and the parts go in with their names, quantities and codes; you can take it back if something is wrong."],
+    rcvAutoDone: ["دخلت للمخزن بروحها", "In stock, entered by itself"], rcvAutoSum: ["استلام رقم {n} · زادت {u}، وجديدة {a}", "Receipt {n} · {u} restocked, {a} new"],
+    rcvUndo: ["تراجع عن الإدخال", "Take it back"], rcvUndoQ: ["ترجّع الاستلام رقم {n}؟", "Take back receipt {n}?"],
+    rcvUndoB: ["القطع تطلع من المخزن، وسعر التكلفة يرجع كيف كان، والقطع الجديدة اللي انضافت معاه تنحذف.", "The parts come out of stock, costs go back to what they were, and new parts it added are removed."],
+    rcvUndone: ["رجّعنا الاستلام {n}. السطور قدامك تصلحها وتدخلها.", "Receipt {n} taken back. The lines are here to fix and enter again."],
+    rcvUndoneList: ["رجّعنا الاستلام {n}", "Receipt {n} taken back"], rcvUndoSold: ["ما نقدروش نرجّعوه: انباع من «{t}»", "Can’t take it back: some of “{t}” was already sold"],
+    rcvUndoOld: ["الموظف يقدر يرجّع استلامه بس، وفي نفس اليوم.", "Staff can take back only their own receipts, within a day."],
+    rcvAnother: ["صوّر فاتورة ثانية", "Photograph another invoice"], rcvSeeList: ["شوف الاستلامات", "See receipts"],
+    rcvWaitFix: ["ما دخلتش بروحها: {n} سطر يحتاج تكمّله (الاسم أو الكمية). صلّحه واضغط «أدخلها للمخزون».", "Not entered: {n} lines need a name or quantity. Fix them and tap Add to stock."],
+    rcvWaitDevice: ["ما دخلتش بروحها: القراية على الجهاز وفيه قطع مش معروفة عندنا. راجعها واضغط «أدخلها للمخزون».", "Not entered: it was read on this device and has parts we don’t know. Check them and tap Add to stock."],
+    rcvWaitPaid: ["ما دخلتش بروحها: اكتب كم دفعت للمورّد، واضغط «أدخلها للمخزون».", "Not entered: enter what you paid the supplier, then tap Add to stock."],
+    rcvWaitSupplier: ["ما دخلتش بروحها: الدين يحتاج اسم المورّد. اكتبه واضغط «أدخلها للمخزون».", "Not entered: a credit receipt needs the supplier name. Enter it and tap Add to stock."],
+    purUndo: ["رجّع الاستلام", "Take back"], rcvNewShort: ["جديدة", "New"], rcvToPosSkip: ["{n} صنف مش في الكتالوج ما انضافش للبيع", "{n} lines not in the catalog were left out of the sale"],
     rcvClear: ["امسح القائمة", "Clear the list"], rcvClearQ: ["تمسح كل الأصناف من القائمة؟", "Remove all lines from the list?"], rcvFromPhoto: ["من الصورة", "From the photo"],
     rcvNeedLines: ["ما فيش أصناف للإدخال", "There are no lines to save"], rcvMany: ["الحد 300 صنف في الاستلام الواحد", "A receipt can have up to 300 lines"],
     purT: ["سجل الاستلام", "Receiving history"], purEmpty: ["ما فيش استلام بضاعة بعد.", "No stock has been received yet."], purNo: ["استلام {n}", "Receipt {n}"],
@@ -346,23 +360,34 @@
     if (/not authorized/.test(m)) return t('errPerm');
     return SP.errText(e);
   }
+  function undoErr(e) {
+    const m = String((e && e.message) || ''), x = /already sold: (.+)$/.exec(m);
+    if (x) return t('rcvUndoSold', { t: x[1] });
+    if (/not authorized/.test(m)) return t('rcvUndoOld');
+    return SP.errText(e);
+  }
   function guard(perm, title) {
     if (!S.user) { S.after = SP.here(); shell(bar(title) + `<main class="wrap">${empty('lock', t('needLoginT'), '', `<a class="btn btn-ink" href="#login">${esc(t('signIn'))}</a>`)}</main>`); return false; }
     if (!perm.some(p => SP.can(p))) { shell(bar(title) + `<main class="wrap">${empty('lock', t('noPermT'), t('errPerm'))}</main>`); return false; }
     return true;
   }
 
+  /* entering a read invoice by itself: on unless switched off on this device */
+  const AUTO = 'sp_rcv_auto';
+  const autoOn = () => { try { return localStorage.getItem(AUTO) !== '0'; } catch (e) { return true; } };
   SP.route(/^receive$/, async (m, n) => {
     if (gate(n) || !guard(['purchases'], t('rcvT'))) return;
     const st = loadR(), fixedBranch = S.perms && S.perms.branch, canPrice = SP.can('products');
     shell(bar(t('rcvT'), `<a class="iconbtn" href="#purchases" aria-label="${esc(t('purT'))}">${I('copy')}</a>`) + `<main class="wrap pos rcv">
       <div class="rcv-actions"><label class="rcv-big" id="rphoto">${I('receipt')}<b>${esc(t('rcvPhoto'))}</b><small>${esc(t('rcvPhotoSub'))}</small><input type="file" accept="image/*" class="sr" id="rpf"></label>
         <button type="button" class="rcv-big" id="rscan">${I('scan')}<b>${esc(t('rcvScan'))}</b><small>${esc(t('rcvScanSub'))}</small></button></div>
+      <label class="switch rcv-auto"><input type="checkbox" id="rauto"${autoOn() ? ' checked' : ''}><span></span>${esc(t('rcvAuto'))}</label><span class="hint">${esc(t('rcvAutoHint'))}</span>
       <div id="rread"></div>
       <form class="field" id="rsf" role="search"><label for="rq" class="sr">${esc(t('search'))}</label><div class="inrow"><input id="rq" class="input" autocomplete="off" placeholder="${esc(t('rcvSearchPh'))}" enterkeyhint="search"></div></form>
       <div id="rres" class="pres"></div>
       <div class="row2"><div class="field"><label for="rsup">${esc(t('rcvSupplier'))}</label><input id="rsup" class="input" maxlength="120" value="${esc(st.supplier || '')}"></div>
         <div class="field"><label for="rbr">${esc(t('posBranch'))}</label><select id="rbr" class="input"${fixedBranch ? ' disabled' : ''}></select></div></div>
+      <div id="rpayb"></div>
       <h2 class="lbl" id="rhead"></h2><div id="rlines" class="plines"></div><div id="rsum"></div></main>`);
     try {
       const sh = (await api.shops({ p_limit: 100 })).items;
@@ -372,6 +397,16 @@
       st.branch = $('#rbr').value; saveR(st);
     } catch (e) { /* branch list optional: the database picks the main branch */ }
     $('#rbr').onchange = e => { st.branch = e.target.value; saveR(st); };
+    $('#rauto').onchange = e => { try { localStorage.setItem(AUTO, e.target.checked ? '1' : '0'); } catch (x) { /* private mode */ } };
+    /* paying the supplier: chosen before the photo, so an invoice that goes in by itself is recorded right */
+    function drawPay() {
+      $('#rpayb').innerHTML = `<fieldset class="field"><legend>${esc(t('rcvPayT'))}</legend><div class="seg">${[['full', 'rcvPaidFull'], ['credit', 'rcvCredit'], ['part', 'rcvPart']].map(([k, l], i) =>
+          `<input type="radio" name="rpay" id="rpay${i}" value="${k}"${(st.pay || 'full') === k ? ' checked' : ''}><label for="rpay${i}">${esc(t(l))}</label>`).join('')}</div></fieldset>
+        ${st.pay === 'part' ? `<div class="prow"><label for="rpaid">${esc(t('rcvPaidNow'))}</label><input id="rpaid" class="input num" inputmode="decimal" dir="ltr" maxlength="12" value="${esc(st.paid || '')}"></div>` : ''}`;
+      $$('input[name=rpay]').forEach(r => r.onchange = () => { st.pay = r.value; saveR(st); drawPay(); });
+      if ($('#rpaid')) $('#rpaid').oninput = e => { st.paid = SP.digits(e.target.value); e.target.classList.remove('invalid'); saveR(st); };
+    }
+    drawPay();
     $('#rsup').oninput = e => { st.supplier = e.target.value; e.target.classList.remove('invalid'); saveR(st); };
 
     /* catalog matching */
@@ -440,10 +475,12 @@
       }
     });
     /* invoice photo */
-    $('#rpf').onchange = async e => {
+    $('#rpf').onchange = e => {
       const f = e.target.files && e.target.files[0];
       e.target.value = '';
-      if (!f) return;
+      if (f) readPhoto(f);
+    };
+    async function readPhoto(f) {
       const box = $('#rread'), url = URL.createObjectURL(f);
       const status = (txt, pct) => { const s = $('#rrs'); if (s) s.textContent = txt + (pct ? ' ' + Math.round(pct * 100) + '%' : ''); };
       box.innerHTML = `<div class="readcard busy"><img src="${url}" alt=""><span class="ar-main"><b>${esc(t('rcvReading'))}</b><small id="rrs" aria-live="polite"></small></span><span class="spin dark"></span></div>`;
@@ -459,12 +496,28 @@
         const added = items.map(x => addLine(x));
         saveR(st); draw();
         box.innerHTML = `<div class="readcard ${items.length ? 'ok' : 'warn'}"><img src="${url}" alt=""><span class="ar-main"><b>${esc(t('rcvFromPhoto'))}</b>
-          <small>${esc(items.length ? t(r.engine === 'ai' ? 'rcvReadAi' : 'rcvReadLocal', { n: items.length }) : t('rcvReadNone'))}</small></span></div>`;
+          <small>${esc(items.length ? t(r.engine === 'ai' ? 'rcvReadAi' : 'rcvReadLocal', { n: items.length }) : t('rcvReadNone'))}</small><small class="rcv-wait" id="rwait" hidden></small></span></div>`;
         await checkAll(added);
+        if (items.length && SP.alive(n) && $('#rauto') && $('#rauto').checked) await autoEnter(r.engine, url);
       } catch (x) {
         if (SP.alive(n)) box.innerHTML = `<div class="readcard warn"><img src="${url}" alt=""><span class="ar-main"><b>${esc(t('rcvFromPhoto'))}</b><small>${esc(x && x.userMsg ? x.userMsg : x && x.offline ? t('rcvOffline') : t('rcvReadFail', { e: SP.errText(x) }))}</small></span></div>`;
       } finally { const b = $('#rphoto'); if (b) b.classList.remove('busy'); }
-    };
+    }
+    /* A read invoice goes in by itself when every line is complete and can be trusted: read by the AI reader, or every part known
+       by its code. Otherwise it waits on screen with the reason, and "Add to stock" enters it as before. */
+    const lineOk = l => Number.isInteger(Number(l.qty)) && Number(l.qty) >= 1 && (l.match || String(l.title || '').trim().length >= 2);
+    async function autoEnter(engine, url) {
+      const wait = k => { const w = $('#rwait'); if (w) { w.textContent = t(k, { n: SP.fmtNum(st.lines.filter(l => !lineOk(l)).length) }); w.hidden = false; } };
+      const bad = st.lines.filter(l => !lineOk(l));
+      if (bad.length) {
+        bad.forEach(l => { const row = $(`[data-k="${l.k}"]`); if (row) $$(!l.match && String(l.title || '').trim().length < 2 ? '[data-f="title"]' : '[data-f="qty"]', row).forEach(x => x.classList.add('invalid')); });
+        return wait('rcvWaitFix');
+      }
+      if (engine !== 'ai' && !st.lines.every(l => l.match)) return wait('rcvWaitDevice');
+      if (st.pay === 'part' && !(Number(String(st.paid || '').replace(',', '.')) > 0)) { if ($('#rpaid')) $('#rpaid').classList.add('invalid'); return wait('rcvWaitPaid'); }
+      if (st.pay && st.pay !== 'full' && !(st.supplier || '').trim()) { $('#rsup').classList.add('invalid'); return wait('rcvWaitSupplier'); }
+      await save({ auto: true, url });
+    }
 
     /* the lines */
     const curOf = () => { const l = st.lines.find(x => x.match && x.match.cur); return (l && l.match.cur) || SP.currencyOf(S.country); };
@@ -497,20 +550,15 @@
       }).join('') : `<p class="muted-p pos-empty">${esc(t('rcvEmpty'))}</p>`;
       $('#rsum').innerHTML = st.lines.length ? `<div class="mcard psum"><div class="prow"><span>${esc(t('rcvUnits'))}</span><b class="num">${esc(SP.fmtNum(units))}</b></div>
           <div class="prow big"><span>${esc(t('rcvTotal'))}</span><b class="num" id="rtot">${esc(money(total, cur))}</b></div>
-          <fieldset class="field"><legend>${esc(t('rcvPayT'))}</legend><div class="seg">${[['full', 'rcvPaidFull'], ['credit', 'rcvCredit'], ['part', 'rcvPart']].map(([k, l], i) =>
-            `<input type="radio" name="rpay" id="rpay${i}" value="${k}"${(st.pay || 'full') === k ? ' checked' : ''}><label for="rpay${i}">${esc(t(l))}</label>`).join('')}</div></fieldset>
-          ${st.pay === 'part' ? `<div class="prow"><label for="rpaid">${esc(t('rcvPaidNow'))}</label><input id="rpaid" class="input num" inputmode="decimal" dir="ltr" maxlength="12" value="${esc(st.paid || '')}"></div>` : ''}
           <div class="field"><label for="rnote">${esc(t('rcvNote'))}</label><input id="rnote" class="input" maxlength="500" value="${esc(st.note || '')}"></div>
           <p class="form-err" id="rerr" role="alert"></p>
           <div class="form-actions"><button type="button" class="btn btn-signal" id="rsave">${I('check')} ${esc(t('rcvSave'))}</button>
             ${SP.can('sales') ? `<button type="button" class="btn btn-ink" id="rpos">${I('tag')} ${esc(t('rcvToPos'))}</button>` : ''}
             <button type="button" class="btn btn-ghost" id="rclr">${I('trash')} ${esc(t('rcvClear'))}</button></div></div>` : '';
       if ($('#rnote')) $('#rnote').oninput = e => { st.note = e.target.value; saveR(st); };
-      $$('input[name=rpay]').forEach(r => r.onchange = () => { st.pay = r.value; saveR(st); draw(); });
-      if ($('#rpaid')) $('#rpaid').oninput = e => { st.paid = SP.digits(e.target.value); saveR(st); };
       if ($('#rsave')) $('#rsave').onclick = save;
       if ($('#rpos')) $('#rpos').onclick = toPos;
-      if ($('#rclr')) $('#rclr').onclick = async () => { if (await SP.confirmSheet({ title: t('rcvClearQ'), ok: t('rcvClear'), danger: true })) { st.lines = []; st.note = ''; st.supplier = ''; st.pay = 'full'; st.paid = ''; $('#rsup').value = ''; saveR(st); $('#rread').innerHTML = ''; draw(); } };
+      if ($('#rclr')) $('#rclr').onclick = async () => { if (await SP.confirmSheet({ title: t('rcvClearQ'), ok: t('rcvClear'), danger: true })) { st.lines = []; st.note = ''; st.supplier = ''; st.pay = 'full'; st.paid = ''; $('#rsup').value = ''; drawPay(); saveR(st); $('#rread').innerHTML = ''; draw(); } };
     }
     const lineOf = el => st.lines.find(l => l.k === (el.closest('[data-k]') || {}).dataset.k);
     $('#rlines').addEventListener('input', e => {
@@ -562,8 +610,10 @@
         if (q) go();
       });
     }
-    async function save() {
+    async function save(o) {
+      o = o && o.auto ? o : {};
       const b = $('#rsave'), err = $('#rerr');
+      if (!b || !err) return;
       err.textContent = '';
       $$('.invalid', $('#rlines')).forEach(x => x.classList.remove('invalid'));
       if (!st.lines.length) { err.textContent = t('rcvNeedLines'); return; }
@@ -577,16 +627,40 @@
       const paid = st.pay === 'credit' ? 0 : st.pay === 'part' ? Number(String(st.paid || '').replace(',', '.')) || 0 : null;
       if (paid != null && !(st.supplier || '').trim()) { err.textContent = t('rcvNeedSupplier'); $('#rsup').classList.add('invalid'); $('#rsup').focus(); return; }
       b.classList.add('busy');
+      const source = st.lines.some(l => l.src === 'photo') ? 'photo' : st.lines.some(l => l.src === 'scan') ? 'scan' : 'manual';
       try {
         const r = await chk(await sb().rpc('receive_stock', { p: {
-          branch: st.branch || null, supplier: (st.supplier || '').trim(), note: (st.note || '').trim(), ...(paid != null ? { paid } : {}),
+          branch: st.branch || null, supplier: (st.supplier || '').trim(), note: (st.note || '').trim(), ...(paid != null ? { paid } : {}), source, auto: !!o.auto,
           items: st.lines.map(l => l.match ? { product_id: l.match.id, qty: Number(l.qty), cost: l.cost }
             : { part_no: l.code || '', barcode: l.barcode || '', title: l.title.trim(), qty: Number(l.qty), cost: l.cost, price: canPrice ? l.price : null, cat: l.cat || 'other' })
         } }));
         sessionStorage.removeItem(RCV);
+        if (o.auto) return entered(r, o.url);
         SP.toast(t('rcvSaved', { n: r.no, u: r.updated, a: r.new }));
         SP.go('purchases');
       } catch (x) { err.textContent = rcvErr(x); b.classList.remove('busy'); }
+    }
+    /* entered by itself: what went in, and a way to take it back (the lines come back to fix) */
+    function entered(r, url) {
+      const was = JSON.parse(JSON.stringify(st.lines)), cur = curOf();
+      st.lines = []; st.note = ''; saveR(st); draw();
+      $('#rread').innerHTML = `<div class="readcard ok done">${url ? `<img src="${url}" alt="">` : ''}<span class="ar-main"><b>${I('check')} ${esc(t('rcvAutoDone'))}</b>
+          <small>${esc(t('rcvAutoSum', { n: r.no, u: SP.fmtNum(r.updated), a: SP.fmtNum(r.new) }))}${r.total ? ' · ' + esc(money(r.total, cur)) : ''}</small></span></div>
+        <table class="inv-items rcv-done"><tbody>${was.map(l => `<tr><td>${esc(l.match ? l.match.title : l.title)}${l.code || l.barcode ? `<small class="mono">${esc(l.code || l.barcode)}</small>` : ''}</td>
+          <td class="num">× ${esc(SP.fmtNum(+l.qty))}</td><td>${l.match ? '' : `<span class="pill">${esc(t('rcvNewShort'))}</span>`}</td></tr>`).join('')}</tbody></table>
+        <div class="form-actions"><button type="button" class="btn btn-ghost" id="rundo">${I('undo')} ${esc(t('rcvUndo'))}</button><a class="btn btn-ghost" href="#purchases">${I('copy')} ${esc(t('rcvSeeList'))}</a>
+          <label class="btn btn-signal" for="rpf">${I('camera')} ${esc(t('rcvAnother'))}</label></div>`;
+      $('#rundo').onclick = async () => {
+        if (!await SP.confirmSheet({ title: t('rcvUndoQ', { n: r.no }), body: t('rcvUndoB'), ok: t('rcvUndo'), danger: true })) return;
+        const b = $('#rundo'); if (b) b.classList.add('busy');
+        try {
+          await chk(await sb().rpc('undo_receipt', { p_id: r.id }));
+          SP.toast(t('rcvUndone', { n: r.no }), 5000);
+          /* the lines come back as they were read; the known parts are looked up again for their stock now */
+          st.lines = was; st.lines.forEach(l => { if (l.match) l.state = 'checking'; });
+          saveR(st); $('#rread').innerHTML = ''; draw(); checkAll(st.lines.filter(l => l.state === 'checking'));
+        } catch (x) { if (b) b.classList.remove('busy'); SP.toast(undoErr(x), 5000); }
+      };
     }
     function toPos() {
       const ok = st.lines.filter(l => l.match), skipped = st.lines.length - ok.length;
@@ -597,6 +671,9 @@
     }
     draw();
     checkAll(st.lines.filter(l => l.state === 'checking'));
+    /* a photo or a scan started from the stock page */
+    if (SP.pendingInvoice) { const f = SP.pendingInvoice; SP.pendingInvoice = null; readPhoto(f); }
+    else if (SP.pendingScan) { SP.pendingScan = false; $('#rscan').click(); }
     SP.done(n);
   });
 
@@ -609,7 +686,17 @@
     const cur = SP.currencyOf(S.country);
     const row = v => `<details class="pur"><summary class="arow"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${esc(v.supplier || t('purNo', { n: v.no }))}${v.total != null && v.paid != null && +v.paid < +v.total ? ` <span class="pill demo">${esc(t('purOwed', { m: money(v.total - v.paid, cur) }))}</span>` : ''}</b>
         <small>${[when(v.created_at), v.staff_name, v.branch_name, SP.count(+v.items_count || 0, 'parts')].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small></span>${v.total != null ? `<b class="num">${esc(money(v.total, cur))}</b>` : ''}</summary>
-      <table class="inv-items pur-items"><tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.code ? `<small class="mono">${esc(it.code)}</small>` : ''}</td><td class="num">× ${esc(it.qty)}</td>${it.cost != null ? `<td class="num">${esc(money(it.cost, cur))}</td>` : ''}</tr>`).join('')}</tbody></table></details>`;
+      <table class="inv-items pur-items"><tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.code ? `<small class="mono">${esc(it.code)}</small>` : ''}</td><td class="num">× ${esc(it.qty)}</td>${it.cost != null ? `<td class="num">${esc(money(it.cost, cur))}</td>` : ''}</tr>`).join('')}</tbody></table>
+      ${canUndo(v) ? `<div class="form-actions"><button type="button" class="btn btn-ghost sm" data-undo="${esc(v.id)}" data-no="${esc(v.no)}">${I('undo')} ${esc(t('purUndo'))}</button></div>` : ''}</details>`;
+    /* taking a receipt back: the owner any receipt, staff their own on the same day (the database checks again) */
+    const canUndo = v => SP.can('purchases') && (S.admin || (S.user && v.staff_id === S.user.id && Date.now() - Date.parse(v.created_at) < 864e5));
+    $('#pl').addEventListener('click', async e => {
+      const b = e.target.closest('[data-undo]');
+      if (!b || !await SP.confirmSheet({ title: t('rcvUndoQ', { n: b.dataset.no }), body: t('rcvUndoB'), ok: t('purUndo'), danger: true })) return;
+      b.classList.add('busy');
+      try { await chk(await sb().rpc('undo_receipt', { p_id: b.dataset.undo })); SP.toast(t('rcvUndoneList', { n: b.dataset.no })); SP.render(); }
+      catch (x) { b.classList.remove('busy'); SP.toast(undoErr(x), 5000); }
+    });
     await SP.pager(n, $('#pl'), $('#more'), async off => { const rows = chk(await sb().rpc('list_purchases', { p_limit: 30, p_offset: off })) || []; return { items: rows, total: rows.length ? +rows[0].total_count : 0 }; },
       items => items.map(row).join(''), (r, first) => { if (first && !r.total) $('#pl').innerHTML = empty('box', t('purEmpty'), '', SP.can('purchases') ? `<a class="btn btn-signal" href="#receive">${I('plus')} ${esc(t('rcvT'))}</a>` : ''); });
     SP.done(n);

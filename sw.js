@@ -1,10 +1,10 @@
 /* Sparat offline support: app files network-first, libraries and fonts stale-while-revalidate,
    product photos cache-first (bounded). Database and VIN lookups always go to the network. */
-const VERSION = 'sparat-v6';
+const VERSION = 'sparat-v7';
 const LIB = 'sparat-lib-v1';
 const IMG = 'sparat-img-v1';
 const SHELL = ['./', 'index.html', 'css/styles.css', 'config.js', 'js/data.js', 'js/i18n.js', 'js/vin.js', 'js/icons.js',
-  'js/demo.js', 'js/core.js', 'js/views.js', 'js/views2.js', 'js/company.js', 'js/pos.js', 'js/books.js', 'js/scan.js', 'js/embed.js', 'js/boot.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
+  'js/demo.js', 'js/core.js', 'js/views.js', 'js/views2.js', 'js/company.js', 'js/pos.js', 'js/books.js', 'js/control.js', 'js/scan.js', 'js/embed.js', 'js/boot.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

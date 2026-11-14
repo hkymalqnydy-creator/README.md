@@ -924,3 +924,61 @@ details.pur[open]>summary{padding-bottom:4px}
 .pl-net.gain{background:rgba(17,116,74,.1);color:var(--good)}
 .pl-net.loss{background:rgba(191,47,31,.1);color:var(--bad)}
 .pl-net b{font-family:var(--font-display);font-size:28px;line-height:1.1}
+/* ---------- owner controls: closed orders, the activity log, prices in bulk, today, invoices entered by themselves ---------- */
+.banner.closed{border-inline-start:4px solid var(--bad)}
+.banner.closed>.ic{color:var(--bad)}
+.banner.closed>span{display:grid;gap:2px}
+.banner.closed small{color:var(--muted);font-size:13.5px}
+.specs.odd>div:last-child{grid-column:1/-1}
+.pd-info .banner.closed{margin-top:12px}
+.log-list{display:grid}
+.log-day{margin:18px 0 2px;font-size:13px;font-weight:800;color:var(--muted)}
+.log-day:first-child{margin-top:6px}
+.log-ic{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;flex:none;background:var(--chip);color:var(--ink)}
+.log-ic .ic{width:19px;height:19px}
+.log-ic.g-sales{background:rgba(17,116,74,.12);color:var(--good)}
+.log-ic.g-stock{background:var(--chip);color:var(--ink)}
+.log-ic.g-prices{background:rgba(255,163,26,.18);color:var(--warn)}
+.log-ic.g-money{background:rgba(13,107,136,.12);color:var(--c-original)}
+.log-ic.g-admin{background:rgba(104,68,179,.12);color:var(--c-refurb)}
+.log-row .ar-main b{font-weight:700;line-height:1.4}
+.log-amt{flex:none;font-weight:800;font-size:14px;white-space:nowrap}
+.log-amt.neg{color:var(--bad)}
+details.log-row{border-bottom:1px solid var(--line)}
+details.log-row>summary{list-style:none;cursor:pointer;border-bottom:0}
+details.log-row>summary::-webkit-details-marker{display:none}
+details.log-row>summary .ar-main small::after{content:"";display:inline-block;vertical-align:middle;width:15px;height:15px;margin-inline-start:4px;background:var(--chev) center/15px no-repeat;transition:transform .15s}
+details.log-row[open]>summary .ar-main small::after{transform:rotate(180deg)}
+.log-more{padding:0 0 12px;padding-inline-start:46px}
+.log-lines{margin:0}
+.log-lines td{padding:5px 8px}
+.log-ch{margin:0;display:grid;gap:6px;font-size:13.5px}
+.log-ch>div{display:flex;gap:10px;justify-content:space-between}
+.log-ch dt{color:var(--muted);font-weight:600}
+.log-ch dd{margin:0;text-align:end}
+.log-filters{margin-top:12px;align-items:center}
+.log-filters .searchbox{margin:0}
+.today .astats{grid-template-columns:repeat(2,minmax(0,1fr))}
+a.astat{color:inherit;text-decoration:none}
+a.astat:active{transform:scale(.98)}
+.today .log-list .arow:last-child{border-bottom:0}
+.bp-will{margin:0;display:grid;gap:2px}
+.bp-will b{font-family:var(--font-display);font-size:22px;line-height:1.2}
+.bp-will small{color:var(--muted);font-size:13px}
+.bp-res .banner{margin-top:0}
+.bp-sample{margin:0}
+.bp-sample td,.bp-sample th{padding:7px 8px}
+.rcv-auto{margin-top:2px}
+#rpayb{margin-top:12px}
+.rcv-auto+.hint{display:block;margin:4px 0 12px}
+.rcv-wait{color:var(--warn);font-weight:700}
+.readcard.done b{display:flex;align-items:center;gap:5px;color:var(--good)}
+.readcard.done b .ic{width:18px;height:18px}
+.rcv-done{margin:0 0 4px}
+.rcv-done td{padding:6px 8px}
+.stk-actions{margin-bottom:14px}
+.pos-limit{margin:-4px 0 0}
+.pos-limit.over{color:var(--bad);font-weight:700}
+.low-row{align-items:center}
+.low-row>.input{flex:0 0 88px}
+.inv-foot{margin:14px 0 0;padding-top:10px;border-top:1px dashed #bbb;text-align:center;color:#444;font-size:13px;white-space:pre-line}
