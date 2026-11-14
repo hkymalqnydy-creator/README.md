@@ -638,7 +638,7 @@ begin
   if not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
   if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid email' using errcode = '22023'; end if;
   v_perms := array(select distinct x from unnest(coalesce(p_perms, '{}')) x
-                   where x in ('sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'customers', 'reports', 'costs', 'settings', 'purchases'));
+                   where x in ('sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'customers', 'reports', 'costs', 'settings', 'purchases', 'expenses'));
   insert into public.staff as st (email, name, perms, branch_id, active, user_id)
   values (v_email, left(coalesce(p_name, ''), 80), v_perms, p_branch, coalesce(p_active, true), (select id from auth.users where lower(email) = v_email limit 1))
   on conflict (email) do update set name = excluded.name, perms = excluded.perms, branch_id = excluded.branch_id,
@@ -863,6 +863,8 @@ create table if not exists public.purchases (
   items_count integer not null default 0,
   created_at  timestamptz not null default now()
 );
+-- what was paid to the supplier on receiving; null = paid in full (also every receipt from before this column)
+alter table public.purchases add column if not exists paid numeric(14,2);
 create table if not exists public.purchase_items (
   id          bigserial primary key,
   purchase_id uuid not null references public.purchases(id) on delete cascade,
@@ -885,7 +887,7 @@ create or replace function public.receive_stock(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   v_me uuid := auth.uid(); v_staff public.staff; v_branch uuid; v_owner uuid; v_it jsonb; v_id uuid; v_qty integer;
-  v_cost numeric; v_price numeric; v_pid uuid; v_total numeric := 0; n_new integer := 0; n_upd integer := 0; v_code text; v_title text;
+  v_cost numeric; v_price numeric; v_pid uuid; v_total numeric := 0; n_new integer := 0; n_upd integer := 0; v_code text; v_title text; v_paid numeric;
   v_sku text; v_bar text; v_pn text; v_can_price boolean := public.has_perm('products');
 begin
   if v_me is null or not public.has_perm('purchases') then raise exception 'not authorized' using errcode = '42501'; end if;
@@ -940,13 +942,20 @@ begin
     insert into public.purchase_items (purchase_id, product_id, code, title, qty, cost) values (v_pid, v_id, v_code, v_title, v_qty, v_cost);
     v_total := v_total + coalesce(v_cost, 0) * v_qty;
   end loop;
-  update public.purchases set total = v_total, items_count = n_new + n_upd where id = v_pid;
+  -- paid less than the total: the rest is owed to the supplier, so the receipt needs the supplier's name
+  v_paid := public.try_num(p->>'paid');
+  if v_paid is not null then
+    v_paid := least(greatest(v_paid, 0), v_total);
+    if v_paid < v_total and public.sup_key(p->>'supplier') is null then raise exception 'supplier needed for credit' using errcode = '22023'; end if;
+  end if;
+  update public.purchases set total = v_total, items_count = n_new + n_upd, paid = v_paid where id = v_pid;
   return jsonb_build_object('id', v_pid, 'no', (select no from public.purchases where id = v_pid), 'new', n_new, 'updated', n_upd, 'total', v_total);
 end $$;
 
 create or replace function public.list_purchases(p_limit integer default 30, p_offset integer default 0)
 returns setof jsonb language sql stable security definer set search_path = public as $$
-  select (to_jsonb(pu) - 'total') || jsonb_build_object('total', case when public.has_perm('costs') then pu.total end, 'branch_name', s.name, 'total_count', count(*) over (),
+  select (to_jsonb(pu) - 'total' - 'paid') || jsonb_build_object('total', case when public.has_perm('costs') then pu.total end,
+           'paid', case when public.has_perm('costs') then coalesce(pu.paid, pu.total) end, 'branch_name', s.name, 'total_count', count(*) over (),
            'items', coalesce((select jsonb_agg(jsonb_build_object('title', it.title, 'code', it.code, 'qty', it.qty, 'cost', case when public.has_perm('costs') then it.cost end) order by it.id)
                               from public.purchase_items it where it.purchase_id = pu.id), '[]'::jsonb))
   from public.purchases pu left join public.shops s on s.id = pu.branch_id
@@ -957,3 +966,356 @@ $$;
 grant execute on function public.receive_stock(jsonb) to authenticated;
 grant execute on function public.list_purchases(integer, integer) to authenticated;
 grant select on public.purchases, public.purchase_items to authenticated;
+
+-- ---------- 11) الحسابات: المخزن، الزبائن (الشاري)، الموردين (البايع)، المصروفات، الأرباح والخسائر ----------
+-- Every change goes through the functions below (security definer, permission checked first); the tables are read-only to the app.
+create table if not exists public.stock_moves (
+  id          bigserial primary key,
+  product_id  uuid references public.products(id) on delete set null,
+  title       text not null,
+  branch_id   uuid references public.shops(id) on delete set null,
+  staff_id    uuid references auth.users(id) on delete set null,
+  staff_name  text not null default '',
+  qty         integer not null check (qty <> 0),                 -- + into stock, - out of stock
+  reason      text not null check (reason in ('count', 'damaged', 'lost', 'other')),
+  cost        numeric(12,2),                                     -- cost price of one unit at that moment
+  note        text not null default '' check (char_length(note) <= 300),
+  created_at  timestamptz not null default now()
+);
+create index if not exists stock_moves_created_idx on public.stock_moves (created_at desc);
+create table if not exists public.customer_payments (
+  id            bigserial primary key,
+  cust_key      text not null check (char_length(cust_key) between 3 and 90),
+  customer_name text not null default '' check (char_length(customer_name) <= 80),
+  amount        numeric(12,2) not null check (amount > 0),
+  staff_id      uuid references auth.users(id) on delete set null,
+  staff_name    text not null default '',
+  note          text not null default '' check (char_length(note) <= 300),
+  created_at    timestamptz not null default now()
+);
+create index if not exists customer_payments_key_idx on public.customer_payments (cust_key);
+create table if not exists public.supplier_payments (
+  id          bigserial primary key,
+  supplier    text not null check (char_length(btrim(supplier)) between 1 and 120),
+  amount      numeric(14,2) not null check (amount > 0),
+  staff_id    uuid references auth.users(id) on delete set null,
+  staff_name  text not null default '',
+  note        text not null default '' check (char_length(note) <= 300),
+  created_at  timestamptz not null default now()
+);
+create table if not exists public.expenses (
+  id          bigserial primary key,
+  branch_id   uuid references public.shops(id) on delete set null,
+  cat         text not null check (cat in ('rent', 'salaries', 'utilities', 'transport', 'maintenance', 'other')),
+  amount      numeric(12,2) not null check (amount > 0),
+  spent_on    date not null default current_date,
+  note        text not null default '' check (char_length(note) <= 300),
+  staff_id    uuid references auth.users(id) on delete set null,
+  staff_name  text not null default '',
+  created_at  timestamptz not null default now()
+);
+create index if not exists expenses_day_idx on public.expenses (spent_on desc);
+alter table public.stock_moves enable row level security;
+alter table public.customer_payments enable row level security;
+alter table public.supplier_payments enable row level security;
+alter table public.expenses enable row level security;
+drop policy if exists "sparat stock moves read" on public.stock_moves;
+create policy "sparat stock moves read" on public.stock_moves for select to authenticated using (public.has_perm('products') or public.has_perm('reports'));
+drop policy if exists "sparat customer payments read" on public.customer_payments;
+create policy "sparat customer payments read" on public.customer_payments for select to authenticated using (public.has_perm('invoices') or public.has_perm('reports'));
+drop policy if exists "sparat supplier payments read" on public.supplier_payments;
+create policy "sparat supplier payments read" on public.supplier_payments for select to authenticated using (public.has_perm('costs'));
+drop policy if exists "sparat expenses read" on public.expenses;
+create policy "sparat expenses read" on public.expenses for select to authenticated using (public.has_perm('expenses') or public.has_perm('costs'));
+
+-- One customer = one phone number (its last 9 digits, so 091… and +21891… match), or the name when the invoice has no phone.
+create or replace function public.cust_key(p_name text, p_phone text) returns text language sql immutable as $$
+  select case when char_length(regexp_replace(public.norm_ar(p_phone), '[^0-9]', '', 'g')) >= 7
+              then 'p:' || right(regexp_replace(public.norm_ar(p_phone), '[^0-9]', '', 'g'), 9)
+              when btrim(coalesce(p_name, '')) <> '' then 'n:' || left(public.norm_ar(regexp_replace(btrim(p_name), '\s+', ' ', 'g')), 80) end
+$$;
+-- One supplier = one name, spelled loosely (spaces, alef/ya/ta-marbuta forms and case don't matter)
+create or replace function public.sup_key(p_name text) returns text language sql immutable as $$
+  select nullif(left(public.norm_ar(regexp_replace(btrim(coalesce(p_name, '')), '\s+', ' ', 'g')), 120), '')
+$$;
+create index if not exists invoices_cust_idx on public.invoices (public.cust_key(customer_name, customer_phone));
+create or replace function public.me_name() returns text language sql stable security definer set search_path = public as $$
+  select coalesce(nullif((select name from public.staff where user_id = auth.uid()), ''), (select email from auth.users where id = auth.uid()), '')
+$$;
+
+-- المخزن: summary, one page of parts, the latest changes
+create or replace function public.stock_report(p_q text default null, p_filter text default 'all', p_limit integer default 50, p_offset integer default 0)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_costs boolean := public.has_perm('costs'); v_q text := nullif(btrim(coalesce(p_q, '')), ''); r jsonb;
+begin
+  if auth.uid() is null or not (public.has_perm('products') or public.has_perm('purchases') or public.has_perm('reports')) then
+    raise exception 'not authorized' using errcode = '42501';
+  end if;
+  with base as (select p.*, s.name as branch_name from public.products p left join public.shops s on s.id = p.shop_id),
+       hit as (select * from base b
+               where (v_q is null or public.norm_ar(b.title) like '%' || public.norm_ar(v_q) || '%' or upper(coalesce(b.sku, '')) like '%' || upper(v_q) || '%'
+                      or upper(b.part_no) like '%' || upper(v_q) || '%' or coalesce(b.barcode, '') = v_q)
+                 and (coalesce(p_filter, 'all') not in ('low', 'out') or (p_filter = 'low' and b.qty between 1 and 3) or (p_filter = 'out' and b.qty = 0)))
+  select jsonb_build_object(
+    'summary', (select jsonb_build_object('parts', count(*), 'units', coalesce(sum(qty), 0),
+                  'low', count(*) filter (where qty between 1 and 3), 'out', count(*) filter (where qty = 0),
+                  'value_price', coalesce(sum(qty * price) filter (where qty > 0 and price is not null), 0),
+                  'value_cost', case when v_costs then coalesce(sum(qty * cost) filter (where qty > 0 and cost is not null), 0) end,
+                  'cost_missing', case when v_costs then count(*) filter (where qty > 0 and cost is null) end) from base),
+    'total', (select count(*) from hit),
+    'items', coalesce((select jsonb_agg(t.x order by t.rn) from (
+               select row_number() over (order by title, id) rn, jsonb_build_object('id', id, 'title', title, 'sku', sku, 'part_no', part_no, 'barcode', barcode,
+                        'qty', qty, 'price', price, 'cost', case when v_costs then cost end, 'branch_name', branch_name) x
+               from hit order by title, id limit least(greatest(coalesce(p_limit, 50), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) t), '[]'::jsonb),
+    'moves', case when public.has_perm('products') or public.has_perm('reports') then coalesce((select jsonb_agg(jsonb_build_object('id', m.id, 'title', m.title, 'qty', m.qty,
+               'reason', m.reason, 'note', m.note, 'staff_name', m.staff_name, 'created_at', m.created_at, 'value', case when v_costs then m.qty * m.cost end) order by m.created_at desc, m.id desc)
+               from (select * from public.stock_moves order by created_at desc, id desc limit 20) m), '[]'::jsonb) else '[]'::jsonb end
+  ) into r;
+  return r;
+end $$;
+
+-- تعديل الكمية: نقص (تالف/ضايع) أو زيادة أو جرد، ويتسجل في حركات المخزن بسعر التكلفة
+create or replace function public.adjust_stock(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_p public.products; v_old integer; v_new integer; v_reason text := coalesce(nullif(p->>'reason', ''), 'other');
+begin
+  if auth.uid() is null or not public.has_perm('products') then raise exception 'not authorized' using errcode = '42501'; end if;
+  if v_reason not in ('count', 'damaged', 'lost', 'other') then raise exception 'bad reason' using errcode = '22023'; end if;
+  select * into v_p from public.products where id = nullif(p->>'id', '')::uuid for update;
+  if v_p.id is null then raise exception 'part not found' using errcode = 'P0001'; end if;
+  v_old := coalesce(v_p.qty, 0);
+  if public.try_num(p->>'set') is not null then v_new := floor(public.try_num(p->>'set'))::integer;
+  else v_new := v_old + floor(coalesce(public.try_num(p->>'delta'), 0))::integer; end if;
+  if v_new < 0 then raise exception 'stock cannot go below zero (available %)', v_old using errcode = '22023'; end if;
+  if v_new > 999999 then raise exception 'bad quantity' using errcode = '22023'; end if;
+  if v_new = v_old then raise exception 'nothing to change' using errcode = '22023'; end if;
+  update public.products set qty = v_new,
+    status = case when v_new = 0 then 'sold' else 'active' end
+  where id = v_p.id;
+  insert into public.stock_moves (product_id, title, branch_id, staff_id, staff_name, qty, reason, cost, note)
+  values (v_p.id, v_p.title, v_p.shop_id, auth.uid(), public.me_name(), v_new - v_old, v_reason, v_p.cost, left(coalesce(p->>'note', ''), 300));
+  return jsonb_build_object('id', v_p.id, 'qty', v_new, 'delta', v_new - v_old);
+end $$;
+
+-- الزبائن: every invoice with a name or phone; what is still unpaid on their invoices, minus the payments made later
+create or replace function public.list_buyers(p_q text default null, p_owing boolean default false, p_limit integer default 30, p_offset integer default 0)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_q text := nullif(btrim(coalesce(p_q, '')), ''); v_d text; r jsonb;
+begin
+  if auth.uid() is null or not (public.has_perm('invoices') or public.has_perm('reports')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  -- a phone number is searched by its last 9 digits, like the customer key (091… and +21891… are the same)
+  v_d := regexp_replace(public.norm_ar(v_q), '[^0-9]', '', 'g');
+  if char_length(v_d) > 9 then v_d := right(v_d, 9); end if;
+  with inv as (select public.cust_key(i.customer_name, i.customer_phone) k, i.* from public.invoices i where i.status = 'done'),
+       g as (select k, (array_agg(customer_name order by created_at desc) filter (where customer_name <> ''))[1] as name,
+                    (array_agg(customer_phone order by created_at desc) filter (where customer_phone <> ''))[1] as phone,
+                    count(*) as n, sum(total) as total, sum(greatest(total - paid, 0)) as due, max(created_at) as last_at
+             from inv where k is not null group by k),
+       pay as (select cust_key k, sum(amount) as paid from public.customer_payments group by cust_key),
+       b as (select g.*, coalesce(pay.paid, 0) as paid_later, g.due - coalesce(pay.paid, 0) as balance from g left join pay on pay.k = g.k),
+       hit as (select * from b where (v_q is null or public.norm_ar(coalesce(b.name, '')) like '%' || public.norm_ar(v_q) || '%'
+                                      or (v_d <> '' and b.k like 'p:%' || v_d || '%'))
+                                 and (not coalesce(p_owing, false) or b.balance > 0))
+  select jsonb_build_object(
+    'owing_total', coalesce((select sum(balance) from b where balance > 0), 0), 'owing_count', (select count(*) from b where balance > 0),
+    'total', (select count(*) from hit),
+    'items', coalesce((select jsonb_agg(t.x order by t.rn) from (
+               select row_number() over (order by (balance > 0) desc, last_at desc, k) rn,
+                      jsonb_build_object('key', k, 'name', coalesce(name, phone, ''), 'phone', coalesce(phone, ''), 'count', n, 'total', total, 'due', due,
+                                         'paid_later', paid_later, 'balance', balance, 'last_at', last_at) x
+               from hit order by (balance > 0) desc, last_at desc, k limit least(greatest(coalesce(p_limit, 30), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) t), '[]'::jsonb)
+  ) into r;
+  return r;
+end $$;
+create or replace function public.buyer_detail(p_key text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare r jsonb;
+begin
+  if auth.uid() is null or not (public.has_perm('invoices') or public.has_perm('reports')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  with inv as (select i.* from public.invoices i where public.cust_key(i.customer_name, i.customer_phone) = p_key),
+       d as (select * from inv where status = 'done')
+  select case when exists (select 1 from inv) then jsonb_build_object(
+    'key', p_key,
+    'name', coalesce((select customer_name from inv where customer_name <> '' order by created_at desc limit 1), (select customer_phone from inv where customer_phone <> '' order by created_at desc limit 1), ''),
+    'phone', coalesce((select customer_phone from inv where customer_phone <> '' order by created_at desc limit 1), ''),
+    'count', (select count(*) from d), 'total', coalesce((select sum(total) from d), 0), 'due', coalesce((select sum(greatest(total - paid, 0)) from d), 0),
+    'paid_later', coalesce((select sum(amount) from public.customer_payments where cust_key = p_key), 0),
+    'invoices', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'no', x.no, 'created_at', x.created_at, 'total', x.total, 'paid', x.paid, 'payment', x.payment,
+                   'status', x.status, 'currency', x.currency, 'staff_name', x.staff_name) order by x.created_at desc) from (select * from inv order by created_at desc limit 50) x), '[]'::jsonb),
+    'payments', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'amount', amount, 'note', note, 'staff_name', staff_name, 'created_at', created_at) order by created_at desc, id desc)
+                   from public.customer_payments where cust_key = p_key), '[]'::jsonb)) end into r;
+  return case when r is null then null else r || jsonb_build_object('balance', (r->>'due')::numeric - (r->>'paid_later')::numeric) end;
+end $$;
+create or replace function public.add_customer_payment(p_key text, p_amount numeric, p_note text default '') returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_name text;
+begin
+  if auth.uid() is null or not public.has_perm('invoices') then raise exception 'not authorized' using errcode = '42501'; end if;
+  if p_amount is null or p_amount <= 0 or p_amount > 99999999 then raise exception 'bad amount' using errcode = '22023'; end if;
+  select coalesce(nullif(customer_name, ''), customer_phone) into v_name from public.invoices
+  where public.cust_key(customer_name, customer_phone) = p_key order by created_at desc limit 1;
+  if v_name is null then raise exception 'customer not found' using errcode = 'P0001'; end if;
+  insert into public.customer_payments (cust_key, customer_name, amount, staff_id, staff_name, note)
+  values (p_key, left(v_name, 80), round(p_amount, 2), auth.uid(), public.me_name(), left(coalesce(p_note, ''), 300));
+  return public.buyer_detail(p_key);
+end $$;
+create or replace function public.delete_customer_payment(p_id bigint) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
+  delete from public.customer_payments where id = p_id;
+end $$;
+
+-- الموردين: receipts with a supplier name; what was not paid on receiving, minus the payments made later
+create or replace function public.list_suppliers(p_q text default null, p_owing boolean default false, p_limit integer default 30, p_offset integer default 0)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_q text := nullif(btrim(coalesce(p_q, '')), ''); r jsonb;
+begin
+  if auth.uid() is null or not public.has_perm('costs') then raise exception 'not authorized' using errcode = '42501'; end if;
+  with pu as (select public.sup_key(x.supplier) k, x.* from public.purchases x),
+       g as (select k, (array_agg(btrim(supplier) order by created_at desc))[1] as name, count(*) as n, sum(total) as total,
+                    sum(total - coalesce(paid, total)) as due, max(created_at) as last_at from pu where k is not null group by k),
+       pay as (select public.sup_key(supplier) k, sum(amount) as paid from public.supplier_payments group by 1),
+       b as (select g.*, coalesce(pay.paid, 0) as paid_later, g.due - coalesce(pay.paid, 0) as balance from g left join pay on pay.k = g.k),
+       hit as (select * from b where (v_q is null or public.norm_ar(b.name) like '%' || public.norm_ar(v_q) || '%') and (not coalesce(p_owing, false) or b.balance > 0))
+  select jsonb_build_object(
+    'owing_total', coalesce((select sum(balance) from b where balance > 0), 0), 'owing_count', (select count(*) from b where balance > 0),
+    'total', (select count(*) from hit),
+    'items', coalesce((select jsonb_agg(t.x order by t.rn) from (
+               select row_number() over (order by (balance > 0) desc, last_at desc, k) rn,
+                      jsonb_build_object('key', k, 'name', name, 'count', n, 'total', total, 'due', due, 'paid_later', paid_later, 'balance', balance, 'last_at', last_at) x
+               from hit order by (balance > 0) desc, last_at desc, k limit least(greatest(coalesce(p_limit, 30), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) t), '[]'::jsonb)
+  ) into r;
+  return r;
+end $$;
+create or replace function public.supplier_detail(p_key text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare r jsonb;
+begin
+  if auth.uid() is null or not public.has_perm('costs') then raise exception 'not authorized' using errcode = '42501'; end if;
+  with pu as (select x.*, s.name as branch_name from public.purchases x left join public.shops s on s.id = x.branch_id where public.sup_key(x.supplier) = p_key),
+       pay as (select * from public.supplier_payments where public.sup_key(supplier) = p_key)
+  select case when exists (select 1 from pu) then jsonb_build_object(
+    'key', p_key, 'name', (select btrim(supplier) from pu order by created_at desc limit 1),
+    'count', (select count(*) from pu), 'total', coalesce((select sum(total) from pu), 0), 'due', coalesce((select sum(total - coalesce(paid, total)) from pu), 0),
+    'paid_later', coalesce((select sum(amount) from pay), 0),
+    'receipts', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'no', x.no, 'created_at', x.created_at, 'total', x.total, 'paid', coalesce(x.paid, x.total),
+                   'items_count', x.items_count, 'branch_name', x.branch_name) order by x.created_at desc) from (select * from pu order by created_at desc limit 50) x), '[]'::jsonb),
+    'payments', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'amount', amount, 'note', note, 'staff_name', staff_name, 'created_at', created_at) order by created_at desc, id desc) from pay), '[]'::jsonb)
+  ) end into r;
+  return case when r is null then null else r || jsonb_build_object('balance', (r->>'due')::numeric - (r->>'paid_later')::numeric) end;
+end $$;
+create or replace function public.add_supplier_payment(p_key text, p_amount numeric, p_note text default '') returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_name text;
+begin
+  if auth.uid() is null or not (public.has_perm('costs') and public.has_perm('purchases')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  if p_amount is null or p_amount <= 0 or p_amount > 99999999 then raise exception 'bad amount' using errcode = '22023'; end if;
+  select btrim(supplier) into v_name from public.purchases where public.sup_key(supplier) = p_key order by created_at desc limit 1;
+  if v_name is null then raise exception 'supplier not found' using errcode = 'P0001'; end if;
+  insert into public.supplier_payments (supplier, amount, staff_id, staff_name, note)
+  values (left(v_name, 120), round(p_amount, 2), auth.uid(), public.me_name(), left(coalesce(p_note, ''), 300));
+  return public.supplier_detail(p_key);
+end $$;
+create or replace function public.delete_supplier_payment(p_id bigint) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
+  delete from public.supplier_payments where id = p_id;
+end $$;
+
+-- المصروفات
+create or replace function public.add_expense(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_amt numeric := public.try_num(p->>'amount'); v_cat text := coalesce(p->>'cat', 'other'); v_day date; v_branch uuid; r public.expenses;
+begin
+  if auth.uid() is null or not public.has_perm('expenses') then raise exception 'not authorized' using errcode = '42501'; end if;
+  if v_amt is null or v_amt <= 0 or v_amt > 99999999 then raise exception 'bad amount' using errcode = '22023'; end if;
+  if v_cat not in ('rent', 'salaries', 'utilities', 'transport', 'maintenance', 'other') then v_cat := 'other'; end if;
+  begin v_day := coalesce(nullif(p->>'spent_on', '')::date, current_date);
+  exception when others then raise exception 'bad date' using errcode = '22023'; end;
+  if v_day > current_date + 1 or v_day < current_date - 3660 then raise exception 'bad date' using errcode = '22023'; end if;
+  v_branch := coalesce((select branch_id from public.staff where user_id = auth.uid() and active), nullif(p->>'branch', '')::uuid);
+  insert into public.expenses (branch_id, cat, amount, spent_on, note, staff_id, staff_name)
+  values (v_branch, v_cat, round(v_amt, 2), v_day, left(coalesce(p->>'note', ''), 300), auth.uid(), public.me_name())
+  returning * into r;
+  return to_jsonb(r) - 'staff_id';
+end $$;
+create or replace function public.list_expenses(p_from date default null, p_to date default null, p_limit integer default 50, p_offset integer default 0)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare r jsonb;
+begin
+  if auth.uid() is null or not (public.has_perm('expenses') or public.has_perm('costs')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  with e as (select x.*, s.name as branch_name from public.expenses x left join public.shops s on s.id = x.branch_id
+             where (p_from is null or x.spent_on >= p_from) and (p_to is null or x.spent_on < p_to))
+  select jsonb_build_object('total', (select count(*) from e), 'sum', coalesce((select sum(amount) from e), 0),
+    'by_cat', coalesce((select jsonb_object_agg(cat, s) from (select cat, sum(amount) as s from e group by cat) t), '{}'::jsonb),
+    'items', coalesce((select jsonb_agg(t.x order by t.rn) from (
+               select row_number() over (order by spent_on desc, id desc) rn,
+                      (to_jsonb(e) - 'staff_id') || jsonb_build_object('mine', e.staff_id = auth.uid()) x
+               from e order by spent_on desc, id desc limit least(greatest(coalesce(p_limit, 50), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) t), '[]'::jsonb)) into r;
+  return r;
+end $$;
+create or replace function public.delete_expense(p_id bigint) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or not public.has_perm('expenses') then raise exception 'not authorized' using errcode = '42501'; end if;
+  delete from public.expenses where id = p_id and (public.is_admin() or staff_id = auth.uid());
+  if not found then raise exception 'not authorized' using errcode = '42501'; end if;
+end $$;
+
+-- الأرباح والخسائر: sales minus what the sold parts cost, minus expenses, plus/minus stock changes; with sellers and debts
+create or replace function public.pnl_report(p_from timestamptz, p_to timestamptz, p_branch uuid default null, p_tz text default 'Africa/Tripoli')
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare r jsonb; v_d0 date; v_d1 date;
+begin
+  if auth.uid() is null or not public.has_perm('costs') then raise exception 'not authorized' using errcode = '42501'; end if;
+  begin v_d0 := (p_from at time zone p_tz)::date; v_d1 := (p_to at time zone p_tz)::date;
+  exception when others then v_d0 := p_from::date; v_d1 := p_to::date; end;
+  with inv as (select * from public.invoices i where i.status = 'done' and i.created_at >= p_from and i.created_at < p_to and (p_branch is null or i.branch_id = p_branch)),
+       items as (select it.* from public.invoice_items it join inv on inv.id = it.invoice_id),
+       ci as (select invoice_id, sum(coalesce(cost, 0) * qty) as c from items group by invoice_id),
+       ex as (select * from public.expenses e where e.spent_on >= v_d0 and e.spent_on < v_d1 and (p_branch is null or e.branch_id = p_branch)),
+       mv as (select * from public.stock_moves m where m.created_at >= p_from and m.created_at < p_to and (p_branch is null or m.branch_id = p_branch)),
+       ret as (select * from public.invoices i where i.status = 'returned' and i.returned_at >= p_from and i.returned_at < p_to and (p_branch is null or i.branch_id = p_branch)),
+       cb as (select g.due - coalesce(p.paid, 0) as bal
+              from (select public.cust_key(customer_name, customer_phone) k, sum(greatest(total - paid, 0)) as due from public.invoices where status = 'done' group by 1) g
+              left join (select cust_key k, sum(amount) as paid from public.customer_payments group by 1) p on p.k = g.k where g.k is not null),
+       sb as (select g.due - coalesce(p.paid, 0) as bal
+              from (select public.sup_key(supplier) k, sum(total - coalesce(paid, total)) as due from public.purchases group by 1) g
+              left join (select public.sup_key(supplier) k, sum(amount) as paid from public.supplier_payments group by 1) p on p.k = g.k where g.k is not null)
+  select jsonb_build_object(
+    'count', (select count(*) from inv),
+    'sales', coalesce((select sum(total) from inv), 0),
+    'discount', coalesce((select sum(discount) from inv), 0),
+    'cogs', coalesce((select sum(c) from ci), 0),
+    'cost_missing', (select count(*) from items where cost is null),
+    'expenses', coalesce((select sum(amount) from ex), 0),
+    'by_cat', coalesce((select jsonb_object_agg(cat, s) from (select cat, sum(amount) as s from ex group by cat) t), '{}'::jsonb),
+    'stock_adj', coalesce((select sum(qty * coalesce(cost, 0)) from mv), 0),
+    'stock_by_reason', coalesce((select jsonb_object_agg(reason, s) from (select reason, sum(qty * coalesce(cost, 0)) as s from mv group by reason) t), '{}'::jsonb),
+    'returned_count', (select count(*) from ret), 'returned_total', coalesce((select sum(total) from ret), 0),
+    'by_staff', coalesce((select jsonb_agg(jsonb_build_object('name', name, 'count', n, 'total', s, 'profit', s - c) order by s desc, name)
+                 from (select coalesce(nullif(inv.staff_name, ''), '—') as name, count(*) as n, sum(inv.total) as s, sum(coalesce(ci.c, 0)) as c
+                       from inv left join ci on ci.invoice_id = inv.id group by 1) t), '[]'::jsonb),
+    'receivable', coalesce((select sum(bal) from cb where bal > 0), 0),
+    'payable', coalesce((select sum(bal) from sb where bal > 0), 0)
+  ) into r;
+  return r || jsonb_build_object('gross', (r->>'sales')::numeric - (r->>'cogs')::numeric,
+                                 'net', (r->>'sales')::numeric - (r->>'cogs')::numeric - (r->>'expenses')::numeric + (r->>'stock_adj')::numeric);
+end $$;
+
+grant execute on function public.cust_key(text, text) to authenticated;
+grant execute on function public.sup_key(text) to authenticated;
+grant execute on function public.stock_report(text, text, integer, integer) to authenticated;
+grant execute on function public.adjust_stock(jsonb) to authenticated;
+grant execute on function public.list_buyers(text, boolean, integer, integer) to authenticated;
+grant execute on function public.buyer_detail(text) to authenticated;
+grant execute on function public.add_customer_payment(text, numeric, text) to authenticated;
+grant execute on function public.delete_customer_payment(bigint) to authenticated;
+grant execute on function public.list_suppliers(text, boolean, integer, integer) to authenticated;
+grant execute on function public.supplier_detail(text) to authenticated;
+grant execute on function public.add_supplier_payment(text, numeric, text) to authenticated;
+grant execute on function public.delete_supplier_payment(bigint) to authenticated;
+grant execute on function public.add_expense(jsonb) to authenticated;
+grant execute on function public.list_expenses(date, date, integer, integer) to authenticated;
+grant execute on function public.delete_expense(bigint) to authenticated;
+grant execute on function public.pnl_report(timestamptz, timestamptz, uuid, text) to authenticated;
+grant select on public.stock_moves, public.customer_payments, public.supplier_payments, public.expenses to authenticated;

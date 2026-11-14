@@ -885,3 +885,41 @@ details.pur[open]>summary{padding-bottom:4px}
 [dir=ltr][data-skin=royal] .hero-car{transform:scaleX(-1);rotate:-5deg;rotate:calc(-1 * atan2(36px,100vw))}
 @media (max-width:359px){[data-skin=royal] .hero-car{display:none}}
 @media (min-width:700px){[data-skin=royal] .hero-car{bottom:-44px}}
+
+/* ---------- accounts: stock, customers, suppliers, expenses, profit and loss (js/books.js) ---------- */
+.stk-row{width:100%;text-align:start;cursor:pointer;background:none;color:inherit;font:inherit;border:0;border-bottom:1px solid var(--line)}
+.stk-row:disabled{cursor:default}
+.qty-chip{flex:none;min-width:44px;height:34px;padding:0 8px;display:inline-grid;place-items:center;border-radius:10px;background:var(--chip);font-weight:800;font-size:15px}
+.qty-chip.low{background:rgba(255,163,26,.22);color:var(--warn)}
+.qty-chip.out{background:rgba(191,47,31,.13);color:var(--bad)}
+.qty-chip.in{background:rgba(17,116,74,.13);color:var(--good)}
+.stk-val{display:grid;justify-items:end;gap:1px;flex:none}
+.stk-val small{color:var(--muted);font-size:12px}
+.chip .cnum{font-weight:800;opacity:.75}
+.chip .cnum:empty{display:none}
+.bal{flex:none;font-weight:800;font-size:14.5px}
+.bal.owe{color:var(--bad)}
+.bal.cr{color:var(--good)}
+.bal.ok{color:var(--muted);font-weight:600}
+.led-head{display:grid;gap:12px}
+.led-bal{display:grid;gap:2px}
+.led-bal small{color:var(--muted);font-weight:700;font-size:13px}
+.led-bal b{font-family:var(--font-display);font-size:34px;line-height:1.1}
+.led-bal.owe b{color:var(--bad)}
+.led-bal.cr b{color:var(--good)}
+.astat.warnstat b{color:var(--bad)}
+.num.neg{color:var(--bad)}
+.num.pos{color:var(--good)}
+.moves summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+.moves summary::-webkit-details-marker{display:none}
+.moves summary .cnum{color:var(--muted)}
+.sheet-sub{margin:-2px 0 14px}
+.pl{display:grid}
+.pl-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
+.pl-row.sub>span{color:var(--muted)}
+.pl-row.tot{font-weight:800}
+.pl-row.pl-cat{padding:5px 0;padding-inline-start:16px;font-size:13.5px;color:var(--muted);border-bottom-style:dashed}
+.pl-net{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:12px;padding:14px 16px;border-radius:14px;font-weight:800}
+.pl-net.gain{background:rgba(17,116,74,.1);color:var(--good)}
+.pl-net.loss{background:rgba(191,47,31,.1);color:var(--bad)}
+.pl-net b{font-family:var(--font-display);font-size:28px;line-height:1.1}

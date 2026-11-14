@@ -34,9 +34,9 @@
     perm_sales: ["البيع وإنشاء الفواتير", "Sell and create invoices"], perm_invoices: ["رؤية كل الفواتير", "See all invoices"], perm_returns: ["المرتجعات", "Returns"],
     perm_discounts: ["إعطاء خصم", "Give discounts"], perm_prices: ["تعديل سعر البيع في الفاتورة", "Change prices on invoices"], perm_products: ["إضافة وتعديل القطع والأسعار والكميات", "Add and edit parts, prices and stock"],
     perm_customers: ["اعتماد وإدارة الزبائن", "Approve and manage customers"], perm_reports: ["التقارير", "Reports"], perm_costs: ["رؤية التكلفة والأرباح", "See cost prices and profit"],
-    perm_settings: ["إعدادات الشركة", "Company settings"], costL: ["سعر التكلفة", "Cost price"], costHint: ["لا يظهر إلا للمالك ومن عنده صلاحية التكلفة.", "Visible only to the owner and staff allowed to see costs."]
+    perm_expenses: ["تسجيل المصروفات", "Record expenses"], perm_settings: ["إعدادات الشركة", "Company settings"], costL: ["سعر التكلفة", "Cost price"], costHint: ["لا يظهر إلا للمالك ومن عنده صلاحية التكلفة.", "Visible only to the owner and staff allowed to see costs."]
   });
-  const PERMS = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'settings'];
+  const PERMS = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings'];
   const PAYS = ['cash', 'card', 'transfer', 'credit'];
 
   /* ---------- permissions ---------- */

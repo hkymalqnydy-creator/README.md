@@ -25,7 +25,9 @@
     barcodeHint: ["امسحه بالكاميرا أو بجهاز الباركود، باش تلقى القطعة بسرعة في البيع والاستلام.", "Scan it with the camera or a barcode scanner to find the part fast when selling and receiving."],
     rcvT: ["استلام بضاعة", "Receive stock"], rcvPhoto: ["صوّر فاتورة المورّد", "Photograph the supplier invoice"], rcvPhotoSub: ["يقرا الأصناف والكميات والأسعار", "Reads items, quantities and prices"],
     rcvScan: ["امسح باركود القطع", "Scan part barcodes"], rcvScanSub: ["قطعة قطعة بالكاميرا", "One by one with the camera"], rcvSearchPh: ["أضف قطعة بالاسم أو الكود أو الباركود…", "Add a part by name, code or barcode…"],
-    rcvSupplier: ["المورّد", "Supplier"], rcvNote: ["ملاحظة", "Note"], rcvReading: ["جاري قراءة الفاتورة…", "Reading the invoice…"],
+    rcvSupplier: ["المورّد", "Supplier"], rcvNote: ["ملاحظة", "Note"],
+    rcvPayT: ["الدفع للمورّد", "Paying the supplier"], rcvPaidFull: ["دفعت كاملة", "Paid in full"], rcvCredit: ["آجل (دين للمورّد)", "On credit"], rcvPart: ["دفعت جزء", "Part paid"],
+    rcvPaidNow: ["المدفوع توا", "Paid now"], purOwed: ["باقي للمورّد {m}", "{m} still owed"], rcvNeedSupplier: ["اكتب اسم المورّد باش يتسجّل الدين عليه.", "Enter the supplier's name so the debt is recorded."], rcvReading: ["جاري قراءة الفاتورة…", "Reading the invoice…"],
     rcvLoadingOcr: ["تحميل أداة القراءة (أول مرة فقط)…", "Downloading the reader (first time only)…"], rcvAi: ["قراءة بالذكاء الاصطناعي…", "Reading with AI…"],
     rcvReadAi: ["قريناها بالذكاء الاصطناعي: {n} صنف. راجعهم قبل الإدخال.", "Read with AI: {n} items. Check them before saving."],
     rcvReadLocal: ["قريناها على الجهاز: {n} صنف. الدقة متوسطة، فراجع الأرقام كويس.", "Read on this device: {n} items. Accuracy is moderate, so check the numbers carefully."],
@@ -340,6 +342,7 @@
     if (/new item needs a name/.test(m)) return t('rcvNeedName');
     if (/bad quantity/.test(m)) return t('rcvBadQty');
     if (/1 to 300/.test(m)) return t('rcvMany');
+    if (/supplier needed for credit/.test(m)) return t('rcvNeedSupplier');
     if (/not authorized/.test(m)) return t('errPerm');
     return SP.errText(e);
   }
@@ -369,7 +372,7 @@
       st.branch = $('#rbr').value; saveR(st);
     } catch (e) { /* branch list optional: the database picks the main branch */ }
     $('#rbr').onchange = e => { st.branch = e.target.value; saveR(st); };
-    $('#rsup').oninput = e => { st.supplier = e.target.value; saveR(st); };
+    $('#rsup').oninput = e => { st.supplier = e.target.value; e.target.classList.remove('invalid'); saveR(st); };
 
     /* catalog matching */
     async function check(l) {
@@ -494,15 +497,20 @@
       }).join('') : `<p class="muted-p pos-empty">${esc(t('rcvEmpty'))}</p>`;
       $('#rsum').innerHTML = st.lines.length ? `<div class="mcard psum"><div class="prow"><span>${esc(t('rcvUnits'))}</span><b class="num">${esc(SP.fmtNum(units))}</b></div>
           <div class="prow big"><span>${esc(t('rcvTotal'))}</span><b class="num" id="rtot">${esc(money(total, cur))}</b></div>
+          <fieldset class="field"><legend>${esc(t('rcvPayT'))}</legend><div class="seg">${[['full', 'rcvPaidFull'], ['credit', 'rcvCredit'], ['part', 'rcvPart']].map(([k, l], i) =>
+            `<input type="radio" name="rpay" id="rpay${i}" value="${k}"${(st.pay || 'full') === k ? ' checked' : ''}><label for="rpay${i}">${esc(t(l))}</label>`).join('')}</div></fieldset>
+          ${st.pay === 'part' ? `<div class="prow"><label for="rpaid">${esc(t('rcvPaidNow'))}</label><input id="rpaid" class="input num" inputmode="decimal" dir="ltr" maxlength="12" value="${esc(st.paid || '')}"></div>` : ''}
           <div class="field"><label for="rnote">${esc(t('rcvNote'))}</label><input id="rnote" class="input" maxlength="500" value="${esc(st.note || '')}"></div>
           <p class="form-err" id="rerr" role="alert"></p>
           <div class="form-actions"><button type="button" class="btn btn-signal" id="rsave">${I('check')} ${esc(t('rcvSave'))}</button>
             ${SP.can('sales') ? `<button type="button" class="btn btn-ink" id="rpos">${I('tag')} ${esc(t('rcvToPos'))}</button>` : ''}
             <button type="button" class="btn btn-ghost" id="rclr">${I('trash')} ${esc(t('rcvClear'))}</button></div></div>` : '';
       if ($('#rnote')) $('#rnote').oninput = e => { st.note = e.target.value; saveR(st); };
+      $$('input[name=rpay]').forEach(r => r.onchange = () => { st.pay = r.value; saveR(st); draw(); });
+      if ($('#rpaid')) $('#rpaid').oninput = e => { st.paid = SP.digits(e.target.value); saveR(st); };
       if ($('#rsave')) $('#rsave').onclick = save;
       if ($('#rpos')) $('#rpos').onclick = toPos;
-      if ($('#rclr')) $('#rclr').onclick = async () => { if (await SP.confirmSheet({ title: t('rcvClearQ'), ok: t('rcvClear'), danger: true })) { st.lines = []; st.note = ''; st.supplier = ''; $('#rsup').value = ''; saveR(st); $('#rread').innerHTML = ''; draw(); } };
+      if ($('#rclr')) $('#rclr').onclick = async () => { if (await SP.confirmSheet({ title: t('rcvClearQ'), ok: t('rcvClear'), danger: true })) { st.lines = []; st.note = ''; st.supplier = ''; st.pay = 'full'; st.paid = ''; $('#rsup').value = ''; saveR(st); $('#rread').innerHTML = ''; draw(); } };
     }
     const lineOf = el => st.lines.find(l => l.k === (el.closest('[data-k]') || {}).dataset.k);
     $('#rlines').addEventListener('input', e => {
@@ -565,10 +573,13 @@
         if (!Number.isInteger(Number(l.qty)) || Number(l.qty) < 1) { err.textContent = t('rcvBadQty'); const i = row && $('[data-f="qty"]', row); if (i) { i.classList.add('invalid'); i.focus(); } return; }
         if (!l.match && String(l.title || '').trim().length < 2) { err.textContent = t('rcvNeedName'); const i = row && $('[data-f="title"]', row); if (i) { i.classList.add('invalid'); i.focus(); } return; }
       }
+      /* on credit or part paid: what was paid now (the rest is owed to the supplier, so the name is needed) */
+      const paid = st.pay === 'credit' ? 0 : st.pay === 'part' ? Number(String(st.paid || '').replace(',', '.')) || 0 : null;
+      if (paid != null && !(st.supplier || '').trim()) { err.textContent = t('rcvNeedSupplier'); $('#rsup').classList.add('invalid'); $('#rsup').focus(); return; }
       b.classList.add('busy');
       try {
         const r = await chk(await sb().rpc('receive_stock', { p: {
-          branch: st.branch || null, supplier: (st.supplier || '').trim(), note: (st.note || '').trim(),
+          branch: st.branch || null, supplier: (st.supplier || '').trim(), note: (st.note || '').trim(), ...(paid != null ? { paid } : {}),
           items: st.lines.map(l => l.match ? { product_id: l.match.id, qty: Number(l.qty), cost: l.cost }
             : { part_no: l.code || '', barcode: l.barcode || '', title: l.title.trim(), qty: Number(l.qty), cost: l.cost, price: canPrice ? l.price : null, cat: l.cat || 'other' })
         } }));
@@ -596,7 +607,7 @@
     shell(bar(t('purT'), SP.can('purchases') ? `<a class="iconbtn" href="#receive" aria-label="${esc(t('rcvT'))}">${I('plus')}</a>` : '') + `<main class="wrap"><div id="pl"><div class="sk sk-row"></div></div>
       <div class="center"><button type="button" class="btn btn-ghost more-btn" id="more" hidden></button></div></main>`);
     const cur = SP.currencyOf(S.country);
-    const row = v => `<details class="pur"><summary class="arow"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${esc(v.supplier || t('purNo', { n: v.no }))}</b>
+    const row = v => `<details class="pur"><summary class="arow"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${esc(v.supplier || t('purNo', { n: v.no }))}${v.total != null && v.paid != null && +v.paid < +v.total ? ` <span class="pill demo">${esc(t('purOwed', { m: money(v.total - v.paid, cur) }))}</span>` : ''}</b>
         <small>${[when(v.created_at), v.staff_name, v.branch_name, SP.count(+v.items_count || 0, 'parts')].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small></span>${v.total != null ? `<b class="num">${esc(money(v.total, cur))}</b>` : ''}</summary>
       <table class="inv-items pur-items"><tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.code ? `<small class="mono">${esc(it.code)}</small>` : ''}</td><td class="num">× ${esc(it.qty)}</td>${it.cost != null ? `<td class="num">${esc(money(it.cost, cur))}</td>` : ''}</tr>`).join('')}</tbody></table></details>`;
     await SP.pager(n, $('#pl'), $('#more'), async off => { const rows = chk(await sb().rpc('list_purchases', { p_limit: 30, p_offset: off })) || []; return { items: rows, total: rows.length ? +rows[0].total_count : 0 }; },
