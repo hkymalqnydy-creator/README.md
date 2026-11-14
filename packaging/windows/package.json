@@ -1,0 +1,17 @@
+{
+  "name": "sparat-windows",
+  "productName": "Sparat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sparat desktop app for Windows",
+  "main": "main.js",
+  "scripts": { "start": "electron .", "dist": "electron-builder --win nsis" },
+  "devDependencies": { "electron": "latest", "electron-builder": "latest" },
+  "build": {
+    "appId": "ly.sparat.desktop",
+    "productName": "Sparat",
+    "files": ["main.js", "app/**/*"],
+    "win": { "target": "nsis", "icon": "app/icons/icon-512.png" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "shortcutName": "سبيرات" }
+  }
+}

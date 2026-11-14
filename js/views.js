@@ -45,7 +45,7 @@
   const skel = k => Array.from({ length: k }, () => '<div class="sk sk-card"></div>').join('');
   const empty = (icon, title, body, btn) => `<div class="empty">${I(icon)}<h3>${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ''}${btn || ''}</div>`;
   const errBox = e => empty('warn', t('loadFailT'), SP.errText(e), `<button type="button" class="btn btn-ghost" data-act="retry">${esc(t('retry'))}</button>`);
-  const initial = s => (String(s || '').trim()[0] || '?').toUpperCase();
+  const initial = s => { const v = String(s || '').trim().replace(/^(محل|مركز|شركة|معرض)\s+/, '').replace(/^ال(?=\S{2})/, ''); return (v[0] || '?').toUpperCase(); };
   const avatar = (s, cls) => `<span class="hexav ${cls || ''}">${s.logo ? SP.imgTag(s.logo, '', s.name) : ''}<span>${esc(initial(s.name))}</span></span>`;
   const vb = s => s.verified ? `<span class="vb">${I('verified')}<span class="sr">${esc(t('verified'))}</span></span>` : '';
   const catIcon = id => (D.CATS.find(c => c.id === id) || {}).icon || 'box';

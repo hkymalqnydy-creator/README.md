@@ -1,0 +1,8 @@
+{
+  "appId": "ly.sparat.app",
+  "appName": "سبيرات",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "android": { "backgroundColor": "#15181d" },
+  "ios": { "backgroundColor": "#15181d", "contentInset": "never" }
+}

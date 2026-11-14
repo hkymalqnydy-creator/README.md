@@ -1,0 +1,13 @@
+سبيرات (Sparat) — جميع الحقوق محفوظة © 2026 لمالك التطبيق.
+Sparat — Copyright © 2026 the owner of the Sparat app. All rights reserved.
+(Replace "the owner of the Sparat app" with your name or company before selling.)
+
+لا يُسمح بنسخ هذا البرنامج أو توزيعه أو بيعه إلا بإذن مكتوب من المالك.
+No part of this software may be copied, distributed or sold without written permission from the owner.
+
+Third-party components used under their own licences:
+- supabase-js (loaded from jsDelivr): MIT License, © Supabase
+- Changa and IBM Plex fonts (loaded from Google Fonts): SIL Open Font License 1.1
+- NHTSA vPIC vehicle data (queried live): public domain (U.S. Government work)
+- Capacitor and Electron (packaging only, installed by npm): MIT License
+Car brand names are used only to describe vehicle compatibility; no brand logos are included.
