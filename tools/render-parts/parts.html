@@ -219,12 +219,26 @@ vec2 battery(vec3 q){
  return r;}
 vec2 scBattery(vec3 p){return battery(tBat(p));}
 
+/* ---------- 12 panel air filter ---------- */
+vec3 tAir(vec3 p){vec3 q=p;q.xz*=rot(0.42);return q;}
+float pleat(float x){return abs(fract(x/1.05)-0.5)*2.;}     // 0 at a fold's ridge, 1 in the valley
+vec2 airFilter(vec3 q){
+ vec3 h=q-vec3(0.,2.6,0.);
+ float outer=sdRBox(h,vec3(14.,2.6,10.5),0.9);
+ float frame=max(outer,-sdBox(h,vec3(12.6,4.,9.1)));
+ vec2 r=vec2(frame,23.);
+ r=U(r,vec2(sdRBox(q-vec3(0.,0.3,0.),vec3(15.,0.3,11.5),0.25),23.));       // sealing flange
+ float top=4.75-1.15*pleat(q.x);
+ float media=max(sdBox(h-vec3(0.,-0.3,0.),vec3(12.65,2.2,9.15)),(q.y-top)*0.55);
+ return U(r,vec2(media,26.));}
+vec2 scAir(vec3 p){return airFilter(tAir(p));}
+
 /* ---------- scene ---------- */
 vec4 bound(){ // centre and radius per scene, for a quick skip of empty space
  if(uScene==0) return vec4(0.,1.,0.,22.); if(uScene==1) return vec4(0.,6.,0.,16.); if(uScene==2) return vec4(0.,2.,0.,22.);
  if(uScene==3) return vec4(0.,6.6,0.,24.); if(uScene==4) return vec4(0.,20.,0.,44.); if(uScene==5) return vec4(0.,6.5,0.,22.);
  if(uScene==6) return vec4(0.,5.,0.,24.); if(uScene==7) return vec4(0.,6.6,0.,17.); if(uScene==8) return vec4(1.,2.,0.,26.);
- if(uScene==9) return vec4(0.,1.,0.,14.); if(uScene==10) return vec4(0.,13.,0.,18.); return vec4(0.,9.,0.,20.);}
+ if(uScene==9) return vec4(0.,1.,0.,14.); if(uScene==10) return vec4(0.,13.,0.,18.); if(uScene==12) return vec4(0.,2.5,0.,20.); return vec4(0.,9.,0.,20.);}
 bool gFull=false; // the bounding-sphere shortcut is only for the first ray: shadows and occlusion need true distances
 vec2 map(vec3 p){
  vec2 r=vec2(p.y,1.);
@@ -233,7 +247,7 @@ vec2 map(vec3 p){
  vec2 o;
  if(uScene==0) o=scPads(p); else if(uScene==1) o=scFilters(p); else if(uScene==2) o=scShocks(p); else if(uScene==3) o=scStrut(p);
  else if(uScene==4) o=scRadiator(p); else if(uScene==5) o=scHead(p); else if(uScene==6) o=scTail(p); else if(uScene==7) o=scComp(p);
- else if(uScene==8) o=scClutch(p); else if(uScene==9) o=scPlugs(p); else if(uScene==10) o=scJug(p); else o=scBattery(p);
+ else if(uScene==8) o=scClutch(p); else if(uScene==9) o=scPlugs(p); else if(uScene==10) o=scJug(p); else if(uScene==12) o=scAir(p); else o=scBattery(p);
  return U(r,o);}
 
 /* ---------- materials ---------- */
@@ -285,6 +299,7 @@ M mat(float id,vec3 p,vec3 n){
  else if(id==22.){o.a=vec3(0.97);o.m=1.;o.r=0.04;}
  else if(id==23.){o.a=lin(vec3(0.184,0.329,0.902));o.r=0.3;}
  else if(id==25.){o.a=vec3(0.05);o.r=0.35;}
+ else if(id==26.){float nz=noise(p*14.)*0.5+noise(p*45.)*0.5;o.a=lin(vec3(0.94,0.9,0.8))*(0.86+0.14*nz);o.r=0.85;}
  return o;}
 
 /* ---------- light ---------- */

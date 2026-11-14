@@ -5,8 +5,8 @@
 (function () {
   'use strict';
   /* one saved demo per app, so two demo builds on the same web address keep their own data */
-  /* SEED goes up when the sample data changes (v2: part pictures), so every phone starts again from the new data */
-  const CONF = window.SPARAT_CONFIG || {}, SEED = 2, SUFFIX = CONF.mode === 'company' ? '_' + String(CONF.appName || 'co').toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
+  /* SEED goes up when the sample data changes (v2: part pictures, v3: the air filter itself), so every phone starts again from the new data */
+  const CONF = window.SPARAT_CONFIG || {}, SEED = 3, SUFFIX = CONF.mode === 'company' ? '_' + String(CONF.appName || 'co').toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
   const KEY = 'sp_demo_db_v' + SEED + SUFFIX;
   try { for (let v = 1; v < SEED; v++) { localStorage.removeItem('sp_demo_db_v' + v + SUFFIX); localStorage.removeItem('sp_demo_db_v' + v + SUFFIX + '_session'); } } catch (e) { /* no storage */ }
   const CATS = ['engine', 'brakes', 'suspension', 'electrical', 'lights', 'body', 'oils', 'cooling', 'ac', 'transmission', 'tires', 'interior', 'other'];

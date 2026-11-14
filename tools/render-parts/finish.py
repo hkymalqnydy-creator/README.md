@@ -9,7 +9,7 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAMES = ['brake-pads', 'oil-filter', 'rear-shocks', 'front-strut', 'radiator', 'headlight', 'tail-lamp', 'ac-compressor',
-         'clutch-kit', 'spark-plugs', 'engine-oil', 'battery']
+         'clutch-kit', 'spark-plugs', 'engine-oil', 'battery', 'air-filter']
 OUT = os.path.join(HERE, '..', '..', 'img', 'parts')
 os.makedirs(OUT, exist_ok=True)
 for i, n in enumerate(NAMES):

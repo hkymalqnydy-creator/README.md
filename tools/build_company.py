@@ -114,6 +114,9 @@ def main():
         for x in json.loads(read(a.demo_extra)):
             imgs = []
             for rel in x.get('imgs', []):
+                if rel.startswith('img/'):                      # one of the app's own pictures
+                    imgs.append(rel)
+                    continue
                 dst = 'img/demo/' + os.path.basename(rel)
                 copy(os.path.join(base, rel), os.path.join(out, dst))
                 imgs.append(dst)

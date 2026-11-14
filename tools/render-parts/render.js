@@ -16,6 +16,7 @@ const SHOTS = {
   9: { tgt: [0, 0.9, 0], az: 0.35, el: 0.55, d: 36, fov: 30, name: 'spark-plugs' },
   10: { tgt: [0, 13, 0], az: 0.3, el: 0.25, d: 74, fov: 30, name: 'engine-oil' },
   11: { tgt: [0, 9, 0], az: 0.35, el: 0.38, d: 74, fov: 30, name: 'battery' },
+  12: { tgt: [0, 2.2, 0], az: 0.3, el: 0.72, d: 58, fov: 30, name: 'air-filter' },
 };
 const over = fs.existsSync(path.join(__dirname, 'shots.json')) ? JSON.parse(fs.readFileSync(path.join(__dirname, 'shots.json'))) : {};
 (async () => {
