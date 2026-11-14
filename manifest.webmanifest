@@ -1,0 +1,25 @@
+{
+  "id": "./",
+  "name": "سبيرات · Sparat",
+  "short_name": "سبيرات",
+  "description": "محلات قطع غيار السيارات في بلدك في تطبيق واحد. Car spare parts shops in your country, in one app.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#15181d",
+  "theme_color": "#15181d",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["shopping", "business", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "رقم الشاصي (VIN)", "short_name": "VIN", "url": "./#vin", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "محلي", "short_name": "محلي", "url": "./#mine", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
