@@ -59,9 +59,10 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('#grid .card-link'); await see('#padd'); await page.click('#padd'); await page.waitForTimeout(200);
     must(await text('.cartbtn .badge').catch(() => '') !== '' || true, 'badge'); await go('cart'); await see('.crow');
     await page.click('.crow [data-d="1"]'); await page.waitForTimeout(150); must((await text('.crow .stepper b')) === '2', 'qty 2');
-    await page.evaluate(() => { window.__opened = []; window.open = u => { window.__opened.push(u); return null; }; });
-    await page.fill('#on', 'زبون'); await page.click('#ogo'); const opened = await page.evaluate(() => window.__opened[0] || '');
-    must(opened.includes('wa.me/218912345678') && decodeURIComponent(opened).includes('× 2'), 'order on whatsapp: ' + opened.slice(0, 80)); log('basket sends the order to the company WhatsApp');
+    // a real link (not window.open), so it also works inside the Claude app's page frame; it follows the form as it is typed
+    await page.fill('#on', 'زبون'); const opened = (await page.getAttribute('#ogo', 'href')) || '';
+    must(opened.includes('wa.me/218912345678') && decodeURIComponent(opened).includes('× 2') && decodeURIComponent(opened).includes('زبون'), 'order on whatsapp: ' + opened.slice(0, 80));
+    must((await page.getAttribute('#ogo', 'target')) === '_blank', 'order link opens outside'); log('basket sends the order to the company WhatsApp');
     await shot('03-cart');
 
     await go('mine'); await see('.onb a[href="#signup"]'); await page.click('.onb a[href="#signup"]'); await see('#anm');
@@ -117,6 +118,8 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.fill('#pcn', 'زبون كاش'); await page.click('#psave'); await page.waitForURL(/#inv-/); await see('.inv-no b');
     const after = await page.evaluate(() => window.__mockdb.products.find(p => p.sku === 'KI-26300').qty);
     must(after === before - 2 && (await text('.inv-tot .big dd')).includes('50'), 'stock and total ' + before + '->' + after); log('salesperson sold 2 oil filters: invoice ' + await text('.inv-no b') + ', stock ' + before + ' → ' + after);
+    const ish = (await page.getAttribute('#ish', 'href')) || ''; must(ish.startsWith('https://wa.me/') && decodeURIComponent(ish).includes('×'), 'invoice whatsapp link ' + ish.slice(0, 60));
+    must(await page.locator('button[onclick="window.print()"]').count() === 2, 'print buttons in the browser edition');
     await shot('09-invoice');
     await go('reports'); await see('.empty'); log('salesperson cannot open reports');
     await go('pos'); await page.fill('#pq', 'KI-26300'); await page.press('#pq', 'Enter'); await see('.pline');

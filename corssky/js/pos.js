@@ -216,8 +216,15 @@
     if (!SP.alive(n)) return;
     if (!inv) return shell(bar(t('invList')) + `<main class="wrap">${empty('lock', t('noPermT'), t('errPerm'))}</main>`);
     const st = S.settings || {}, cur = inv.currency, br = inv.branch || {}, app = st.brand_name || SP.CFG.appName || t('app');
+    /* printing needs the browser (the Claude app's page frame cannot print); WhatsApp is a real link, which works everywhere */
+    const canPrint = !SP.CFG.embedded;
+    const waHref = v => {
+      const items = (v.items || []).map(it => `• ${it.title} × ${it.qty} = ${money(it.line_total, cur)}`).join('\n');
+      const text = t('invMsg', { n: v.no, app, items, t: money(v.total, cur) });
+      return SP.waLink(v.customer_phone, text, S.country) || 'https://wa.me/?text=' + encodeURIComponent(text);
+    };
     const draw = v => {
-      shell(bar(t('invT', { n: v.no }), `<button type="button" class="iconbtn" onclick="window.print()" aria-label="${esc(t('invPrint'))}">${I('copy')}</button>`) + `<main class="wrap invoice-wrap">
+      shell(bar(t('invT', { n: v.no }), canPrint ? `<button type="button" class="iconbtn" onclick="window.print()" aria-label="${esc(t('invPrint'))}">${I('copy')}</button>` : '') + `<main class="wrap invoice-wrap">
         <article class="invoice${v.status === 'returned' ? ' returned' : ''}" id="invoice">
           <header class="inv-head">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : `<span class="brand-mark">${I('nut')}</span>`}<div><b>${esc(app)}</b><small>${esc([br.name, br.city, br.phone ? SP.prettyPhone(br.phone, S.country) : ''].filter(Boolean).join(' · '))}</small></div>
             <div class="inv-no"><small>${esc(t('invT', { n: '' }).trim())}</small><b class="num">${esc(v.no)}</b></div></header>
@@ -230,16 +237,10 @@
             <div class="big"><dt>${esc(t('posTotal'))}</dt><dd class="num">${esc(money(v.total, cur))}</dd></div>
             ${v.payment === 'credit' ? `<div><dt>${esc(t('posPaid'))}</dt><dd class="num">${esc(money(v.paid, cur))}</dd></div><div><dt>${esc(t('posRemain'))}</dt><dd class="num">${esc(money(v.total - v.paid, cur))}</dd></div>` : ''}</dl>
           ${v.note ? `<p class="inv-note">${esc(v.note)}</p>` : ''}</article>
-        <div class="form-actions noprint"><button type="button" class="btn btn-ink" onclick="window.print()">${I('copy')} ${esc(t('invPrint'))}</button>
-          <button type="button" class="btn btn-wa" id="ish">${I('chat')} ${esc(t('invShare'))}</button>
+        <div class="form-actions noprint">${canPrint ? `<button type="button" class="btn btn-ink" onclick="window.print()">${I('copy')} ${esc(t('invPrint'))}</button>` : ''}
+          <a class="btn btn-wa" id="ish" href="${esc(waHref(v))}" target="_blank" rel="noopener">${I('chat')} ${esc(t('invShare'))}</a>
           ${SP.can('returns') && v.status === 'done' ? `<button type="button" class="btn btn-danger" id="iret">${I('back', 'dirx')} ${esc(t('invReturn'))}</button>` : ''}
           ${SP.can('sales') ? `<a class="btn btn-ghost" href="#pos">${I('plus')} ${esc(t('posClear'))}</a>` : ''}</div></main>`);
-      $('#ish').onclick = () => {
-        const items = (v.items || []).map(it => `• ${it.title} × ${it.qty} = ${money(it.line_total, cur)}`).join('\n');
-        const text = t('invMsg', { n: v.no, app, items, t: money(v.total, cur) });
-        const w = SP.waLink(v.customer_phone, text, S.country) || 'https://wa.me/?text=' + encodeURIComponent(text);
-        window.open(w, '_blank', 'noopener');
-      };
       if ($('#iret')) $('#iret').onclick = async () => {
         if (!await SP.confirmSheet({ title: t('invReturn'), body: t('invReturnQ'), ok: t('invReturn'), danger: true })) return;
         try { const r = await P.ret(v.id); SP.toast(t('invReturnDone')); draw(r); } catch (e) { SP.toast(posErr(e)); }
@@ -285,9 +286,7 @@
         for (let off = 0; off < 5000; off += 100) { const r = await P.list({ ...args(off), p_limit: 100 }); all.push(...r.items); if (r.items.length < 100) break; }
         const cell = v => { const s = v == null ? '' : String(v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
         const lines = ['no,date,branch,staff,customer,phone,payment,subtotal,discount,total,paid,status'].concat(all.map(v => [v.no, v.created_at, v.branch_name, v.staff_name, v.customer_name, v.customer_phone, v.payment, v.subtotal, v.discount, v.total, v.paid, v.status].map(cell).join(',')));
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-        a.download = 'invoices-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 1500);
+        await SP.saveFile('invoices-' + new Date().toISOString().slice(0, 10) + '.csv', lines.join('\r\n'));
       } catch (e) { SP.toast(SP.errText(e)); } finally { b.classList.remove('busy'); }
     };
     SP.done(n);

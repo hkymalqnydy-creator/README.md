@@ -188,7 +188,7 @@
           <div class="field"><label for="op">${esc(t('phoneNum'))}</label><input id="op" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(c.phone || '')}"></div></div>
           <div class="field"><label for="ox">${esc(t('cartNote'))}</label><textarea id="ox" class="input" maxlength="500" placeholder="${esc(t('cartNotePh'))}"></textarea></div>
           <p class="form-err" id="oerr" role="alert"></p>
-          <div class="form-actions"><button class="btn btn-wa" id="ogo">${I('chat')} ${esc(t('sendOrder'))}</button><button type="button" class="btn btn-ghost" id="oclr">${I('trash')} ${esc(t('clearCart'))}</button></div></form>`;
+          <div class="form-actions"><a class="btn btn-wa" id="ogo" href="#cart" target="_blank" rel="noopener">${I('chat')} ${esc(t('sendOrder'))}</a><button type="button" class="btn btn-ghost" id="oclr">${I('trash')} ${esc(t('clearCart'))}</button></div></form>`;
       $('#cl').onclick = e => {
         const b = e.target.closest('[data-d]');
         if (!b) return;
@@ -197,10 +197,11 @@
         draw();
       };
       $('#oclr').onclick = () => { SP.cart.clear(); SP.toast(t('cartCleared')); SP.render(); };
-      $('#of').onsubmit = e => {
-        e.preventDefault();
+      /* A real link rather than window.open: it opens WhatsApp from Safari, from the installed app and from the
+         in-app page alike (the Claude app's page frame does not allow window.open). It follows the form as it is typed. */
+      function orderLink() {
         const num = contactNum();
-        if (!SP.waNum(num, S.country)) { $('#oerr').textContent = t('noCompanyWa'); return; }
+        if (!SP.waNum(num, S.country)) return '';
         const lines = [t('orderMsg'), ''];
         list.forEach((i, k) => lines.push(`${k + 1}. ${i.p.title}${i.p.part_no || i.p.sku ? ' [' + (i.p.part_no || i.p.sku) + ']' : ''} × ${i.qty}${i.p.price != null ? ' — ' + SP.priceText(i.p.price, cur) : ''}`));
         if (allPriced && total) lines.push('', t('orderTotal', { t: SP.priceText(total, cur) }));
@@ -210,8 +211,12 @@
         if (ph) lines.push(t('orderPhone', { p: ph }));
         if (S.car) lines.push(t('waCar', { car: SP.carText(S.car) }).trim() + (S.car.vin ? t('vinMsg', { v: S.car.vin }) : ''));
         if (note) lines.push(t('orderNote', { x: note }));
-        window.open(SP.waLink(num, lines.join('\n'), S.country), '_blank', 'noopener');
-      };
+        return SP.waLink(num, lines.join('\n'), S.country);
+      }
+      const link = () => { $('#ogo').setAttribute('href', orderLink() || '#cart'); };
+      $('#of').oninput = link; link();
+      $('#ogo').onclick = e => { if (!orderLink()) { e.preventDefault(); $('#oerr').textContent = t('noCompanyWa'); } };
+      $('#of').onsubmit = e => { e.preventDefault(); $('#ogo').click(); };
     }
     draw();
     SP.done(n);
@@ -455,6 +460,7 @@
   }
   async function readSheet(file) {
     if (/\.(xlsx|xls|xlsm|ods)$/i.test(file.name)) {
+      if (CFG.embedded) throw Object.assign(new Error('xlsx in the in-app page'), { userMsg: t('xlsxEmbedded') });
       const X = await loadXLSX(), wb = X.read(await file.arrayBuffer());
       return X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
     }
@@ -504,12 +510,7 @@
     }).filter(o => o.sku);
   }
   const csvCell = v => { const s = v == null ? '' : String(v); return /[",\n\r;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  function download(name, text) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
-    a.download = name; document.body.appendChild(a); a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
-  }
+  const download = (name, text) => SP.saveFile(name, text);
   SP.route(/^admin-sync$/, async (m, n) => {
     if (gate(n) || !adminGuard(n)) return;
     const base = (CFG.supabaseUrl || 'https://YOUR-PROJECT.supabase.co').replace(/\/$/, '');
@@ -552,7 +553,7 @@ Content-Type: application/json
         }
         stat.innerHTML = `${esc(t('importCols', { c: names.join('، ') }))}<br><b>${esc(t('importDone', { i: sum.inserted, u: sum.updated, s: sum.skipped, e: sum.errors }))}</b>`;
         S.myShops = null; S.pcache.clear();
-      } catch (x) { stat.textContent = SP.errText(x); }
+      } catch (x) { stat.textContent = (x && x.userMsg) || SP.errText(x); }
     };
     $('#exp').onclick = async () => {
       const b = $('#exp'); b.classList.add('busy');

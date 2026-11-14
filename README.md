@@ -63,6 +63,7 @@ python3 tools/build_company.py --name Corssky --email owner@corssky.ly --brand b
 | `supabase/functions/scan-invoice` | قراءة فواتير الموردين بالذكاء الاصطناعي (اختياري) |
 | `tools/sync` | برنامج ربط منظومة المبيعات (Python) |
 | `tools/build_company.py`, `branding/` | بناء نسخة شركة باسمها وأيقوناتها |
+| `tools/build_artifact.py` | نسخة تجريبية تفتح كصفحة داخل تطبيق Claude |
 | `tests/` | اختبارات قاعدة البيانات والمتصفح ودالة القراءة |
 | `privacy.html` | سياسة الخصوصية (تطلبها المتاجر) |
 

@@ -214,12 +214,36 @@
 
   /* ---------- backend (Supabase) ---------- */
   let sb = null;
-  function initBackend() {
+  /* The database library loads only when a server is set (the demo never needs it), and gives up after a while,
+     so a slow or blocked connection shows the retry screen instead of holding the app on its splash screen. */
+  const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.97.0';
+  const scripts = {};
+  function loadScript(src, ms = 20000) {
+    if (!scripts[src]) scripts[src] = new Promise((ok, no) => {
+      const el = document.createElement('script');
+      let tm = 0;
+      const end = (fail, why) => {
+        clearTimeout(tm); el.onload = el.onerror = null;
+        if (!fail) return ok();
+        delete scripts[src];
+        no(Object.assign(new Error(why + ': ' + src), { timeout: why === 'timeout' }));
+      };
+      el.src = src; el.async = true;
+      el.onload = () => end(false); el.onerror = () => { el.remove(); end(true, 'load failed'); };
+      tm = setTimeout(() => end(true, 'timeout'), ms);
+      document.head.appendChild(el);
+    });
+    return scripts[src];
+  }
+  async function initBackend() {
     if (!CFG.supabaseUrl || !CFG.supabaseKey) {
       if (CFG.demo && window.SPARAT_DEMO) { sb = SP.sb = window.SPARAT_DEMO.create({ seed: true, persist: true }); SP.demo = true; return ''; }
       return 'config';
     }
-    if (!window.supabase || typeof window.supabase.createClient !== 'function') return 'lib';
+    if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+      try { await loadScript(SUPABASE_JS); } catch (e) { console.warn(e.message); }
+      if (!window.supabase || typeof window.supabase.createClient !== 'function') return 'lib';
+    }
     sb = SP.sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
       auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
     });
@@ -499,11 +523,23 @@
     return !!(r && r.outcome === 'accepted');
   }
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const standalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  /* the in-app page edition (CFG.embedded) runs inside the Claude app: nothing to install */
+  const standalone = () => !!CFG.embedded || (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
   if ('serviceWorker' in navigator && location.protocol === 'https:' && !CFG.noServiceWorker) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { /* app works without offline cache */ }));
   }
   window.addEventListener('offline', () => toast(t('offlineToast')));
+
+  /* ---------- files ---------- */
+  /* Offers a generated text file to the user (a CSV gets a byte-order mark, so Excel shows Arabic correctly).
+     The in-app page edition swaps in the Claude app's save sheet (js/embed.js). Resolves true when handed over. */
+  async function saveFile(name, text) {
+    const csv = /\.csv$/i.test(name), a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([(csv ? '\uFEFF' : '') + text], { type: (csv ? 'text/csv' : 'text/plain') + ';charset=utf-8' }));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    return true;
+  }
 
   /* ---------- boot ---------- */
   async function boot() {
@@ -512,7 +548,7 @@
     S.city = load('sp_city', '') || '';
     S.car = load('sp_car', null);
     S.favs = new Set(arr(load('sp_favs', [])));
-    S.err = initBackend();
+    S.err = await initBackend();
     window.addEventListener('hashchange', render);
     if (!S.err) {
       try { const r = await sb.auth.getSession(); await refreshUser(r && r.data && r.data.session); } catch (e) { /* signed out */ }
@@ -542,6 +578,6 @@
     brandName, modelObj, modelName, carText, catName, condName, fitText, fitsCar, waNum, waLink, telHref, prettyPhone,
     setCountry, setCity, setCar, toggleFav, toast, openSheet, confirmSheet, errText, api, auth, refreshUser, searchArgs, queryParts, searchText,
     hiddenLabel, brandsList, popularIds, applyBranding, cart, company: CFG.mode === 'company',
-    uploadPhoto, removePhotos, thumbUrl, imgTag, route, render, go, here, alive, done, install, isIOS, standalone, boot, siteUrl
+    uploadPhoto, removePhotos, thumbUrl, imgTag, route, render, go, here, alive, done, install, isIOS, standalone, boot, siteUrl, loadScript, saveFile
   });
 })();

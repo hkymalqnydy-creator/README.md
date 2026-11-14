@@ -214,7 +214,8 @@
       } catch (x) { msg.textContent = t(x && x.offline ? 'rcvOffline' : 'scanNotFound'); }
     };
     (async () => {
-      if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || window.isSecureContext === false) { noCam(t('scanNoCam')); return; }
+      /* the Claude app's page frame has no camera: go straight to the photo and typing options */
+      if (CFG.embedded || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || window.isSecureContext === false) { noCam(t('scanNoCam')); return; }
       try {
         eng = await engine();
         if (closed) return;
@@ -299,10 +300,12 @@
   const noAi = () => { try { return sessionStorage.getItem(NOAI) === '1'; } catch (e) { return false; } };
   const aiReady = () => !SP.demo && !!(SP.sb && SP.sb.functions) && CFG.aiScan !== false && !noAi();
   /* 1) the company's AI reader (Supabase function "scan-invoice"; needs an Anthropic API key on the server);
-     2) otherwise text recognition on this device (Tesseract), then the best-effort parse above. */
+     2) otherwise text recognition on this device (Tesseract), then the best-effort parse above.
+     SP.invoiceEngine(file, progress), when set, replaces both (the in-app page edition reads with Claude: js/embed.js). */
   SP.readInvoice = async (file, progress) => {
     const say = progress || (() => {});
     if (window.SP_SCAN_ENGINE) return window.SP_SCAN_ENGINE(file, say);
+    if (typeof SP.invoiceEngine === 'function') return SP.invoiceEngine(file, say);
     if (aiReady()) {
       try {
         say('ai');
@@ -456,7 +459,7 @@
           <small>${esc(items.length ? t(r.engine === 'ai' ? 'rcvReadAi' : 'rcvReadLocal', { n: items.length }) : t('rcvReadNone'))}</small></span></div>`;
         await checkAll(added);
       } catch (x) {
-        if (SP.alive(n)) box.innerHTML = `<div class="readcard warn"><img src="${url}" alt=""><span class="ar-main"><b>${esc(t('rcvFromPhoto'))}</b><small>${esc(x && x.offline ? t('rcvOffline') : t('rcvReadFail', { e: SP.errText(x) }))}</small></span></div>`;
+        if (SP.alive(n)) box.innerHTML = `<div class="readcard warn"><img src="${url}" alt=""><span class="ar-main"><b>${esc(t('rcvFromPhoto'))}</b><small>${esc(x && x.userMsg ? x.userMsg : x && x.offline ? t('rcvOffline') : t('rcvReadFail', { e: SP.errText(x) }))}</small></span></div>`;
       } finally { const b = $('#rphoto'); if (b) b.classList.remove('busy'); }
     };
 
