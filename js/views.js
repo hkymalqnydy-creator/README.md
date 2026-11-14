@@ -382,7 +382,7 @@
           <div class="cats">${D.CATS.slice(0, 7).map(c => `<a class="cat" ${sf({ cat: c.id })}><span class="hex">${I(c.icon)}</span><span>${esc(SP.catName(c.id, true))}</span></a>`).join('')}
           <a class="cat" href="#cats"><span class="hex dark">${I('grid')}</span><span>${esc(t('allCats'))}</span></a></div></section>
         <section class="sec"><div class="sec-h"><h2>${esc(t('brands'))}</h2><a class="more" href="#brands">${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div>
-          <div class="hscroll">${brands.map(b => `<a class="btile" href="#b-${b.id}"><span class="fl" aria-hidden="true">${SP.flag(b.origin)}</span><span>${esc(SP.brandName(b.id))}</span></a>`).join('')}</div></section>
+          <div class="hscroll">${brands.map(b => `<a class="btile" href="#b-${b.id}">${SP.brandMark(b.id)}<span>${esc(SP.brandName(b.id))}</span></a>`).join('')}</div></section>
         ${car ? `<section class="sec"><div class="sec-h"><h2>${esc(t('fitsYourCar'))} <small>${esc(SP.carText(car))}</small></h2><a class="more" ${sf({ fit: true })}>${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div><div class="grid" id="gfit">${skel(4)}</div></section>` : ''}
         <section class="sec"><div class="sec-h"><h2>${esc(t('newArrivals'))}</h2><a class="more" ${sf({})}>${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div><div class="grid" id="gnew">${skel(8)}</div></section>
         <section class="sec" id="secshops"${SP.hideBranches && SP.hideBranches() ? ' hidden' : ''}><div class="sec-h"><h2>${esc(t('shops'))}</h2><a class="more" href="#shops">${esc(t('allShops'))} ${I('chevL', 'dirx')}</a></div><div class="hscroll" id="hshops"></div></section>
@@ -613,7 +613,7 @@
     const total = ALL.reduce((k, b) => k + b.models.length, 0);
     const pop = P.map(id => BRAND.get(id)).filter(Boolean);
     const rest = ALL.filter(b => !P.includes(b.id)).sort((a, b) => SP.brandName(a.id).localeCompare(SP.brandName(b.id), SP.LANG));
-    const row = b => `<a class="catrow" href="#b-${b.id}" data-k="${esc(SP.norm(b.en + ' ' + b.ar + ' ' + b.id))}"><span class="hex bfl"><span aria-hidden="true">${SP.flag(b.origin)}</span></span><span class="cr-name">${esc(SP.brandName(b.id))}${SP.LANG === 'ar' ? ` <small class="ltr">${esc(b.en)}</small>` : ''}</span><span class="cr-n">${esc(t('modelsN', { n: SP.fmtNum(b.models.length) }))}</span>${I('chevL', 'dirx')}</a>`;
+    const row = b => `<a class="catrow" href="#b-${b.id}" data-k="${esc(SP.norm(b.en + ' ' + b.ar + ' ' + b.id))}">${SP.brandMark(b.id)}<span class="cr-name">${esc(SP.brandName(b.id))}${SP.LANG === 'ar' ? ` <small class="ltr">${esc(b.en)}</small>` : ''}</span><span class="cr-n">${esc(t('modelsN', { n: SP.fmtNum(b.models.length) }))}</span>${I('chevL', 'dirx')}</a>`;
     shell(bar(t('allBrandsT')) + `<main class="wrap"><p class="muted-p" style="margin-top:14px">${esc(t('brandsSub', { b: SP.fmtNum(ALL.length), m: SP.fmtNum(total) }))}</p>
       <form class="searchbox flat" id="bq" role="search" style="margin-top:12px">${I('search')}<input type="search" placeholder="${esc(t('searchBrand'))}" aria-label="${esc(t('searchBrand'))}"></form>
       <h2 class="lbl optg">${esc(t('popularBrands'))}</h2><div class="catlist bl">${pop.map(row).join('')}</div>
@@ -630,7 +630,7 @@
     const b = BRAND.get(m[1]);
     if (!b) { SP.go('brands'); return; }
     const row = x => `<a class="catrow" ${sf({ make: b.id, model: x.en })} data-k="${esc(SP.norm(x.en + ' ' + (x.ar || '')))}"><span class="cr-name">${esc(SP.LANG === 'ar' && x.ar ? x.ar : x.en)}${SP.LANG === 'ar' && x.ar && x.ar !== x.en ? ` <small class="ltr">${esc(x.en)}</small>` : ''}</span><span class="cr-n num">${x.from}–${x.to}</span>${I('chevL', 'dirx')}</a>`;
-    shell(bar(SP.brandName(b.id)) + `<main class="wrap"><div class="bhead"><span class="bflag" aria-hidden="true">${SP.flag(b.origin)}</span><span><b>${esc(SP.brandName(b.id))}</b><small>${esc(t('madeIn', { c: SP.countryName(b.origin) }))} · ${esc(t('modelsN', { n: SP.fmtNum(b.models.length) }))}</small></span></div>
+    shell(bar(SP.brandName(b.id)) + `<main class="wrap"><div class="bhead">${SP.brandMark(b.id)}<span><b>${esc(SP.brandName(b.id))}</b><small>${esc(t('madeIn', { c: SP.countryName(b.origin) }))} · ${esc(t('modelsN', { n: SP.fmtNum(b.models.length) }))}</small></span></div>
       <div class="mactions"><a class="btn btn-signal" ${sf({ make: b.id })}>${I('search')} ${esc(t('partsFor', { b: SP.brandName(b.id) }))}</a><a class="btn btn-ghost" href="#shops" id="bshops">${I('store')} ${esc(t('shops'))}</a></div>
       <h2 class="lbl optg">${esc(t('modelsOf', { b: SP.brandName(b.id) }))}</h2>
       <form class="searchbox flat" id="mq" role="search">${I('search')}<input type="search" placeholder="${esc(t('searchModel'))}" aria-label="${esc(t('searchModel'))}"></form>
@@ -659,7 +659,7 @@
     add('vinDrive', sp.drive);
     add('vinTrans', sp.transKey ? (sp.transKey.startsWith('trans') ? t(sp.transKey) : sp.transKey) : sp.trans);
     add('vinPlant', [sp.plantCity, sp.plantCountry].filter(Boolean).join(', '));
-    return `<section class="vincard"><div class="vin-head"><span class="bflag" aria-hidden="true">${SP.flag(r.country)}</span><span><b>${esc([bn, model, r.year].filter(Boolean).join(' '))}</b><small class="ltr mono">${esc(r.vin)}</small></span></div>
+    return `<section class="vincard"><div class="vin-head">${r.brandId ? SP.brandMark(r.brandId) : `<span class="bflag" aria-hidden="true">${SP.flag(r.country)}</span>`}<span><b>${esc([bn, model, r.year].filter(Boolean).join(' '))}</b><small class="ltr mono">${esc(r.vin)}</small></span></div>
       <dl class="specs">${rows.join('')}</dl><div class="banner ${kind}">${I(kind === 'warn' ? 'warn' : 'info')}<span>${esc(note)}</span></div>
       ${r.brandId ? `<div class="sheet-actions"><button type="button" class="btn btn-signal" id="vuse">${I('car')} ${esc(t('vinUse'))}</button><a class="btn btn-ghost" ${sf({ fit: true })} id="vparts">${I('search')} ${esc(t('vinParts'))}</a></div>` : ''}</section>`;
   }

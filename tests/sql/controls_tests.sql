@@ -174,6 +174,14 @@ select 'K54 one person: everything the staff member did, and both people listed'
   jsonb_array_length(r->'actors') >= 2 people
 from public.list_activity(p_actor => '77777777-7777-7777-7777-777777777777') r;
 select 'K55 a word finds the supplier' t, (r->>'total')::integer receipts from public.list_activity(p_q => 'مورد التراجع') r;
+-- a logo picture per brand
+update public.settings set brand_logos = '{"kia": "https://example.test/storage/v1/object/public/photos/u/kia.jpg"}'::jsonb where id = 1;
+select 'K58 brand logos saved; the log names the setting without copying the pictures (expect kia, brand_logos, no change values)' t,
+  (select string_agg(k, ',') from jsonb_object_keys((select brand_logos from public.settings where id = 1)) k) brands,
+  (select title from public.activity_log where kind = 'settings' order by id desc limit 1) setting,
+  (select detail->'changes' ? 'brand_logos' from public.activity_log where kind = 'settings' order by id desc limit 1) copied;
+\echo K59 expect violates check constraint (a list is not a map of brands):
+update public.settings set brand_logos = '["kia"]'::jsonb where id = 1;
 \echo K56 expect permission denied (the owner cannot rewrite the log either):
 update public.activity_log set title = 'x';
 \echo K57 expect permission denied (nor delete it):

@@ -10,7 +10,7 @@
 6. `pos_tests.sql` (P1…P21) — منظومة المبيعات والصلاحيات / sales system and staff permissions
 7. `receive_tests.sql` (R1…R14) — استلام البضاعة والباركود / receiving stock and barcodes
 8. `books_tests.sql` (B1…B37) — المخزن، ديون الزبائن والموردين، المصروفات، الأرباح والخسائر / stock, customer and supplier debts, expenses, profit and loss
-9. `controls_tests.sql` (K1…K57) — سجل الحركة، حد التخفيض، البيع تحت التكلفة، إخفاء الكميات، الأسعار بالجملة، إلغاء الاستلام / activity log, discount limits, selling below cost, hidden quantities, bulk prices, taking a receipt back
+9. `controls_tests.sql` (K1…K59) — سجل الحركة، حد التخفيض، البيع تحت التكلفة، إخفاء الكميات، الأسعار بالجملة، إلغاء الاستلام / activity log, discount limits, selling below cost, hidden quantities, bulk prices, taking a receipt back
 
 كل سطر نتيجة يبدأ برقم الاختبار، والأخطاء المتوقعة مكتوبة قبلها (expect …). / Each result line starts with its test number; expected errors are announced just before them.
 

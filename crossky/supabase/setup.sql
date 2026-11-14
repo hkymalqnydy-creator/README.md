@@ -466,6 +466,8 @@ alter table public.settings add column if not exists address        text    not 
 alter table public.settings add column if not exists open_signup    boolean not null default true;
 alter table public.settings add column if not exists orders_enabled boolean not null default false;
 alter table public.settings add column if not exists brands         text[]  not null default '{}';
+-- the logo picture the company uploaded for a brand, by brand id ({"kia": "https://…/photos/…jpg"}); shown instead of the brand's initials
+alter table public.settings add column if not exists brand_logos    jsonb   not null default '{}'::jsonb check (jsonb_typeof(brand_logos) = 'object' and octet_length(brand_logos::text) <= 40000);
 -- الرد الآلي: رسالة الترحيب وقواعد «كلمات ← رد» يكتبها المالك
 alter table public.settings add column if not exists bot_enabled    boolean not null default true;
 alter table public.settings add column if not exists bot_welcome    text    not null default '' check (char_length(bot_welcome) <= 400);
@@ -1433,7 +1435,7 @@ create trigger products_log after insert or update or delete on public.products 
 create or replace function public.settings_log() returns trigger language plpgsql security definer set search_path = public as $$
 declare v_keys text[]; v_ch jsonb;
 begin
-  select array_agg(n.key order by n.key), jsonb_object_agg(n.key, case when n.key in ('about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'hero_sub') then null else jsonb_build_array(o.value, n.value) end)
+  select array_agg(n.key order by n.key), jsonb_object_agg(n.key, case when n.key in ('about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub') then null else jsonb_build_array(o.value, n.value) end)
   into v_keys, v_ch
   from jsonb_each(to_jsonb(new)) n join jsonb_each(to_jsonb(old)) o using (key)
   where n.value is distinct from o.value and n.key <> 'updated_at';

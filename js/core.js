@@ -108,6 +108,34 @@
     const b = BRAND.get(id);
     return b ? (LANG === 'ar' ? b.ar : b.en) : id;
   };
+  /* A brand's mark, shown where the country flag used to be: the logo the company uploaded for it (settings.brand_logos,
+     or the map given while editing), otherwise the brand's initials on a hexagon in one of the app's own tones. */
+  const MARK_TONES = ['#2f54e6', '#1b2a6b', '#0e7c86', '#6b3fa0', '#3b4566', '#1f6f43', '#24539c', '#4a3a8c'];
+  function brandInitials(b) {
+    const en = String(b.en || b.id || '').split(' / ')[0].replace(/\(.*?\)/g, '').trim();
+    if (/^[A-Z0-9]{2,4}$/.test(en)) return en;
+    const w = en.split(/[\s\-&]+/).filter(x => /^\p{L}/u.test(x));
+    return (w.length > 1 ? w[0][0] + w[1][0] : (w[0] || en || '?')[0]).toUpperCase();
+  }
+  function brandMark(id, logos) {
+    const b = BRAND.get(id);
+    if (!b) return '';
+    const map = logos || (S.settings && S.settings.brand_logos) || {}, logo = typeof map[id] === 'string' ? map[id] : '';
+    if (logo) return `<span class="bmark img" aria-hidden="true"><img src="${esc(logo)}" alt="" decoding="async"></span>`;
+    const ini = brandInitials(b);
+    return `<span class="bmark${ini.length === 3 ? ' sm' : ini.length > 3 ? ' xs' : ''}" style="--bm:${MARK_TONES[toneOf(id)]}" aria-hidden="true">${esc(ini)}</span>`;
+  }
+  /* each brand keeps one tone; brands with the same initials (Honda, Hyundai) get different tones */
+  let markTone = null;
+  function toneOf(id) {
+    if (!markTone) {
+      markTone = new Map(); const seen = {};
+      BRAND.forEach(b => { const k = brandInitials(b), n = seen[k] = (seen[k] || 0) + 1; let h = 0;
+        for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+        markTone.set(b.id, (h + n - 1) % MARK_TONES.length); });
+    }
+    return markTone.get(id) || 0;
+  }
   const modelObj = (make, model) => { const b = BRAND.get(make); return b && model ? b.models.find(m => m.en === model) || null : null; };
   const modelName = (make, model) => { if (!model) return ''; const m = modelObj(make, model); return m ? (LANG === 'ar' && m.ar ? m.ar : m.en) : model; };
   const carText = c => c && c.make ? [brandName(c.make), modelName(c.make, c.model), c.year].filter(Boolean).join(' ') : '';
@@ -585,7 +613,7 @@
   Object.assign(SP, {
     $, $$, esc, sleep, arr, uid, debounce, load, store, digits, norm, opt,
     COUNTRY, BRAND, flag, currencyOf, dialOf, setLang, t, fmtNum, plural, count, countryName, priceHTML, priceText, ago,
-    brandName, modelObj, modelName, carText, catName, condName, fitText, fitsCar, waNum, waLink, telHref, prettyPhone,
+    brandName, brandMark, modelObj, modelName, carText, catName, condName, fitText, fitsCar, waNum, waLink, telHref, prettyPhone,
     setCountry, setCity, setCar, toggleFav, toast, openSheet, confirmSheet, errText, api, auth, refreshUser, searchArgs, queryParts, searchText,
     hiddenLabel, brandsList, popularIds, applyBranding, cart, company: CFG.mode === 'company',
     uploadPhoto, removePhotos, thumbUrl, imgTag, route, render, go, here, alive, done, install, isIOS, standalone, boot, siteUrl, loadScript, saveFile

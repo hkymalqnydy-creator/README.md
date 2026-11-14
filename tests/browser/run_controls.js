@@ -174,6 +174,20 @@ const log = s => console.log(`${++step}. ${s}`);
     await go('admin-company'); await see('#csf'); must(await page.locator('#cpm').count() === 0 && await page.locator('a[href="#admin-control"]').count() > 0, 'price visibility moved to Controls');
     log('company settings point to Controls for price visibility, orders and sign-up');
 
+    // ----- brand marks instead of flags, and a logo picture the company uploads for a brand -----
+    must(await page.locator('#blg .blogo').count() >= 10 && (await text('#blg .blogo[data-id="kia"] .bmark')) === 'K', 'a tile per brand shown, with its initials');
+    await page.setInputFiles('#blg input[data-up="kia"]', path.join(SITE, 'icons/icon-192.png')); await see('#blg .blogo[data-id="kia"] .bmark.img img');
+    await page.click('#cgo'); await page.waitForTimeout(500);
+    must(/^data:image\/|^https?:/.test(await db(() => (window.__mockdb.settings.brand_logos || {}).kia || '')), 'logo saved for kia');
+    await go(''); await see('.btile .bmark');
+    must(await page.locator('.btile .fl').count() === 0 && await page.locator('.btile[href="#b-kia"] .bmark.img img').count() === 1
+      && (await text('.btile[href="#b-hyundai"] .bmark')) === 'H', 'home: no flags; kia shows its picture, hyundai its initials');
+    await go('brands'); await see('.catrow .bmark'); must(await page.locator('.catrow .bfl').count() === 0, 'brands page without flags');
+    await go('b-kia'); await see('.bhead .bmark.img'); await shot('10-brands');
+    await go('admin-company'); await see('#blg'); await page.click('#blg [data-rm="kia"]'); await page.click('#cgo'); await page.waitForTimeout(500);
+    await go(''); await see('.btile .bmark'); must((await text('.btile[href="#b-kia"] .bmark')) === 'K', 'logo removed: back to the initials');
+    log('brands: initials on a hexagon instead of the flag; a logo uploaded for KIA shows everywhere, and removing it brings the initials back');
+
     if (errors.length) throw new Error('browser errors:\n' + errors.join('\n'));
     console.log('\nCONTROLS PASSED (' + step + ' checks)');
   } catch (e) {

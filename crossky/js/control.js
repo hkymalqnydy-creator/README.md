@@ -61,7 +61,7 @@
     sk_price_mode: ["إظهار الأسعار", "Price visibility"], sk_orders_enabled: ["الطلبات", "Orders"], sk_open_signup: ["التسجيل", "Sign-up"], sk_shop_closed: ["قفل الطلبات", "Closing orders"],
     sk_closed_msg: ["رسالة القفل", "Closed message"], sk_hide_qty: ["إخفاء الكميات", "Hiding quantities"], sk_hide_branches: ["إخفاء الفروع", "Hiding branches"], sk_no_below_cost: ["البيع تحت التكلفة", "Selling below cost"],
     sk_low_stock: ["حد «قرب يخلص»", "Running-low level"], sk_invoice_footer: ["آخر الفاتورة", "Invoice footer"], sk_notice: ["الإعلان", "Notice"], sk_contact_wa: ["رقم الواتساب", "WhatsApp number"],
-    sk_bot_rules: ["الرد الآلي", "Auto-reply"], sk_bot_enabled: ["الرد الآلي", "Auto-reply"], sk_bot_welcome: ["ترحيب الرد الآلي", "Auto-reply welcome"], sk_brands: ["الماركات", "Brands"],
+    sk_bot_rules: ["الرد الآلي", "Auto-reply"], sk_bot_enabled: ["الرد الآلي", "Auto-reply"], sk_bot_welcome: ["ترحيب الرد الآلي", "Auto-reply welcome"], sk_brands: ["الماركات", "Brands"], sk_brand_logos: ["شعارات الماركات", "Brand logos"],
     sk_other: ["إعدادات الشركة", "Company settings"],
     /* bulk prices */
     bpHow: ["كيف يتغير السعر", "How prices change"], bpModePct: ["نسبة ٪", "By %"], bpModeAdd: ["مبلغ", "By amount"], bpModeMargin: ["التكلفة + ربح", "Cost + margin"],

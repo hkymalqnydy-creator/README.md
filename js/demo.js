@@ -34,7 +34,7 @@
     stock_moves: [], move_seq: 0, customer_payments: [], supplier_payments: [], pay_seq: 0, expenses: [], exp_seq: 0,
     activity: [], act_seq: 0, price_changes: [], batch_seq: 0,
     settings: { id: 1, admin_wa: '', notice: '', updated_at: now(), price_mode: 'all', brand_name: '', tagline: '', logo: '', accent: '', hero_title: '', hero_sub: '',
-      about: '', contact_wa: '', contact_phone: '', address: '', open_signup: true, orders_enabled: false, brands: [], bot_enabled: true, bot_welcome: '', bot_rules: [],
+      about: '', contact_wa: '', contact_phone: '', address: '', open_signup: true, orders_enabled: false, brands: [], brand_logos: {}, bot_enabled: true, bot_welcome: '', bot_rules: [],
       hide_qty: false, hide_branches: false, shop_closed: false, closed_msg: '', no_below_cost: false, low_stock: 3, invoice_footer: '' }
   });
 
@@ -352,7 +352,7 @@
     /* one line in the activity log (supabase/setup.sql section 12: log_act and the triggers) */
     const logAct = (kind, ref, title, amount, detail) => DB.activity.push({ id: ++DB.act_seq, created_at: now(), actor_id: uid() || null, actor_name: meName(), kind,
       ref: String(ref == null ? '' : ref).slice(0, 80), title: String(title == null ? '' : title).slice(0, 200), amount: amount == null ? null : amount, detail: detail || {} });
-    const LONG = ['about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'hero_sub'];
+    const LONG = ['about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub'];
     function logEdit(name, a, b) {
       const same = (x, y) => JSON.stringify(x == null ? null : x) === JSON.stringify(y == null ? null : y);
       if (name === 'settings') {

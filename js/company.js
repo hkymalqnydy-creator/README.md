@@ -52,6 +52,10 @@
     ordersL: ["تفعيل سلة الطلبات", "Turn on the order basket"], signupL: ["السماح لأي شخص بتسجيل محل", "Let anyone register a shop"],
     signupHint: ["أطفئها في نسخة الشركة: الفروع تضيفها الإدارة فقط.", "Turn off for a single company: only admins add branches."],
     brandsL: ["الماركات الظاهرة في التطبيق", "Car brands shown in the app"], brandsKJ: ["كوري وياباني", "Korean and Japanese"], brandsAll: ["كل الماركات", "All brands"],
+    blogosT: ["شعارات الماركات", "Brand logos"],
+    blogosH: ["كل ماركة ليها شارة بحروفها. اضغط على الماركة وارفع صورة شعارها من عندك، ويطلع بدل الشارة في كل التطبيق. وبعدها احفظ الإعدادات.",
+      "Each brand has a badge with its initials. Tap a brand and upload a picture of its logo from your own files to show it instead everywhere in the app. Then save the settings."],
+    blogoAdd: ["ارفع الشعار", "Upload logo"], blogoChange: ["غيّره", "Change"], blogoDel: ["ارجع لشارة {b}", "Back to the {b} badge"],
     custPending: ["بانتظار الموافقة", "Pending"], custApproved: ["معتمد", "Approved"], approveBtn: ["اعتمد", "Approve"], unapproveBtn: ["ألغِ الاعتماد", "Remove approval"],
     noCustomers: ["لا يوجد زبائن مسجّلين بعد", "No customers yet"], custSaved: ["تم تحديث الزبون", "Customer updated"],
     importT: ["تحديث القطع من ملف Excel", "Update parts from an Excel file"],
@@ -335,6 +339,8 @@
     if (gate(n) || !adminGuard(n)) return;
     const st = S.settings || {};
     let logo = st.logo || '';
+    /* a logo picture per brand, from the company's own files; saved with the settings */
+    const logos = { ...(st.brand_logos && typeof st.brand_logos === 'object' ? st.brand_logos : {}) };
     /* the colour of this edition's look (the royal skin is blue): shown when the owner has not picked one, and saved as "none" when picked back */
     const skinColor = (() => {
       const r = document.documentElement, cur = r.style.getPropertyValue('--signal');
@@ -362,6 +368,7 @@
       <a class="admin-entry" href="#admin-control">${I('lock')}<span><b>${esc(t('ctlCustT'))}</b><small>${esc(t('ctlMoved'))}</small></span>${I('chevL', 'dirx')}</a>
       <section class="mcard"><h2 class="lbl">${esc(t('brandsL'))}</h2><div class="form-actions"><button type="button" class="btn btn-ghost sm" id="bkj">${esc(t('brandsKJ'))}</button><button type="button" class="btn btn-ghost sm" id="ball">${esc(t('brandsAll'))}</button></div>
         <div id="bgs">${group(SP.flag('KR') + ' ' + SP.countryName('KR'), by('KR'))}${group(SP.flag('JP') + ' ' + SP.countryName('JP'), by('JP'))}${group(t('moreBrands'), other)}</div></section>
+      <section class="mcard"><h2 class="lbl">${esc(t('blogosT'))}</h2><p class="hint">${esc(t('blogosH'))}</p><div class="blogos" id="blg"></div></section>
       <p class="form-err" id="cerr" role="alert"></p><button class="btn btn-signal block" id="cgo">${I('check')} ${esc(t('saveSettings'))}</button></form></main>`);
     const inp = $('#clf');
     inp.onchange = async () => {
@@ -371,8 +378,26 @@
       try { logo = await SP.uploadPhoto(f, 'logo'); $('#cli').innerHTML = SP.imgTag(logo, '', ''); } catch (e) { SP.toast(SP.errText(e)); }
       finally { $('#clp').classList.remove('busy-pick'); }
     };
-    $('#bkj').onclick = () => $$('#bgs input').forEach(x => { x.checked = ['KR', 'JP'].includes((BRAND.get(x.value) || {}).origin); });
-    $('#ball').onclick = () => $$('#bgs input').forEach(x => { x.checked = true; });
+    /* the brands shown, each with its mark: tap to upload its logo, × to go back to the initials */
+    const drawLogos = () => {
+      const ids = $$('#bgs input:checked').map(x => x.value);
+      $('#blg').innerHTML = ids.map(id => { const has = typeof logos[id] === 'string' && !!logos[id];
+        return `<div class="blogo" data-id="${id}"><label class="blogo-pick">${SP.brandMark(id, logos)}<span class="bn">${esc(SP.brandName(id))}</span>
+          <small>${I('camera')} ${esc(t(has ? 'blogoChange' : 'blogoAdd'))}</small><input type="file" accept="image/*" class="sr" data-up="${id}"></label>
+          ${has ? `<button type="button" class="blogo-rm" data-rm="${id}" aria-label="${esc(t('blogoDel', { b: SP.brandName(id) }))}">${I('close')}</button>` : ''}</div>`; }).join('');
+    };
+    drawLogos();
+    $('#bgs').addEventListener('change', drawLogos);
+    $('#blg').addEventListener('change', async e => {
+      const f = e.target.files && e.target.files[0], id = e.target.dataset.up, tile = e.target.closest('.blogo');
+      e.target.value = '';
+      if (!f || !id) return;
+      tile.classList.add('busy');
+      try { logos[id] = await SP.uploadPhoto(f, 'logo'); drawLogos(); } catch (x) { tile.classList.remove('busy'); SP.toast(SP.errText(x)); }
+    });
+    $('#blg').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b) { delete logos[b.dataset.rm]; drawLogos(); } });
+    $('#bkj').onclick = () => { $$('#bgs input').forEach(x => { x.checked = ['KR', 'JP'].includes((BRAND.get(x.value) || {}).origin); }); drawLogos(); };
+    $('#ball').onclick = () => { $$('#bgs input').forEach(x => { x.checked = true; }); drawLogos(); };
     $('#csf').onsubmit = async e => {
       e.preventDefault();
       const picked = $$('#bgs input:checked').map(x => x.value);
@@ -380,7 +405,8 @@
         brand_name: $('#cbn').value.trim(), tagline: $('#ctg').value.trim(), logo: logo || '', accent: $('#cac').value || '',
         hero_title: $('#cht').value.trim(), hero_sub: $('#chs').value.trim(), notice: $('#cnt').value.trim(), about: $('#cab').value.trim(),
         contact_wa: SP.digits($('#cwa').value).trim(), contact_phone: SP.digits($('#cph').value).trim(), address: $('#cad').value.trim(),
-        brands: picked.length === D.BRANDS.length ? [] : picked
+        brands: picked.length === D.BRANDS.length ? [] : picked,
+        brand_logos: Object.fromEntries(Object.entries(logos).filter(([k, v]) => BRAND.has(k) && typeof v === 'string' && v))
       };
       if (v.accent.toLowerCase() === skinColor) v.accent = '';
       if (v.contact_wa && !SP.waNum(v.contact_wa, S.country)) { $('#cerr').textContent = t('needWa', { ex: '+' + SP.dialOf(S.country) + ' …' }); return; }

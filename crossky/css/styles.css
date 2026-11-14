@@ -982,3 +982,32 @@ a.astat:active{transform:scale(.98)}
 .low-row{align-items:center}
 .low-row>.input{flex:0 0 88px}
 .inv-foot{margin:14px 0 0;padding-top:10px;border-top:1px dashed #bbb;text-align:center;color:#444;font-size:13px;white-space:pre-line}
+/* ---------- brand marks (where the flags were): the company's uploaded logo, or the initials on a hexagon ---------- */
+.bmark{--bm:var(--signal);width:34px;height:34px;flex:none;display:grid;place-items:center;background:var(--bm);color:#fff;font-family:var(--font-display);font-weight:800;font-size:14.5px;line-height:1;letter-spacing:.02em;direction:ltr;clip-path:polygon(25% 4%,75% 4%,100% 50%,75% 96%,25% 96%,0 50%)}
+.bmark.sm{font-size:11px;letter-spacing:0}
+.bmark.xs{font-size:9px;letter-spacing:0}
+.bmark.img{clip-path:none;background:#fff;border:1px solid var(--line);border-radius:10px;padding:3px}
+.bmark.img img{width:100%;height:100%;object-fit:contain;display:block}
+.btile{padding-block:7px;padding-inline-start:8px}
+.catrow .bmark{width:46px;height:46px;font-size:18px}
+.catrow .bmark.sm{font-size:14px}
+.catrow .bmark.xs{font-size:11.5px}
+.catrow .bmark.img{border-radius:13px;padding:4px}
+.bhead .bmark,.vin-head .bmark{width:64px;height:64px;font-size:25px}
+.bhead .bmark.sm,.vin-head .bmark.sm{font-size:19px}
+.bhead .bmark.xs,.vin-head .bmark.xs{font-size:15px}
+.bhead .bmark.img,.vin-head .bmark.img{border-radius:16px;padding:6px}
+.blogos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.blogo{position:relative}
+.blogo-pick{display:grid;justify-items:center;gap:5px;padding:12px 6px 10px;border:1.5px dashed var(--line);border-radius:14px;background:var(--surface);cursor:pointer;text-align:center;height:100%}
+.blogo-pick .bmark{width:46px;height:46px;font-size:18px}
+.blogo-pick .bmark.sm{font-size:14px}
+.blogo-pick .bmark.xs{font-size:11.5px}
+.blogo-pick .bmark.img{border-radius:12px;padding:4px}
+.blogo-pick .bn{font-weight:700;font-size:13px;line-height:1.3;overflow-wrap:anywhere}
+.blogo-pick small{display:flex;align-items:center;gap:3px;color:var(--signal);font-weight:700;font-size:11.5px}
+.blogo-pick small .ic{width:14px;height:14px}
+.blogo-pick:focus-within{outline:2.5px solid var(--signal);outline-offset:2px}
+.blogo.busy .blogo-pick{opacity:.5;pointer-events:none}
+.blogo-rm{position:absolute;top:4px;inset-inline-end:4px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--chip);color:var(--muted);border:0;padding:0}
+.blogo-rm .ic{width:14px;height:14px}
