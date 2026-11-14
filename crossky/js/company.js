@@ -6,6 +6,11 @@
   const SP = window.SP;
   const { $, $$, esc, I, t, S, api, D, BRAND, opt, shell, bar, empty, avatar, vb, gate } = SP;
   const CFG = SP.CFG, arr = SP.arr;
+  /* a single company has no shops to verify: its admin card and hints speak about the company */
+  if (CFG.mode === 'company') Object.assign(SP.L.T, {
+    adminB: ["الإعدادات، إخفاء الأسعار، الزبائن، الرد الآلي، والربط مع منظومتك.", "Settings, price visibility, customers, auto-reply and the link to your system."],
+    noticePh: ["مثلاً: تخفيضات على الفحمات هذا الأسبوع", "e.g. Brake pads on sale this week"]
+  });
 
   Object.assign(window.SP_IC, {
     bag: '<path d="M5 8h14l-1.2 12H6.2z"/><path d="M9 8V7a3 3 0 0 1 6 0v1"/>',
@@ -326,6 +331,12 @@
     if (gate(n) || !adminGuard(n)) return;
     const st = S.settings || {}, mode = st.price_mode || 'all';
     let logo = st.logo || '';
+    /* the colour of this edition's look (the royal skin is blue): shown when the owner has not picked one, and saved as "none" when picked back */
+    const skinColor = (() => {
+      const r = document.documentElement, cur = r.style.getPropertyValue('--signal');
+      r.style.removeProperty('--signal'); const v = getComputedStyle(r).getPropertyValue('--signal').trim().toLowerCase(); if (cur) r.style.setProperty('--signal', cur);
+      return /^#[0-9a-f]{6}$/.test(v) ? v : '#ffa31a';
+    })();
     const chosen = new Set(arr(st.brands).length ? st.brands : SP.brandsList().map(b => b.id));
     const group = (title, list) => `<p class="lbl optg">${title}</p><div class="seg brandseg">${list.map(b => `<input type="checkbox" id="bb-${b.id}" value="${b.id}"${chosen.has(b.id) ? ' checked' : ''}><label for="bb-${b.id}">${esc(SP.brandName(b.id))}</label>`).join('')}</div>`;
     const by = cc => D.BRANDS.filter(b => b.origin === cc), other = D.BRANDS.filter(b => b.origin !== 'KR' && b.origin !== 'JP');
@@ -334,7 +345,7 @@
         <div class="row2"><div class="field"><label for="cbn">${esc(t('brandNameL'))}</label><input id="cbn" class="input" maxlength="60" value="${esc(st.brand_name || '')}" placeholder="${esc(CFG.appName || t('app'))}"></div>
           <div class="field"><label for="ctg">${esc(t('taglineL'))}</label><input id="ctg" class="input" maxlength="120" value="${esc(st.tagline || '')}"></div></div>
         <div class="row2"><div class="field"><span class="lbl">${esc(t('logoL'))}</span><label class="logo-pick sm" id="clp"><span class="logo-in" id="cli">${logo ? SP.imgTag(logo, '', '') : I('camera')}</span><input type="file" accept="image/*" class="sr" id="clf"></label></div>
-          <div class="field"><label for="cac">${esc(t('accentL'))}</label><input id="cac" class="input color" type="color" value="${esc(/^#[0-9a-f]{6}$/i.test(st.accent || '') ? st.accent : '#ffa31a')}"></div></div></section>
+          <div class="field"><label for="cac">${esc(t('accentL'))}</label><input id="cac" class="input color" type="color" value="${esc(/^#[0-9a-f]{6}$/i.test(st.accent || '') ? st.accent : skinColor)}"></div></div></section>
       <section class="mcard"><h2 class="lbl">${esc(t('textsT'))}</h2>
         <div class="field"><label for="cht">${esc(t('heroTitleL'))}</label><input id="cht" class="input" maxlength="80" value="${esc(st.hero_title || '')}" placeholder="${esc(t('heroA') + ' ' + t('heroB'))}"></div>
         <div class="field"><label for="chs">${esc(t('heroSubL'))}</label><textarea id="chs" class="input" maxlength="240" placeholder="${esc(t('heroSub'))}">${esc(st.hero_sub || '')}</textarea></div>
@@ -371,7 +382,7 @@
         price_mode: ($('#cpm input:checked') || {}).value || 'all', orders_enabled: $('#cor').checked, open_signup: $('#csu').checked,
         brands: picked.length === D.BRANDS.length ? [] : picked
       };
-      if (v.accent.toLowerCase() === '#ffa31a') v.accent = '';
+      if (v.accent.toLowerCase() === skinColor) v.accent = '';
       if (v.contact_wa && !SP.waNum(v.contact_wa, S.country)) { $('#cerr').textContent = t('needWa', { ex: '+' + SP.dialOf(S.country) + ' …' }); return; }
       const b = $('#cgo'); b.classList.add('busy');
       try { await api.saveSettings(v); SP.toast(t('settingsSaved')); SP.render(); } catch (x) { $('#cerr').textContent = SP.errText(x); } finally { b.classList.remove('busy'); }

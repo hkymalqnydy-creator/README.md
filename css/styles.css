@@ -621,7 +621,8 @@ html[dir="ltr"] select.input{background-position:right 12px center}
 .radio:has(input:checked){border-color:var(--signal);background:color-mix(in srgb,var(--signal) 10%,var(--surface))}
 .brandseg{margin-bottom:6px}
 .input.color{height:46px;padding:4px;cursor:pointer}
-.logo-pick.sm{width:76px;height:76px}
+.logo-pick.sm{position:relative;bottom:auto;inset-inline-start:auto;width:58px;height:58px;padding:3px;margin-top:4px}
+.logo-pick.sm .logo-in .ic{width:20px;height:20px}
 .rule{display:grid;gap:8px;padding:12px 0;border-bottom:1px dashed var(--line)}
 .rule .btn{justify-self:start}
 .filebtn{position:relative;overflow:hidden}
