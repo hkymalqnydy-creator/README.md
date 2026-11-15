@@ -328,7 +328,7 @@
         const c = await toCanvas(file, 1600);
         const r = await sb().functions.invoke('scan-invoice', { body: { image: c.toDataURL('image/jpeg', 0.85).split(',')[1], mime: 'image/jpeg' } });
         if (r.error) throw r.error;
-        if (r.data && Array.isArray(r.data.items)) return { supplier: r.data.supplier || '', items: r.data.items, engine: 'ai' };
+        if (r.data && Array.isArray(r.data.items)) return { supplier: r.data.supplier || '', invoice_no: r.data.invoice_no || '', date: r.data.date || '', total: r.data.total ?? null, items: r.data.items, engine: 'ai' };
       } catch (e) {
         const st = e && e.context && e.context.status;
         if (st === 404 || st === 503 || (e && e.name === 'FunctionsRelayError')) try { sessionStorage.setItem(NOAI, '1'); } catch (x) { /* private mode */ }
@@ -351,6 +351,15 @@
   const lid = () => Math.random().toString(36).slice(2, 10);
   const money = (v, cur) => SP.priceText(Number(v || 0), cur || SP.currencyOf(S.country));
   const matchOf = p => ({ id: p.id, title: p.title, qty: p.qty, sku: p.sku || '', part_no: p.part_no || '', barcode: p.barcode || '', price: p.price, cost: p.cost, cur: p.shop && p.shop.currency });
+  /* the assistant's «edit in Receive»: an invoice it read, opened in this page to change before entering (lines: {code, barcode, title, qty, cost, p}) */
+  SP.rcvLoad = (lines, o) => {
+    const st = loadR();
+    st.lines = (lines || []).slice(0, 300).map(l => ({ k: lid(), code: l.code || '', barcode: l.barcode || '', title: l.title || '', qty: l.qty || 1, cost: l.cost == null ? null : l.cost,
+      price: null, cat: 'other', src: 'photo', match: l.p ? matchOf(l.p) : null, state: l.p ? 'ok' : 'new' }));
+    if (o && o.supplier) st.supplier = o.supplier;
+    if (o && o.note) st.note = o.note;
+    saveR(st);
+  };
   function rcvErr(e) {
     const m = String((e && e.message) || '');
     if (/new item needs a name/.test(m)) return t('rcvNeedName');

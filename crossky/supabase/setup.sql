@@ -271,6 +271,9 @@ create table if not exists public.staff (
 );
 -- the most this employee may take off an invoice, as a % of it (null = no limit)
 alter table public.staff add column if not exists max_discount numeric(5,2) check (max_discount is null or (max_discount >= 0 and max_discount <= 100));
+-- the AI assistant (section 14): given by the manager, and what it may do for this person (a part of their own permissions)
+alter table public.staff add column if not exists ai_on boolean not null default false;
+alter table public.staff add column if not exists ai_perms text[] not null default '{}';
 create or replace function public.has_perm(p text)
 returns boolean language sql stable security definer set search_path = public as $$
   select public.is_admin() or exists (select 1 from public.staff where user_id = auth.uid() and active and p = any (perms));
@@ -649,11 +652,18 @@ create or replace function public.my_perms() returns jsonb language sql stable s
     'perms', coalesce((select to_jsonb(perms) from public.staff where user_id = auth.uid() and active), '[]'::jsonb),
     'branch', (select branch_id from public.staff where user_id = auth.uid() and active),
     'max_discount', (select max_discount from public.staff where user_id = auth.uid() and active),
-    'name', (select name from public.staff where user_id = auth.uid()));
+    'name', (select name from public.staff where user_id = auth.uid()),
+    -- the AI assistant: the manager always; an employee when the manager gave it, doing only what he chose of their permissions
+    'ai', public.is_admin() or exists (select 1 from public.staff where user_id = auth.uid() and active and ai_on),
+    'ai_perms', case when public.is_admin() then to_jsonb(array['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings'])
+      else coalesce((select to_jsonb(array(select x from unnest(ai_perms) x where x = any (perms))) from public.staff where user_id = auth.uid() and active and ai_on), '[]'::jsonb) end);
 $$;
 
 drop function if exists public.save_staff(text, text, text[], uuid, boolean);
-create or replace function public.save_staff(p_email text, p_name text, p_perms text[], p_branch uuid default null, p_active boolean default true, p_max_discount numeric default null)
+drop function if exists public.save_staff(text, text, text[], uuid, boolean, numeric);
+-- p_ai_on / p_ai_perms: the AI assistant for this person (null keeps what they have); its permissions stay within theirs
+create or replace function public.save_staff(p_email text, p_name text, p_perms text[], p_branch uuid default null, p_active boolean default true, p_max_discount numeric default null,
+                                             p_ai_on boolean default null, p_ai_perms text[] default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_email text := lower(btrim(coalesce(p_email, ''))); v_perms text[]; r jsonb;
 begin
@@ -662,10 +672,13 @@ begin
   v_perms := array(select distinct x from unnest(coalesce(p_perms, '{}')) x
                    where x in ('sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'customers', 'reports', 'costs', 'settings', 'purchases', 'expenses'));
   if p_max_discount is not null and (p_max_discount < 0 or p_max_discount > 100) then raise exception 'bad discount limit' using errcode = '22023'; end if;
-  insert into public.staff as st (email, name, perms, branch_id, active, user_id, max_discount)
-  values (v_email, left(coalesce(p_name, ''), 80), v_perms, p_branch, coalesce(p_active, true), (select id from auth.users where lower(email) = v_email limit 1), p_max_discount)
+  insert into public.staff as st (email, name, perms, branch_id, active, user_id, max_discount, ai_on, ai_perms)
+  values (v_email, left(coalesce(p_name, ''), 80), v_perms, p_branch, coalesce(p_active, true), (select id from auth.users where lower(email) = v_email limit 1), p_max_discount,
+          coalesce(p_ai_on, false), array(select distinct x from unnest(coalesce(p_ai_perms, '{}')) x where x = any (v_perms)))
   on conflict (email) do update set name = excluded.name, perms = excluded.perms, branch_id = excluded.branch_id,
-    active = excluded.active, user_id = coalesce(st.user_id, excluded.user_id), max_discount = excluded.max_discount
+    active = excluded.active, user_id = coalesce(st.user_id, excluded.user_id), max_discount = excluded.max_discount,
+    ai_on = coalesce(p_ai_on, st.ai_on),
+    ai_perms = array(select distinct x from unnest(coalesce(p_ai_perms, st.ai_perms)) x where x = any (excluded.perms))
   returning to_jsonb(st.*) into r;
   return r;
 end $$;
@@ -877,7 +890,7 @@ begin
 end $$;
 
 grant execute on function public.my_perms() to authenticated;
-grant execute on function public.save_staff(text, text, text[], uuid, boolean, numeric) to authenticated;
+grant execute on function public.save_staff(text, text, text[], uuid, boolean, numeric, boolean, text[]) to authenticated;
 grant execute on function public.delete_staff(uuid) to authenticated;
 grant execute on function public.get_invoice(uuid) to authenticated;
 grant execute on function public.create_invoice(jsonb) to authenticated;
@@ -1435,7 +1448,7 @@ create trigger products_log after insert or update or delete on public.products 
 create or replace function public.settings_log() returns trigger language plpgsql security definer set search_path = public as $$
 declare v_keys text[]; v_ch jsonb;
 begin
-  select array_agg(n.key order by n.key), jsonb_object_agg(n.key, case when n.key in ('about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub', 'ads') then null else jsonb_build_array(o.value, n.value) end)
+  select array_agg(n.key order by n.key), jsonb_object_agg(n.key, case when n.key in ('about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub', 'ads', 'ai_rules') then null else jsonb_build_array(o.value, n.value) end)
   into v_keys, v_ch
   from jsonb_each(to_jsonb(new)) n join jsonb_each(to_jsonb(old)) o using (key)
   where n.value is distinct from o.value and n.key <> 'updated_at';
@@ -1453,7 +1466,9 @@ begin
   j := to_jsonb(case when tg_op = 'DELETE' then old else new end);
   perform public.log_act(case when tg_op = 'DELETE' then 'staff_del' else 'staff' end, j->>'id', coalesce(nullif(j->>'name', ''), j->>'email'), null,
     jsonb_build_object('email', j->>'email', 'perms', j->'perms', 'active', j->'active', 'max_discount', j->'max_discount', 'new', tg_op = 'INSERT',
-                       'was', case when tg_op = 'UPDATE' then jsonb_build_object('perms', to_jsonb(old.perms), 'active', old.active, 'max_discount', old.max_discount) end));
+                       'ai_on', j->'ai_on', 'ai_perms', j->'ai_perms',
+                       'was', case when tg_op = 'UPDATE' then jsonb_build_object('perms', to_jsonb(old.perms), 'active', old.active, 'max_discount', old.max_discount,
+                                                                                  'ai_on', old.ai_on, 'ai_perms', to_jsonb(old.ai_perms)) end));
   return null;
 end $$;
 drop trigger if exists staff_log on public.staff;
@@ -1506,6 +1521,7 @@ begin
             when 'prices' then a.kind in ('bulk_price', 'bulk_undo') or (a.kind = 'product_edit' and (a.detail ? 'price' or a.detail ? 'cost' or a.detail ? 'hide_price'))
             when 'money'  then a.kind in ('pay_in', 'pay_in_del', 'pay_out', 'pay_out_del', 'expense', 'expense_del')
             when 'admin'  then a.kind in ('staff', 'staff_del', 'settings', 'customer')
+            when 'ai'     then a.kind = 'ai'
             else true end))
   select jsonb_build_object(
     'total', (select count(*) from hit),
@@ -1677,3 +1693,93 @@ $$;
 do $$ begin
   alter table public.settings add constraint settings_ads_chk check (public.ads_ok(ads));
 exception when duplicate_object then null; end $$;
+
+-- ---------- 14) المساعد الذكي (AI) ----------
+-- The assistant inside the app (js/ai.js, js/ai-tools.js). It belongs to the manager: he always has it with everything; he gives
+-- it to an employee (staff.ai_on) with the things it may do for them (staff.ai_perms, kept within their own permissions), and to
+-- signed-in customers if he wants (settings.ai_customers: finding parts, questions, the cart). Whatever it changes, it changes
+-- through the same functions as the screens, with the person's own permissions, after they tap to confirm, and ai_log writes a line.
+-- The server function supabase/functions/assistant asks ai_gate before every call to Claude: who may, and how much a day.
+alter table public.settings add column if not exists ai_customers boolean not null default false;
+alter table public.settings add column if not exists ai_name text not null default '' check (char_length(ai_name) <= 40);
+alter table public.settings add column if not exists ai_rules text not null default '' check (char_length(ai_rules) <= 3000);
+alter table public.settings add column if not exists ai_daily integer not null default 40 check (ai_daily between 5 and 1000);
+
+-- one line per message to the assistant (a message can take several calls to Claude: looking things up, preparing)
+create table if not exists public.ai_turns (
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  turn       uuid not null,
+  day        date not null,
+  calls      integer not null default 0,
+  created_at timestamptz not null default now(),
+  primary key (user_id, turn)
+);
+create index if not exists ai_turns_day_idx on public.ai_turns (day, user_id);
+alter table public.ai_turns enable row level security;   -- no policies: only the functions below read and write it
+revoke all on public.ai_turns from anon, authenticated;
+
+-- who may use the assistant now, and what it may do for them
+create or replace function public.ai_access() returns jsonb language sql stable security definer set search_path = public as $$
+  select case
+    when auth.uid() is null then jsonb_build_object('ok', false, 'role', 'visitor')
+    when public.is_admin() then jsonb_build_object('ok', true, 'role', 'admin',
+      'perms', to_jsonb(array['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings']))
+    when exists (select 1 from public.staff where user_id = auth.uid() and active) then
+      coalesce((select jsonb_build_object('ok', true, 'role', 'staff', 'perms', to_jsonb(array(select x from unnest(ai_perms) x where x = any (perms))))
+                from public.staff where user_id = auth.uid() and active and ai_on), jsonb_build_object('ok', false, 'role', 'staff'))
+    when coalesce((select ai_customers from public.settings where id = 1), false) then jsonb_build_object('ok', true, 'role', 'customer', 'perms', '[]'::jsonb)
+    else jsonb_build_object('ok', false, 'role', 'customer') end;
+$$;
+
+-- before every call to Claude: refuses who may not, counts a new message against the day's limit (the manager has none),
+-- caps the calls of one message, and gives the server what it tells the assistant (who this is, the manager's instructions)
+create or replace function public.ai_gate(p_turn uuid) returns jsonb language plpgsql security definer set search_path = public as $$
+declare a jsonb := public.ai_access(); v_day date := (now() at time zone 'Africa/Tripoli')::date; v_lim integer; v_used integer; v_calls integer; st public.settings;
+begin
+  if not coalesce((a->>'ok')::boolean, false) then raise exception 'ai not allowed' using errcode = '42501'; end if;
+  if p_turn is null then raise exception 'bad turn' using errcode = '22023'; end if;
+  select * into st from public.settings where id = 1;
+  v_lim := case when a->>'role' = 'admin' then null else coalesce(st.ai_daily, 40) end;
+  if not exists (select 1 from public.ai_turns where user_id = auth.uid() and turn = p_turn) then
+    select count(*) into v_used from public.ai_turns where user_id = auth.uid() and day = v_day;
+    if v_lim is not null and v_used >= v_lim then raise exception 'ai daily limit' using errcode = 'P0001'; end if;
+  end if;
+  insert into public.ai_turns as t (user_id, turn, day, calls) values (auth.uid(), p_turn, v_day, 1)
+  on conflict (user_id, turn) do update set calls = t.calls + 1 returning calls into v_calls;
+  if v_calls > 12 then raise exception 'ai too many steps' using errcode = 'P0001'; end if;
+  select count(*) into v_used from public.ai_turns where user_id = auth.uid() and day = v_day;
+  return a || jsonb_build_object(
+    'left', case when v_lim is null then null else greatest(v_lim - v_used, 0) end,
+    'me', coalesce(nullif(public.me_name(), ''), (select name from public.customers where user_id = auth.uid()), ''),
+    'branch', (select s.name from public.staff f join public.shops s on s.id = f.branch_id where f.user_id = auth.uid() and f.active),
+    'name', st.ai_name, 'rules', st.ai_rules, 'bot_rules', st.bot_rules, 'company', st.brand_name, 'about', left(coalesce(st.about, ''), 1500),
+    'contact', st.contact_wa, 'address', st.address, 'price_mode', st.price_mode, 'orders', st.orders_enabled and not coalesce(st.shop_closed, false));
+end $$;
+
+-- a line in the activity log for what the assistant did for someone (after they confirmed): what, the tool, and what they asked
+create or replace function public.ai_log(p_what text, p_tool text default '', p_ask text default '', p_ref text default '') returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not coalesce((public.ai_access()->>'ok')::boolean, false) or (public.ai_access()->>'role') = 'customer' then
+    raise exception 'not authorized' using errcode = '42501';
+  end if;
+  perform public.log_act('ai', p_ref, p_what, null,
+    jsonb_strip_nulls(jsonb_build_object('tool', nullif(left(coalesce(p_tool, ''), 40), ''), 'ask', nullif(left(coalesce(p_ask, ''), 300), ''))));
+end $$;
+
+-- the manager's view: messages to the assistant per person over the last days
+create or replace function public.ai_usage(p_days integer default 1) returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('user_id', x.u, 'name', x.name, 'messages', x.n, 'calls', x.c) order by x.n desc, x.name) from (
+    select t.user_id u, count(*) n, sum(t.calls) c,
+           coalesce((select nullif(f.name, '') from public.staff f where f.user_id = t.user_id), (select c2.name from public.customers c2 where c2.user_id = t.user_id),
+                    (select email from auth.users where id = t.user_id), '') as name
+    from public.ai_turns t where t.day > (now() at time zone 'Africa/Tripoli')::date - least(greatest(coalesce(p_days, 1), 1), 90)
+    group by t.user_id) x), '[]'::jsonb);
+end $$;
+
+grant execute on function public.ai_access() to authenticated;
+grant execute on function public.ai_gate(uuid) to authenticated;
+grant execute on function public.ai_log(text, text, text, text) to authenticated;
+grant execute on function public.ai_usage(integer) to authenticated;

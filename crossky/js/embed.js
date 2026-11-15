@@ -32,7 +32,7 @@
   /* ---------- reading a photographed invoice with Claude ---------- */
   const PROMPT = `You are reading a photo of a supplier invoice or delivery note for car spare parts. It may be in Arabic or English, printed or handwritten.
 Reply with ONLY one JSON object and no other text, in exactly this shape:
-{"supplier":"","invoice_no":"","date":"","currency":"","items":[{"code":"","barcode":"","title":"","qty":0,"unit_price":0,"total":0}]}
+{"supplier":"","invoice_no":"","date":"","currency":"","total":null,"items":[{"code":"","barcode":"","title":"","qty":0,"unit_price":0,"total":0}]}
 Rules:
 - One entry in "items" for every item line, in the printed order. Skip column headers, subtotals, totals, taxes, discounts, payments, notes and signatures.
 - code: the part number or item code exactly as printed (keep letters, digits and dashes). Empty when there is none.
@@ -40,7 +40,8 @@ Rules:
 - title: the item description as written, in its original language.
 - qty: the number of units. unit_price: the price of one unit. total: the line total. Use null for any number you cannot read; never guess.
 - Numbers are plain JSON numbers with a dot for decimals: convert Arabic-Indic digits and drop thousands separators.
-- supplier: the seller's name from the letterhead. date: YYYY-MM-DD when readable, else empty. currency: as printed (for example LYD, د.ل, USD), else empty.
+- supplier: the seller's name from the letterhead. invoice_no: the invoice number as printed. date: YYYY-MM-DD when readable, else empty. currency: as printed (for example LYD, د.ل, USD), else empty.
+- The top-level total: the invoice's grand total as printed (the amount to pay, after any discount), or null when it is not printed or not readable.
 - If the photo is not an invoice, reply {"items":[]}.`;
   const DIGITS = {};
   '٠١٢٣٤٥٦٧٨٩'.split('').forEach((d, i) => { DIGITS[d] = String(i); });
@@ -91,7 +92,8 @@ Rules:
         unit_price: price != null && price >= 0 ? price : null, total: total != null && total >= 0 ? total : null
       };
     }).filter(l => l.title || l.code || l.barcode);
-    return { supplier: str(data && data.supplier, 120), items, engine: 'ai' };
+    const tot = num(data && data.total);
+    return { supplier: str(data && data.supplier, 120), invoice_no: str(data && data.invoice_no, 40), date: str(data && data.date, 20), total: tot != null && tot >= 0 ? tot : null, items, engine: 'ai' };
   };
 
   /* ---------- exported files: the Claude app's save sheet ---------- */

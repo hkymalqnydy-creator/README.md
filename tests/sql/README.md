@@ -12,8 +12,11 @@
 8. `books_tests.sql` (B1…B37) — المخزن، ديون الزبائن والموردين، المصروفات، الأرباح والخسائر / stock, customer and supplier debts, expenses, profit and loss
 9. `controls_tests.sql` (K1…K59) — سجل الحركة، حد التخفيض، البيع تحت التكلفة، إخفاء الكميات، الأسعار بالجملة، إلغاء الاستلام / activity log, discount limits, selling below cost, hidden quantities, bulk prices, taking a receipt back
 10. `ads_tests.sql` (A1…A16) — إعلانات الرئيسية: الحفظ والقراءة، السجل، الروابط والصور المرفوضة، الحد 5، الموظف بدون صلاحية / home screen ads: saving and reading, the log, refused links and pictures, the limit of 5, staff without the right
+11. `ai_tests.sql` (I1…I28) — المساعد الذكي: للمدير دايماً، يعطيه لموظف بصلاحيات من صلاحياته، الزبائن، حد الرسائل اليومي، الخطوات، السجل، الاستعمال / the AI assistant: always the manager's, granted per employee within his own permissions, customers, the daily message limit, steps per message, the log, usage
 
 كل سطر نتيجة يبدأ برقم الاختبار، والأخطاء المتوقعة مكتوبة قبلها (expect …). / Each result line starts with its test number; expected errors are announced just before them.
 
 `../functions/scan_invoice_test.mjs` يختبر دالة قراءة الفواتير بخدمات وهمية / tests the invoice-reader function against fake services:
 `node --experimental-strip-types tests/functions/scan_invoice_test.mjs` (Node 22.6+).
+`../functions/assistant_test.mjs` يختبر دالة المساعد (الدخول، البوابة، الأدوات المسموحة، الصور، الأخطاء) / tests the assistant function (login, the gate, allowed tools, photos, errors):
+`node --experimental-strip-types tests/functions/assistant_test.mjs`.

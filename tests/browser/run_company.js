@@ -120,7 +120,7 @@ const log = s => console.log(`${++step}. ${s}`);
     // ----- sales system -----
     await login('owner@crossky.ly', '123456'); await go('system'); await see('.pos-tile');
     const hrefs = await page.$$eval('.pos-tile', l => l.map(a => a.getAttribute('href')));
-    must(hrefs.length === 16 && ['#admin', '#admin-control', '#admin-log', '#admin-prices', '#admin-ads', '#pos', '#receive', '#invoices', '#purchases', '#reports', '#staff', '#stock', '#buyers', '#suppliers', '#expenses', '#pnl'].every(h => hrefs.includes(h)), 'owner has 6 sales + 5 accounts + 5 owner tiles: ' + hrefs.join('|'));
+    must(hrefs.length === 17 && ['#admin', '#admin-control', '#admin-log', '#admin-prices', '#admin-ads', '#admin-ai', '#pos', '#receive', '#invoices', '#purchases', '#reports', '#staff', '#stock', '#buyers', '#suppliers', '#expenses', '#pnl'].every(h => hrefs.includes(h)), 'owner has 6 sales + 5 accounts + 6 owner tiles: ' + hrefs.join('|'));
     await go('staff'); await see('#sadd2'); await page.click('#sadd2'); await see('#se');
     await page.fill('#se', 'seller2@test.ly'); await page.fill('#sn2', 'سالم'); must(await page.locator('.perm-list input[value="sales"]').isChecked(), 'sell permission pre-ticked');
     must(await page.locator('.perm-list input[value="purchases"]').count() === 1 && !(await page.locator('.perm-list input[value="purchases"]').isChecked()), 'receiving permission offered, off by default');

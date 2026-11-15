@@ -113,7 +113,7 @@
     return true;
   }
   SP.adminTabs = cur => `<nav class="chips light admintabs" aria-label="${esc(t('admin'))}">${[['admin', 'adminMain'], ['admin-control', 'ctlT'], ['admin-log', 'logT'], ['admin-prices', 'bpT'],
-    ['admin-ads', 'adsT'], ['admin-company', 'companySet'], ['admin-customers', 'customersT'], ['admin-bot', 'adminBot'], ['admin-sync', 'syncT']]
+    ['admin-ads', 'adsT'], ['admin-ai', 'aiSetT'], ['admin-company', 'companySet'], ['admin-customers', 'customersT'], ['admin-bot', 'adminBot'], ['admin-sync', 'syncT']]
     .map(([h, k]) => `<a class="chip${cur === h ? ' on' : ''}" href="#${h}"${cur === h ? ' aria-current="page"' : ''}>${esc(t(k))}</a>`).join('')}</nav>`;
 
   /* ---------- header extras: basket button, assistant button, contact block ---------- */
@@ -128,7 +128,8 @@
     const nav = $('.admintabs'), on = nav && $('.chip.on', nav);
     if (on) { const a = nav.getBoundingClientRect(), b = on.getBoundingClientRect(); if (b.left < a.left || b.right > a.right) nav.scrollLeft += b.left - a.left - (a.width - b.width) / 2; }
     let fab = $('#botfab');
-    const show = !S.err && !(S.settings && S.settings.bot_enabled === false) && ['home', 'cats', 'shops', 'favs'].includes(SP.tab);
+    /* the ready-replies assistant, for whoever does not have the AI assistant (js/ai.js has its own button) */
+    const show = !S.err && !(SP.aiOn && SP.aiOn()) && !(S.settings && S.settings.bot_enabled === false) && ['home', 'cats', 'shops', 'favs'].includes(SP.tab);
     if (!show) { if (fab) fab.remove(); return; }
     if (!fab) { fab = document.createElement('a'); fab.id = 'botfab'; fab.className = 'botfab'; fab.href = '#bot'; document.body.appendChild(fab); }
     fab.setAttribute('aria-label', t('botFab'));

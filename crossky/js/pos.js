@@ -102,7 +102,7 @@
     const head = bar(t('tabSystem'), '', { noBack: true });
     if (!S.user) { S.after = 'system'; shell(head + `<main class="wrap">${empty('lock', t('tabSystem'), t('sysSignIn'), `<a class="btn btn-ink" href="#login">${esc(t('signIn'))}</a>`)}</main>`); return SP.done(n); }
     if (!SP.isStaff()) { shell(head + `<main class="wrap">${empty('lock', t('tabSystem'), t('sysStaffOnly'))}</main>`); return SP.done(n); }
-    const own = S.admin ? [['admin', 'shield', 'admin'], ['admin-control', 'lock', 'ctlT'], ['admin-log', 'history', 'logT'], ['admin-prices', 'percent', 'bpT'], ['admin-ads', 'megaphone', 'adsT']]
+    const own = S.admin ? [['admin', 'shield', 'admin'], ['admin-control', 'lock', 'ctlT'], ['admin-log', 'history', 'logT'], ['admin-prices', 'percent', 'bpT'], ['admin-ads', 'megaphone', 'adsT'], ['admin-ai', 'spark', 'aiSetT']]
       .filter(([h]) => h === 'admin' || SP.company).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('') : '';
     shell(head + `<main class="wrap mine sys">${S.admin && SP.company && SP.adminToday ? '<div id="atoday"></div>' : ''}${SP.posEntry()}
       ${own ? `<section class="mcard"><h2 class="lbl">${esc(t('sysAdminT'))}</h2><div class="pos-grid">${own}</div></section>` : ''}</main>`);
@@ -122,14 +122,15 @@
   const POS_KEY = 'sp_pos';
   const loadPos = () => { try { return JSON.parse(sessionStorage.getItem(POS_KEY) || 'null') || { lines: [], pay: 'cash' }; } catch (e) { return { lines: [], pay: 'cash' }; } };
   const savePos = v => { try { sessionStorage.setItem(POS_KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } };
-  /* Puts parts on the open sale (used by "open as a sale" when receiving). */
-  SP.posLoad = items => {
+  /* Puts parts on the open sale (used by "open as a sale" when receiving, and by the assistant), with the customer and payment if given. */
+  SP.posLoad = (items, extra) => {
     const st = loadPos();
     items.forEach(p => {
       const ex = st.lines.find(l => l.id === p.id);
       if (ex) ex.qty += p.qty || 1;
-      else st.lines.push({ id: p.id, title: p.title, sku: p.sku || '', price: p.price, base: p.price, qty: p.qty || 1, stock: p.stock, cur: p.cur });
+      else st.lines.push({ id: p.id, title: p.title, sku: p.sku || '', price: p.price, base: p.base != null ? p.base : p.price, qty: p.qty || 1, stock: p.stock, cur: p.cur });
     });
+    if (extra) ['cname', 'cphone', 'pay', 'discount', 'paid', 'note'].forEach(k => { if (extra[k] != null && extra[k] !== '') st[k] = extra[k]; });
     savePos(st);
   };
   const codeKey = v => String(v || '').toUpperCase().replace(/[\s\-./_]/g, '');
@@ -369,10 +370,12 @@
       <div class="row2"><div class="field"><label for="sn2">${esc(t('staffName'))}</label><input id="sn2" class="input" maxlength="80" value="${esc(v.name)}"></div>
         <div class="field"><label for="sbr">${esc(t('posBranch'))}</label><select id="sbr" class="input">${opt('', t('staffAllBranches'), v.branch_id || '')}${branches.map(b => opt(b.id, b.name, v.branch_id || '')).join('')}</select></div></div>
       <fieldset class="field"><legend>${esc(t('staffPerms'))}</legend><div class="perm-list">${PERMS.map(p => `<label class="switch"><input type="checkbox" value="${p}"${(v.perms || []).includes(p) ? ' checked' : ''}><span></span>${esc(t('perm_' + p))}</label>`).join('')}</div></fieldset>
+      ${SP.aiStaffBox ? SP.aiStaffBox(v) : ''}
       <div class="field"><label for="smd">${esc(t('staffMaxDisc'))}</label><input id="smd" class="input num" dir="ltr" inputmode="decimal" maxlength="6" value="${v.max_discount == null ? '' : esc(+v.max_discount)}"><span class="hint">${esc(t('staffMaxDiscHint'))}</span></div>
       <label class="switch"><input type="checkbox" id="sac"${v.active !== false ? ' checked' : ''}><span></span>${esc(t('staffActive'))}</label>
       <p class="form-err" id="serr2" role="alert"></p>
       <div class="sheet-actions"><button class="btn btn-signal">${I('check')} ${esc(t('saveChanges'))}</button>${v.id ? `<button type="button" class="btn btn-danger" id="sdel2">${I('trash')} ${esc(t('staffDel'))}</button>` : ''}</div></form>`, { label: t('staffT') });
+    if (SP.aiStaffWire) SP.aiStaffWire(s.el, v);
     $('#stf', s.el).onsubmit = async e => {
       e.preventDefault();
       const email = $('#se', s.el).value.trim().toLowerCase();
@@ -380,7 +383,8 @@
       const lr = SP.digits($('#smd', s.el).value).replace(/[٫,]/g, '.').replace(/[\s٪%]/g, ''), lim = lr === '' ? null : Number(lr);
       if (lim != null && !(lim >= 0 && lim <= 100)) { $('#serr2', s.el).textContent = t('staffBadLimit'); $('#smd', s.el).classList.add('invalid'); $('#smd', s.el).focus(); return; }
       try {
-        await P.saveStaff({ p_email: email, p_name: $('#sn2', s.el).value.trim(), p_perms: $$('.perm-list input:checked', s.el).map(x => x.value), p_branch: $('#sbr', s.el).value || null, p_active: $('#sac', s.el).checked, p_max_discount: lim });
+        await P.saveStaff({ p_email: email, p_name: $('#sn2', s.el).value.trim(), p_perms: $$('.perm-list input:checked', s.el).map(x => x.value), p_branch: $('#sbr', s.el).value || null,
+          p_active: $('#sac', s.el).checked, p_max_discount: lim, ...(SP.aiStaffValue ? SP.aiStaffValue(s.el) : {}) });
         SP.toast(t('staffSaved')); s.close(); onSaved();
       } catch (x) { $('#serr2', s.el).textContent = SP.errText(x); }
     };
@@ -400,7 +404,7 @@
     const bname = id => (branches.find(b => b.id === id) || {}).name || t('staffAllBranches');
     $('#sl').innerHTML = list.length ? list.map((v, i) => `<button type="button" class="arow staff-row" data-i="${i}"><span class="hexav"><span>${esc(SP.initial(v.name || v.email))}</span></span>
         <span class="ar-main"><b>${esc(v.name || v.email)} ${!v.active ? `<span class="pill demo">${esc(t('staffOff'))}</span>` : !v.user_id ? `<span class="pill demo">${esc(t('staffWaiting'))}</span>` : ''}</b>
-        <small class="ltr">${esc(v.email)}</small><small>${esc([bname(v.branch_id), (v.perms || []).map(p => t('perm_' + p)).join('، ') || '—', v.max_discount != null ? t('staffLimitShort', { n: SP.fmtNum(+v.max_discount) }) : ''].filter(Boolean).join(' · '))}</small></span>${I('chevL', 'dirx')}</button>`).join('')
+        <small class="ltr">${esc(v.email)}</small><small>${esc([bname(v.branch_id), (v.perms || []).map(p => t('perm_' + p)).join('، ') || '—', v.max_discount != null ? t('staffLimitShort', { n: SP.fmtNum(+v.max_discount) }) : ''].filter(Boolean).join(' · '))}</small>${v.ai_on && SP.aiStaffShort ? `<small class="ai-short">${I('spark')} ${esc(SP.aiStaffShort(v))}</small>` : ''}</span>${I('chevL', 'dirx')}</button>`).join('')
       : empty('user', t('staffT'), t('noStaff'));
     const again = () => SP.render();
     $('#sl').onclick = e => { const b = e.target.closest('[data-i]'); if (b) staffSheet(list[+b.dataset.i], branches, again); };

@@ -35,7 +35,9 @@
     activity: [], act_seq: 0, price_changes: [], batch_seq: 0, passkeys: [],
     settings: { id: 1, admin_wa: '', notice: '', updated_at: now(), price_mode: 'all', brand_name: '', tagline: '', logo: '', accent: '', hero_title: '', hero_sub: '',
       about: '', contact_wa: '', contact_phone: '', address: '', open_signup: true, orders_enabled: false, brands: [], brand_logos: {}, bot_enabled: true, bot_welcome: '', bot_rules: [],
-      hide_qty: false, hide_branches: false, shop_closed: false, closed_msg: '', no_below_cost: false, low_stock: 3, invoice_footer: '', ads: [] }
+      hide_qty: false, hide_branches: false, shop_closed: false, closed_msg: '', no_below_cost: false, low_stock: 3, invoice_footer: '', ads: [],
+      ai_customers: false, ai_name: '', ai_rules: '', ai_daily: 40 },
+    ai_turns: []
   });
   /* the edition's ads at the top of the home screen (config demoAds, from tools/build_company.py --demo-ads) */
   const demoAds = () => (Array.isArray(CONF.demoAds) ? CONF.demoAds : []).filter(x => x && typeof x === 'object').slice(0, 5)
@@ -212,6 +214,15 @@
     const uid = () => session && session.user.id;
     const isAdmin = () => !!uid() && DB.admins.includes(uid());
     const staffRow = () => DB.staff.find(x => x.user_id && x.user_id === uid() && x.active);
+    const PERMS_ALL = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings'];
+    const aiAccess = () => {
+      if (!uid()) return { ok: false, role: 'visitor' };
+      if (isAdmin()) return { ok: true, role: 'admin', perms: PERMS_ALL.slice() };
+      const on = staffRow();
+      if (on) return on.ai_on ? { ok: true, role: 'staff', perms: (on.ai_perms || []).filter(x => on.perms.includes(x)) } : { ok: false, role: 'staff' };
+      return DB.settings.ai_customers ? { ok: true, role: 'customer', perms: [] } : { ok: false, role: 'customer' };
+    };
+    const tripoliDay = (k) => { const d = new Date(Date.now() + (k || 0) * 864e5); try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Tripoli' }).format(d); } catch (e) { return d.toISOString().slice(0, 10); } };
     const hasPerm = p => isAdmin() || !!(staffRow() && staffRow().perms.includes(p));
     const isStaff = () => isAdmin() || !!staffRow();
     const fail = (m, code) => { throw Object.assign(new Error(m), { code: code || 'P0001' }); };
@@ -356,6 +367,8 @@
       }
       if (name === 'customers' && !hasPerm('customers')) { delete v.approved; delete v.user_id; }
       if (name === 'settings' && 'ads' in v && !adsOk(v.ads)) return { error: { message: 'new row for relation "settings" violates check constraint "settings_ads_chk"', code: '23514' } };
+      if (name === 'settings' && (('ai_daily' in v && !(Number.isInteger(+v.ai_daily) && +v.ai_daily >= 5 && +v.ai_daily <= 1000)) || ('ai_rules' in v && String(v.ai_rules || '').length > 3000) || ('ai_name' in v && String(v.ai_name || '').length > 40)))
+        return { error: { message: 'new row for relation "settings" violates check constraint "settings_ai_check"', code: '23514' } };
       if (name !== 'customers') v.updated_at = now();
       return { vals: v };
     }
@@ -450,7 +463,7 @@
     /* one line in the activity log (supabase/setup.sql section 12: log_act and the triggers) */
     const logAct = (kind, ref, title, amount, detail) => DB.activity.push({ id: ++DB.act_seq, created_at: now(), actor_id: uid() || null, actor_name: meName(), kind,
       ref: String(ref == null ? '' : ref).slice(0, 80), title: String(title == null ? '' : title).slice(0, 200), amount: amount == null ? null : amount, detail: detail || {} });
-    const LONG = ['about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub', 'ads'];
+    const LONG = ['about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub', 'ads', 'ai_rules'];
     function logEdit(name, a, b) {
       const same = (x, y) => JSON.stringify(x == null ? null : x) === JSON.stringify(y == null ? null : y);
       if (name === 'settings') {
@@ -540,7 +553,8 @@
       rotate_sync_key() { if (!isAdmin()) throw Object.assign(new Error('not authorized'), { code: '42501' }); DB.sync_key = Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join(''); save(); return DB.sync_key; },
       sync_products(a) { if (!DB.sync_key || a.p_key !== DB.sync_key) throw Object.assign(new Error('invalid sync key'), { code: '42501' }); const r = upsert(a.p_rows, a.p_shop); logAct('sync', '', '', null, r); save(); return r; },
       my_perms() { const st = DB.staff.find(x => x.user_id && x.user_id === uid()), on = staffRow();
-        return { admin: isAdmin(), staff: !!on, perms: on ? on.perms : [], branch: on ? on.branch_id : null, max_discount: on && on.max_discount != null ? on.max_discount : null, name: st ? st.name : null }; },
+        return { admin: isAdmin(), staff: !!on, perms: on ? on.perms : [], branch: on ? on.branch_id : null, max_discount: on && on.max_discount != null ? on.max_discount : null, name: st ? st.name : null,
+          ai: isAdmin() || !!(on && on.ai_on), ai_perms: isAdmin() ? PERMS_ALL.slice() : on && on.ai_on ? (on.ai_perms || []).filter(x => on.perms.includes(x)) : [] }; },
       save_staff(a) {
         if (!isAdmin()) fail('not authorized', '42501');
         const email = String(a.p_email || '').trim().toLowerCase();
@@ -548,13 +562,16 @@
         const ok = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'customers', 'reports', 'costs', 'settings', 'purchases', 'expenses'];
         const lim = a.p_max_discount == null || a.p_max_discount === '' ? null : Number(a.p_max_discount);
         if (lim != null && !(lim >= 0 && lim <= 100)) fail('bad discount limit', '22023');
-        let r = DB.staff.find(x => x.email === email); const isNew = !r, was = r ? { perms: r.perms, active: r.active, max_discount: r.max_discount == null ? null : r.max_discount } : null;
-        if (!r) { r = { id: uuid(), email, user_id: (DB.users.find(u => u.email === email) || {}).id || null, created_at: now() }; DB.staff.push(r); }
-        const before = JSON.stringify([r.name, r.perms, r.branch_id, r.active, r.max_discount == null ? null : r.max_discount]);
-        Object.assign(r, { name: String(a.p_name || '').slice(0, 80), perms: [...new Set((a.p_perms || []).filter(p => ok.includes(p)))], branch_id: a.p_branch || null, active: a.p_active !== false,
-          max_discount: lim == null ? null : Math.round(lim * 100) / 100 });
-        if (isNew || before !== JSON.stringify([r.name, r.perms, r.branch_id, r.active, r.max_discount]))
-          logAct('staff', r.id, r.name || r.email, null, { email: r.email, perms: r.perms, active: r.active, max_discount: r.max_discount, new: isNew, was });
+        let r = DB.staff.find(x => x.email === email); const isNew = !r, was = r ? { perms: r.perms, active: r.active, max_discount: r.max_discount == null ? null : r.max_discount, ai_on: !!r.ai_on, ai_perms: r.ai_perms || [] } : null;
+        if (!r) { r = { id: uuid(), email, user_id: (DB.users.find(u => u.email === email) || {}).id || null, created_at: now(), ai_on: false, ai_perms: [] }; DB.staff.push(r); }
+        const before = JSON.stringify([r.name, r.perms, r.branch_id, r.active, r.max_discount == null ? null : r.max_discount, !!r.ai_on, r.ai_perms || []]);
+        const perms = [...new Set((a.p_perms || []).filter(p => ok.includes(p)))];
+        /* the assistant: null keeps what they have; what it may do stays within their own permissions */
+        Object.assign(r, { name: String(a.p_name || '').slice(0, 80), perms, branch_id: a.p_branch || null, active: a.p_active !== false,
+          max_discount: lim == null ? null : Math.round(lim * 100) / 100, ai_on: a.p_ai_on == null ? !!r.ai_on : !!a.p_ai_on,
+          ai_perms: [...new Set((a.p_ai_perms == null ? r.ai_perms || [] : a.p_ai_perms).filter(p => perms.includes(p)))] });
+        if (isNew || before !== JSON.stringify([r.name, r.perms, r.branch_id, r.active, r.max_discount, r.ai_on, r.ai_perms]))
+          logAct('staff', r.id, r.name || r.email, null, { email: r.email, perms: r.perms, active: r.active, max_discount: r.max_discount, new: isNew, ai_on: r.ai_on, ai_perms: r.ai_perms, was });
         save(); return r;
       },
       delete_staff(a) {
@@ -866,6 +883,35 @@
       },
 
       /* ---------- owner controls (supabase/setup.sql section 12) ---------- */
+      /* the AI assistant (supabase/setup.sql section 14): who may use it, the day's limit, its log line, and the manager's view of the use */
+      ai_access() { return aiAccess(); },
+      ai_gate(a) {
+        const acc = aiAccess(), day = tripoliDay();
+        if (!acc.ok) fail('ai not allowed', '42501');
+        if (!a.p_turn) fail('bad turn', '22023');
+        const st = DB.settings, lim = acc.role === 'admin' ? null : +st.ai_daily || 40, mine = () => DB.ai_turns.filter(x => x.user_id === uid() && x.day === day).length;
+        let r = DB.ai_turns.find(x => x.user_id === uid() && x.turn === a.p_turn);
+        if (!r) { if (lim != null && mine() >= lim) fail('ai daily limit'); r = { user_id: uid(), turn: a.p_turn, day, calls: 0, created_at: now() }; DB.ai_turns.push(r); }
+        if (r.calls + 1 > 12) fail('ai too many steps');
+        r.calls++; save();
+        const on = staffRow(), cust = (DB.customers || []).find(c => c.user_id === uid()), br = on && DB.shops.find(x => x.id === on.branch_id);
+        return { ...acc, left: lim == null ? null : Math.max(lim - mine(), 0), me: (on && on.name) || (cust && cust.name) || '', branch: br ? br.name : null,
+          name: st.ai_name, rules: st.ai_rules, bot_rules: st.bot_rules, company: st.brand_name, about: String(st.about || '').slice(0, 1500), contact: st.contact_wa, address: st.address,
+          price_mode: st.price_mode, orders: st.orders_enabled !== false && !st.shop_closed };
+      },
+      ai_log(a) {
+        const acc = aiAccess();
+        if (!acc.ok || acc.role === 'customer') fail('not authorized', '42501');
+        const d = {}; if (a.p_tool) d.tool = String(a.p_tool).slice(0, 40); if (a.p_ask) d.ask = String(a.p_ask).slice(0, 300);
+        logAct('ai', String(a.p_ref || '').slice(0, 80), String(a.p_what || '').slice(0, 200), null, d); save(); return null;
+      },
+      ai_usage(a) {
+        if (!isAdmin()) fail('not authorized', '42501');
+        const days = Math.min(Math.max(+a.p_days || 1, 1), 90), from = tripoliDay(-(days - 1)), g = {};
+        DB.ai_turns.filter(x => x.day >= from).forEach(x => { const r = g[x.user_id] = g[x.user_id] || { user_id: x.user_id, messages: 0, calls: 0 }; r.messages++; r.calls += x.calls; });
+        return Object.values(g).map(r => { const f = DB.staff.find(x => x.user_id === r.user_id), c = (DB.customers || []).find(x => x.user_id === r.user_id), u = DB.users.find(x => x.id === r.user_id);
+          return { ...r, name: (f && f.name) || (c && c.name) || (u && u.email) || '' }; }).sort((x, y) => y.messages - x.messages || x.name.localeCompare(y.name));
+      },
       list_activity(a) {
         if (!uid() || !isAdmin()) fail('not authorized', '42501');
         const q = String(a.p_q || '').trim(), nq = norm(q), g = a.p_group || null, has = (x, k) => !!x.detail && Object.prototype.hasOwnProperty.call(x.detail, k);
@@ -873,7 +919,7 @@
           : g === 'stock' ? ['receive', 'receipt_undo', 'stock', 'product_add', 'product_del', 'sync', 'import'].includes(x.kind) || (x.kind === 'product_edit' && (has(x, 'qty') || has(x, 'title') || has(x, 'status')))
           : g === 'prices' ? ['bulk_price', 'bulk_undo'].includes(x.kind) || (x.kind === 'product_edit' && (has(x, 'price') || has(x, 'cost') || has(x, 'hide_price')))
           : g === 'money' ? ['pay_in', 'pay_in_del', 'pay_out', 'pay_out_del', 'expense', 'expense_del'].includes(x.kind)
-          : g === 'admin' ? ['staff', 'staff_del', 'settings', 'customer'].includes(x.kind) : true);
+          : g === 'admin' ? ['staff', 'staff_del', 'settings', 'customer'].includes(x.kind) : g === 'ai' ? x.kind === 'ai' : true);
         const hit = DB.activity.filter(x => (!a.p_from || x.created_at >= a.p_from) && (!a.p_to || x.created_at < a.p_to) && (!a.p_actor || x.actor_id === a.p_actor)
           && (!q || norm(x.title).includes(nq) || String((x.detail || {}).no) === q || norm(x.actor_name).includes(nq)) && inGroup(x)).sort(newest);
         const people = {};

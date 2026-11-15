@@ -61,7 +61,8 @@
     sk_price_mode: ["إظهار الأسعار", "Price visibility"], sk_orders_enabled: ["الطلبات", "Orders"], sk_open_signup: ["التسجيل", "Sign-up"], sk_shop_closed: ["قفل الطلبات", "Closing orders"],
     sk_closed_msg: ["رسالة القفل", "Closed message"], sk_hide_qty: ["إخفاء الكميات", "Hiding quantities"], sk_hide_branches: ["إخفاء الفروع", "Hiding branches"], sk_no_below_cost: ["البيع تحت التكلفة", "Selling below cost"],
     sk_low_stock: ["حد «قرب يخلص»", "Running-low level"], sk_invoice_footer: ["آخر الفاتورة", "Invoice footer"], sk_notice: ["الإعلان", "Notice"], sk_contact_wa: ["رقم الواتساب", "WhatsApp number"],
-    sk_bot_rules: ["الرد الآلي", "Auto-reply"], sk_bot_enabled: ["الرد الآلي", "Auto-reply"], sk_bot_welcome: ["ترحيب الرد الآلي", "Auto-reply welcome"], sk_brands: ["الماركات", "Brands"], sk_brand_logos: ["شعارات الماركات", "Brand logos"], sk_ads: ["إعلانات الرئيسية", "Home screen ads"],
+    sk_bot_rules: ["الرد الآلي", "Auto-reply"], sk_bot_enabled: ["الرد الآلي", "Auto-reply"], sk_bot_welcome: ["ترحيب الرد الآلي", "Auto-reply welcome"], sk_brands: ["الماركات", "Brands"], sk_brand_logos: ["شعارات الماركات", "Brand logos"], sk_ads: ["إعلانات الرئيسية", "Home screen ads"], sk_ai_customers: ["المساعد للزبائن", "Assistant for customers"],
+    sk_ai_name: ["اسم المساعد", "Assistant’s name"], sk_ai_rules: ["تعليمات المساعد", "Assistant instructions"], sk_ai_daily: ["رسايل المساعد في اليوم", "Assistant messages a day"],
     sk_other: ["إعدادات الشركة", "Company settings"],
     /* bulk prices */
     bpHow: ["كيف يتغير السعر", "How prices change"], bpModePct: ["نسبة ٪", "By %"], bpModeAdd: ["مبلغ", "By amount"], bpModeMargin: ["التكلفة + ربح", "Cost + margin"],
@@ -106,10 +107,10 @@
   /* ---------- the log as sentences ---------- */
   const GROUP = { sale: 'sales', return: 'sales', receive: 'stock', receipt_undo: 'stock', stock: 'stock', product_add: 'stock', product_del: 'stock', sync: 'stock', import: 'stock',
     bulk_price: 'prices', bulk_undo: 'prices', pay_in: 'money', pay_in_del: 'money', pay_out: 'money', pay_out_del: 'money', expense: 'money', expense_del: 'money',
-    staff: 'admin', staff_del: 'admin', settings: 'admin', customer: 'admin' };
+    staff: 'admin', staff_del: 'admin', settings: 'admin', customer: 'admin', ai: 'ai' };
   const ICON = { sale: 'tag', return: 'undo', receive: 'receipt', receipt_undo: 'undo', stock: 'stack', product_add: 'plus', product_del: 'trash', product_edit: 'edit', sync: 'copy', import: 'download',
     bulk_price: 'percent', bulk_undo: 'undo', pay_in: 'wallet', pay_in_del: 'trash', pay_out: 'truck', pay_out_del: 'trash', expense: 'wallet', expense_del: 'trash',
-    staff: 'users', staff_del: 'users', settings: 'shield', customer: 'user' };
+    staff: 'users', staff_del: 'users', settings: 'shield', customer: 'user', ai: 'spark' };
   const groupOf = x => x.kind === 'product_edit' ? (x.detail && (x.detail.price || x.detail.cost || x.detail.hide_price) ? 'prices' : 'stock') : GROUP[x.kind] || 'admin';
   const v2 = v => v == null || v === '' ? '—' : typeof v === 'boolean' ? t(v ? 'lgYes' : 'lgNo') : typeof v === 'number' || /^-?\d+(\.\d+)?$/.test(String(v)) ? num(+v) : String(v);
   const moneyOrDash = v => v == null ? '—' : money(v);
@@ -151,6 +152,7 @@
     if ((x.kind === 'sync' || x.kind === 'import') && d) f.push(t('lgSynced', { a: num(d.inserted || 0), u: num(d.updated || 0) }));
     if ((x.kind === 'pay_in' || x.kind === 'pay_out' || x.kind.endsWith('_del')) && d.note && !x.kind.startsWith('expense')) f.push(d.note);
     if (x.kind === 'stock' && d.note) f.push(d.note);
+    if (x.kind === 'ai' && d.ask) f.push('«' + d.ask + '»');
     return f;
   }
   /* what opens under "details": the lines of a receipt, old → new values, permissions */
@@ -175,6 +177,10 @@
         if (rem.length) rows.push(`<div><dt>${esc(t('staffPerms'))}</dt><dd>${esc(t('lgRemovedP', { p: rem.map(p => t('perm_' + p)).join('، ') }))}</dd></div>`);
         if (w.active !== undefined && w.active !== d.active) rows.push(`<div><dt>${esc(t('lgStatus'))}</dt><dd>${esc(t(w.active ? 'lgActive' : 'lgStopped'))} ← <b>${esc(t(d.active ? 'lgActive' : 'lgStopped'))}</b></dd></div>`);
       }
+      /* the AI assistant given, taken, or what it may do changed */
+      const aiTxt = (on, ps) => on ? (ps && ps.length ? ps.map(p => t('perm_' + p)).join('، ') : t('aiSetStaffAsk')) : t('aiSetStaffOff');
+      if (d.ai_on !== undefined && (d.new ? d.ai_on : (w.ai_on !== undefined && (w.ai_on !== d.ai_on || JSON.stringify(w.ai_perms || []) !== JSON.stringify(d.ai_perms || [])))))
+        rows.push(`<div><dt>${esc(t('aiStaffT'))}</dt><dd>${d.new ? '' : esc(aiTxt(w.ai_on, w.ai_perms)) + ' ← '}<b>${esc(aiTxt(d.ai_on, d.ai_perms))}</b></dd></div>`);
       const lim = v => v == null ? t('ctlNoLimit') : num(v) + '٪';
       if (d.new ? d.max_discount != null : (w.max_discount !== undefined && String(w.max_discount) !== String(d.max_discount))) rows.push(`<div><dt>${esc(t('lgLimit'))}</dt><dd>${d.new ? '' : esc(lim(w.max_discount)) + ' ← '}<b>${esc(lim(d.max_discount))}</b></dd></div>`);
       return rows.length ? `<dl class="log-ch">${rows.join('')}</dl>` : '';
@@ -200,7 +206,7 @@
   SP.logRow = logRow;
 
   /* ---------- the activity log ---------- */
-  const GROUPS = [['', 'logAll'], ['sales', 'logSales'], ['stock', 'logStock'], ['prices', 'logPrices'], ['money', 'logMoney'], ['admin', 'logAdmin']];
+  const GROUPS = [['', 'logAll'], ['sales', 'logSales'], ['stock', 'logStock'], ['prices', 'logPrices'], ['money', 'logMoney'], ['admin', 'logAdmin'], ['ai', 'logAi']];
   const RANGES = [['today', 'rangeToday'], ['7', 'range7'], ['month', 'rangeMonth'], ['all', 'rangeAll']];
   SP.route(/^admin-log$/, async (m, n) => {
     if (gate(n) || !guard(n, t('logT'))) return;
