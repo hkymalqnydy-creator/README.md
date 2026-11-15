@@ -304,7 +304,7 @@ const log = s => console.log(`${++step}. ${s}`);
     a = await say('بيع فحمات باترول');
     const sm = await db(() => window.__sample[0]);
     must(sm.first.includes('an employee named أحمد') && sm.first.includes('only: sales') && sm.first.includes('الضمان 3 شهور') && sm.last.role === 'user' && sm.last.content.includes('بيع فحمات باترول'), 'what Claude is told ' + sm.first.slice(0, 300));
-    must(sm.tools.sort().join() === 'add_to_cart,find_invoices,find_parts,invoice_from_photo,open_page,part_details,prepare_sale' && sm.cache === false, 'his tools only ' + sm.tools);
+    must(sm.tools.sort().join() === 'add_to_cart,find_invoices,find_parts,invoice_from_photo,open_page,part_details,prepare_sale' && sm.cache === undefined, 'his tools only (no cache with tools) ' + sm.tools);
     must(a.includes('جهزتلك') && await lastAi().locator('.ai-prop').count() === 1, 'Claude prepared the sale: ' + a);
     await confirmLast();
     log('inside the Claude app: Claude gets who he is and only his tools, finds the part and prepares the sale; «نفّذ» sells it');

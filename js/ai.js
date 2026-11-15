@@ -205,14 +205,16 @@
   /* ---------- engine: Claude inside the Claude app (the viewer's own Claude) ---------- */
   const SAMPLE_ERR = { not_granted: 'aiErrDenied', rate_limited: 'aiErrBusy', session_expired: 'aiErrSignInClaude' };
   async function runClaude(E, msg, ask, img, ctx, idx) {
+    /* page tools: small results (a long list goes back cut, with a note) */
+    const small = r => { const j = JSON.stringify(r == null ? null : r); return j && j.length > 9000 ? { cut: true, part: j.slice(0, 9000) } : r; };
     const tools = SP.aiTools().map(x => ({ name: x.name, description: x.desc, inputSchema: { type: 'object', properties: x.props || {}, required: x.req || [] },
-      execute: async input => ctx.run(x.name, input) }));
+      execute: async input => small(await ctx.run(x.name, input)) }));
     const input = history(idx), q = ask || (img ? 'What part is in this photo? Find it in the shop.' : '');
     if (input.length && input[input.length - 1].role === 'user') input[input.length - 1].content += '\n' + q; else input.push({ role: 'user', content: q });
     input[0] = { role: 'user', content: brief() + '\n\n' + pageNow() + '\n\n---\n\n' + input[0].content };
     try {
-      const out = await E.sample(input, { tools, modelTier: 'default', cache: false, images: img && E.images ? [img] : undefined,
-        onText: ({ text }) => { if (text) { msg.text = text; msg.typing = false; draw(); } } });
+      const out = await E.sample(input, { tools, modelTier: 'default', images: img && E.images ? [img] : undefined,
+        onText: ({ text }) => { if (!text) return; if (/^Thinking(\.\.\.|…)$/.test(text.trim())) { msg.status = t('aiThinking'); draw(); return; } msg.status = ''; msg.text = text; msg.typing = false; draw(); } });
       msg.text = (out && out.text) || msg.text || '';
     } catch (e) {
       const k = SAMPLE_ERR[e && e.code];
