@@ -245,7 +245,8 @@
   let sb = null;
   /* The database library loads only when a server is set (the demo never needs it), and gives up after a while,
      so a slow or blocked connection shows the retry screen instead of holding the app on its splash screen. */
-  const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.97.0';
+  /* 2.105+ has passkeys (Face ID sign-in); if that file ever fails, the previous one still runs everything else */
+  const SUPABASE_JS = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.1', 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.97.0'];
   const scripts = {};
   function loadScript(src, ms = 20000) {
     if (!scripts[src]) scripts[src] = new Promise((ok, no) => {
@@ -269,12 +270,13 @@
       if (CFG.demo && window.SPARAT_DEMO) { sb = SP.sb = window.SPARAT_DEMO.create({ seed: true, persist: true }); SP.demo = true; return ''; }
       return 'config';
     }
-    if (!window.supabase || typeof window.supabase.createClient !== 'function') {
-      try { await loadScript(SUPABASE_JS); } catch (e) { console.warn(e.message); }
-      if (!window.supabase || typeof window.supabase.createClient !== 'function') return 'lib';
+    for (const src of SUPABASE_JS) {
+      if (window.supabase && typeof window.supabase.createClient === 'function') break;
+      try { await loadScript(src); } catch (e) { console.warn(e.message); }
     }
+    if (!window.supabase || typeof window.supabase.createClient !== 'function') return 'lib';
     sb = SP.sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
-      auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
+      auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true, experimental: { passkey: true } }
     });
     return '';
   }
@@ -543,7 +545,11 @@
     const n = ++tok;
     for (const r of ROUTES) {
       const m = h.match(r.re);
-      if (m) { SP.tab = r.o.tab || ''; try { await r.fn(m, n); } catch (e) { console.error(e); if (SP.fail) SP.fail(e, n); } return; }
+      if (m) {
+        /* the system's screens light up the system tab */
+        SP.tab = r.o.tab != null ? r.o.tab : /^(system|pos|receive|invoices|inv-|purchases|reports|staff|stock|buyers?|buyer-|suppliers?|supplier-|expenses|pnl|admin)/.test(h) ? 'system' : '';
+        try { await r.fn(m, n); } catch (e) { console.error(e); if (SP.fail) SP.fail(e, n); } return;
+      }
     }
     location.replace('#');
   }

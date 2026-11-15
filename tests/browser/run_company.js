@@ -118,9 +118,9 @@ const log = s => console.log(`${++step}. ${s}`);
     a = await ask('شن عندكم زيوت'); must(a.includes('كل أنواع الزيوت'), 'new rule'); log('owner added an auto-reply and the assistant uses it');
     await page.click('#bclr'); await page.waitForTimeout(200);
     // ----- sales system -----
-    await login('owner@crossky.ly', '123456'); await see('.pos-tile');
+    await login('owner@crossky.ly', '123456'); await go('system'); await see('.pos-tile');
     const hrefs = await page.$$eval('.pos-tile', l => l.map(a => a.getAttribute('href')));
-    must(hrefs.length === 11 && ['#pos', '#receive', '#invoices', '#purchases', '#reports', '#staff', '#stock', '#buyers', '#suppliers', '#expenses', '#pnl'].every(h => hrefs.includes(h)), 'owner has 6 sales + 5 accounts tiles: ' + hrefs.join('|'));
+    must(hrefs.length === 15 && ['#admin', '#admin-control', '#admin-log', '#admin-prices', '#pos', '#receive', '#invoices', '#purchases', '#reports', '#staff', '#stock', '#buyers', '#suppliers', '#expenses', '#pnl'].every(h => hrefs.includes(h)), 'owner has 6 sales + 5 accounts + 4 owner tiles: ' + hrefs.join('|'));
     await go('staff'); await see('#sadd2'); await page.click('#sadd2'); await see('#se');
     await page.fill('#se', 'seller2@test.ly'); await page.fill('#sn2', 'سالم'); must(await page.locator('.perm-list input[value="sales"]').isChecked(), 'sell permission pre-ticked');
     must(await page.locator('.perm-list input[value="purchases"]').count() === 1 && !(await page.locator('.perm-list input[value="purchases"]').isChecked()), 'receiving permission offered, off by default');
@@ -128,7 +128,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await shot('08-staff');
     await go('mine'); await page.click('#lo'); await page.waitForTimeout(300); await go('signup'); await see('#anm');
     await page.fill('#anm', 'سالم'); await page.fill('#aph', '0931234567'); await page.fill('#ae', 'seller2@test.ly'); await page.fill('#ap', 'secret777'); await page.click('#ago');
-    await page.waitForURL(/#mine/); await see('.pos-tile'); const tl = await page.locator('.pos-tile').allInnerTexts();
+    await page.waitForURL(/#mine/); await see('a.sys-entry'); await go('system'); await see('.pos-tile'); const tl = await page.locator('.pos-tile').allInnerTexts();
     must(tl.length === 2 && !tl.join().includes('التقارير'), 'seller tiles: ' + tl.join('|')); log('salesperson signed up and got exactly: ' + tl.join(' + '));
     await go('pos'); await see('#pq'); await page.fill('#pq', 'KI-26300'); await page.press('#pq', 'Enter'); await see('.pline');
     await page.click('.pline [data-d="1"]'); await page.waitForTimeout(150); must((await text('.pline .stepper b')) === '2', 'qty 2');
@@ -231,10 +231,10 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('#rpos'); await page.waitForURL(/#pos/); await see('.pline'); must(await page.locator('.pline').count() === 3, 'three lines on the sale'); log('"open as a sale" put the 3 parts on the point of sale');
     await page.click('#pnew'); await go('receive'); await see('#rclr'); await page.click('#rclr'); await see('[data-ok]'); await page.click('[data-ok]'); await page.waitForTimeout(200);
     // a salesperson without the receiving permission
-    await login('seller@crossky.ly', '123456'); must(!(await page.locator('.pos-tile').allInnerTexts()).join().includes('استلام'), 'no receive tile for seller');
+    await login('seller@crossky.ly', '123456'); await go('system'); await see('.pos-tile'); must(!(await page.locator('.pos-tile').allInnerTexts()).join().includes('استلام'), 'no receive tile for seller');
     await go('receive'); await see('.empty'); log('salesperson without permission cannot receive stock');
     // ----- accounts: stock, customers (الشاري), suppliers (البايع), expenses, profit and loss -----
-    await go('mine'); await see('.pos-tile'); must(!(await page.locator('.pos-tile[href="#pnl"], .pos-tile[href="#stock"], .pos-tile[href="#buyers"]').count()), 'no accounts tiles for the salesperson');
+    await go('system'); await see('.pos-tile'); must(!(await page.locator('.pos-tile[href="#pnl"], .pos-tile[href="#stock"], .pos-tile[href="#buyers"]').count()), 'no accounts tiles for the salesperson');
     await go('pnl'); await see('.empty'); log('salesperson sees no accounts and cannot open profit and loss');
     await login('owner@crossky.ly', '123456');
     const pnl = () => page.evaluate(async () => { const d = new Date(), from = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 40), to = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);

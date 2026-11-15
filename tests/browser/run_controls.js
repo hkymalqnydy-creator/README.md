@@ -21,6 +21,10 @@ const log = s => console.log(`${++step}. ${s}`);
     return fs.existsSync(f) ? route.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }) : route.fulfill({ status: 404, body: '' });
   });
   const page = await ctx.newPage();
+  /* Face ID stand-in: Chrome's virtual platform authenticator (resident keys, user verified) */
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource|net::ERR/.test(m.text())) errors.push('console: ' + m.text()); });
   const shot = n => page.screenshot({ path: path.join(__dirname, 'shots', 'k-' + n + '.png') });
@@ -187,6 +191,39 @@ const log = s => console.log(`${++step}. ${s}`);
     await go('admin-company'); await see('#blg'); await page.click('#blg [data-rm="kia"]'); await page.click('#cgo'); await page.waitForTimeout(500);
     await go(''); await see('.btile .bmark'); must((await text('.btile[href="#b-kia"] .bmark')) === 'K', 'logo removed: back to the initials');
     log('brands: initials on a hexagon instead of the flag; a logo uploaded for KIA shows everywhere, and removing it brings the initials back');
+
+
+    // ----- the system on its own tab next to home -----
+    const tabs = async () => (await page.locator('.tabs .tab').allInnerTexts()).map(x => x.trim());
+    must((await tabs())[1] === 'المنظومة', 'system tab second for the owner: ' + (await tabs()).join('|'));
+    await page.click('.tabs a[href="#system"]'); await page.waitForURL(/#system/); await see('.pos-tile'); await see('.today .astat');
+    must(await page.locator('.today .log-row').count() === 0 && await page.locator('.pos-tile[href="#pos"]').count() === 1 && await page.locator('.pos-tile[href="#admin-log"]').count() === 1, 'system page: today, sales, accounts, owner tiles');
+    await go('pos'); must(await page.locator('.tabs .tab.on').innerText() === 'المنظومة', 'the system tab stays lit on the point of sale');
+    await shot('11-system');
+    await logout(); await go('');
+    must(!(await tabs()).includes('المنظومة'), 'customers have no system tab: ' + (await tabs()).join('|'));
+    await go('system'); await see('.empty'); must((await text('.empty')).includes('ادخل'), 'system asks to sign in');
+    await page.click('.empty a[href="#login"]'); await see('#ae'); await page.fill('#ae', 'seller@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago');
+    await page.waitForURL(/#system/); await see('.pos-tile');
+    must((await tabs())[1] === 'المنظومة' && await page.locator('.pos-tile[href="#pos"]').count() === 1 && await page.locator('.pos-tile[href="#admin-log"]').count() === 0, 'the seller: system tab, own tiles, no owner tiles');
+    log('system tab next to home for the owner and staff (today, sales, accounts, owner tiles); customers do not see it; signing in from it comes back to it');
+
+    // ----- Face ID (passkeys) -----
+    await login('owner@crossky.ly'); await see('#bioon', 8000);
+    await page.click('#bioon'); await see('.bio-card.on', 8000);
+    must(await db(() => window.__mockdb.passkeys.length) === 1 && (await text('.bio-list')).length > 0, 'passkey saved and listed');
+    await logout(); await go('login'); await see('#abg', 8000);
+    await page.click('#abg'); await page.waitForURL(/#mine/, { timeout: 8000 }); await see('.acct');
+    must((await text('.acct')).includes('owner@crossky.ly'), 'signed in with the passkey');
+    const used = await db(() => window.__mockdb.passkeys[0].last_used_at);
+    must(!!used, 'last use recorded');
+    log('Face ID: turned on from the account page, then signed in with one tap (no email or password)'); await shot('12-faceid');
+    await page.click('.bio-list [data-del]'); await confirm(); await see('#bioon:not(.btn-ghost)', 6000);
+    must(await db(() => window.__mockdb.passkeys.length) === 0, 'removed');
+    await logout(); await go('login'); await see('#abg', 8000); await page.click('#abg');
+    await page.waitForFunction(() => document.querySelector('#aerr').textContent.length > 5);
+    must((await text('#aerr')).includes('كلمة السر'), 'removed passkey no longer signs in: ' + await text('#aerr'));
+    log('removed it from the account page: that passkey no longer signs in, and the page says to use the password');
 
     if (errors.length) throw new Error('browser errors:\n' + errors.join('\n'));
     console.log('\nCONTROLS PASSED (' + step + ' checks)');

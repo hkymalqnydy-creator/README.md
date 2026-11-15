@@ -56,12 +56,14 @@
     shell(bar(t('mine'), '', { noBack: true }) + `<main class="wrap mine">
       <section class="mcard acct"><div class="mc-head">${I('user')}<span><b>${esc(t('signedInT'))}</b><small class="ltr">${esc(S.user.email)}</small></span>
         <button type="button" class="btn btn-ghost sm" id="lo">${I('logout', 'dirx')} ${esc(t('logout'))}</button></div></section>
+      ${SP.bioCard ? SP.bioCard() : ''}
+      ${SP.systemLink ? SP.systemLink() : ''}
       ${S.admin ? `<a class="admin-entry" href="#admin">${I('shield')}<span><b>${esc(t('admin'))}</b><small>${esc(t('adminB'))}</small></span>${I('chevL', 'dirx')}</a>` : ''}
-      ${SP.posEntry ? SP.posEntry() : ''}
       ${shops.length ? `<div class="sec-h"><h2>${esc(t(shops.length > 1 ? 'yourShops' : 'yourShop'))}</h2></div>${shops.map(mcard).join('')}<a class="btn btn-ghost" href="#new-shop">${I('plus')} ${esc(t('anotherShop'))}</a>`
         : `<section class="onb"><h2>${esc(t('registerT'))}</h2><p>${esc(t('ctaB'))}</p><a class="btn btn-signal" href="#new-shop">${I('store')} ${esc(t('registerShop'))}</a></section>`}
       ${prefs()}</main>`);
     wirePrefs();
+    if (SP.wireBio) SP.wireBio(n);
     $('#lo').onclick = async () => { await SP.auth.signOut(); await SP.refreshUser(null); SP.toast(t('loggedOut')); SP.render(); };
     SP.done(n);
   }, { tab: 'mine' });
@@ -73,6 +75,7 @@
     if (S.user) { shell(bar(t('signedInT')) + `<main class="wrap">${empty('check', t('signedInT'), t('signedAs', { e: S.user.email }), `<a class="btn btn-ink" href="#mine">${esc(t('mine'))}</a>`)}</main>`); return; }
     shell(bar(t(up ? 'signupT' : 'loginT')) + `<main class="wrap form-wrap">
       <div class="chips light authtabs"><a class="chip${up ? '' : ' on'}" href="#login"${up ? '' : ' aria-current="page"'}>${esc(t('tabIn'))}</a><a class="chip${up ? ' on' : ''}" href="#signup"${up ? ' aria-current="page"' : ''}>${esc(t('tabUp'))}</a></div>
+      ${up ? '' : '<div id="abio" class="bio-login" hidden></div>'}
       <form class="form" id="af" novalidate style="margin-top:18px">
         ${up && SP.company ? `<div class="field"><label for="anm">${esc(t('custName'))} <span class="req">*</span></label><input id="anm" class="input" maxlength="80" autocomplete="name" required></div>
         <div class="row2"><div class="field"><label for="aph">${esc(t('phoneNum'))} <span class="req">*</span></label><input id="aph" class="input" type="tel" inputmode="tel" dir="ltr" maxlength="30" autocomplete="tel"></div>
@@ -105,6 +108,13 @@
         SP.go(to);
       } catch (x) { err.textContent = SP.errText(x); btn.classList.remove('busy'); btn.textContent = label; }
     };
+    /* Face ID / fingerprint (js/passkey.js): same landing as the password */
+    if (!up && SP.wireBioLogin) SP.wireBioLogin(n, async session => {
+      await SP.refreshUser(session);
+      SP.toast(t('welcome'));
+      const to = S.after || 'mine'; S.after = '';
+      SP.go(to);
+    });
     if ($('#afg')) $('#afg').onclick = async () => {
       const email = $('#ae').value.trim();
       if (!okEmail(email)) { err.textContent = t('emailFirst'); $('#ae').focus(); return; }

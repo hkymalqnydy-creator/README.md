@@ -124,6 +124,10 @@ const log = (() => { let n = 0; return s => console.log(`${++n}. ${s}`); })();
     await go('invoices'); await page.click('[data-r="all"]').catch(() => {}); await see('.inv-row'); await page.click('.inv-row'); await see('#ish');
     must((await page.getAttribute('#ish', 'href')).startsWith('https://wa.me/') && await page.locator('[onclick="window.print()"]').count() === 0, 'invoice actions in the page');
     await shot('02-invoice'); log('invoice: WhatsApp link, no print button');
+    // the system tab is there; Face ID is not offered inside the page frame (WebAuthn is not allowed there)
+    must((await page.locator('.tabs .tab').allInnerTexts()).map(x => x.trim())[1] === 'المنظومة', 'system tab in the page');
+    await go('mine'); await see('.acct'); await page.waitForTimeout(400); must(await page.locator('#bioon').count() === 0, 'no Face ID card in the page');
+    log('system tab next to home; no Face ID inside the Claude app page');
     const csp = await db(() => window.__csp), own = csp.filter(v => /page\.test|inline|eval/.test(v));
     must(!own.length, 'the page policy blocked the app itself: ' + own.join(' | '));
     must(!errors.length, errors.join(' | '));

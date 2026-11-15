@@ -1011,3 +1011,17 @@ a.astat:active{transform:scale(.98)}
 .blogo.busy .blogo-pick{opacity:.5;pointer-events:none}
 .blogo-rm{position:absolute;top:4px;inset-inline-end:4px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--chip);color:var(--muted);border:0;padding:0}
 .blogo-rm .ic{width:14px;height:14px}
+/* ---------- Face ID sign-in, and the system on its own tab ---------- */
+.bio-login{margin-top:16px}
+.bio-btn .ic{width:22px;height:22px}
+.or-line{display:flex;align-items:center;gap:10px;margin:16px 0 0;color:var(--muted);font-size:13px}
+.or-line::before,.or-line::after{content:"";flex:1;height:1px;background:var(--line)}
+.bio-card .mc-head>.ic{width:30px;height:30px;flex:none;color:var(--signal)}
+.bio-card.on .mc-head>.ic{color:var(--good)}
+.bio-card .mc-head>span{flex:1}
+.bio-list{margin-top:8px}
+.bio-list .arow:last-child{border-bottom:0}
+.bio-card .form-actions{margin-top:10px}
+.sys-entry{margin-bottom:0}
+.tabs-in[style*="repeat(6"] .tab{font-size:10.5px}
+.tabs-in[style*="repeat(6"] .tab span{white-space:nowrap}

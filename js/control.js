@@ -378,14 +378,16 @@
   });
 
   /* ---------- today, on the main admin tab ---------- */
-  SP.adminToday = async (el, n) => {
+  /* compact (the system tab): the numbers only, without the latest activity */
+  SP.adminToday = async (el, n, o) => {
     if (!el || !SP.company) return;
+    const compact = !!(o && o.compact);
     el.innerHTML = `<section class="mcard today"><h2 class="lbl">${esc(t('tdT'))}</h2><div class="astats">${'<div class="sk" style="height:74px"></div>'.repeat(4)}</div></section>`;
     const [from, to] = BK.span('today');
     const [p, s, l] = await Promise.all([
       rpc('pnl_report', { p_from: from.toISOString(), p_to: to.toISOString(), p_branch: null, p_tz: BK.tz() }).catch(() => null),
       rpc('stock_report', { p_limit: 1 }).catch(() => null),
-      rpc('list_activity', { p_limit: 6 }).catch(() => null)]);
+      compact ? null : rpc('list_activity', { p_limit: 6 }).catch(() => null)]);
     if (!SP.alive(n) || !el.isConnected) return;
     const sum = (s && s.summary) || {}, stat = (k, v, href, cls, f) => `<a class="astat${cls ? ' ' + cls : ''}" href="#${href}"${f ? ` data-stk="${f}"` : ''}><b class="num">${esc(v)}</b><small>${esc(t(k))}</small></a>`;
     el.innerHTML = `<section class="mcard today"><h2 class="lbl">${esc(t('tdT'))}</h2><div class="astats">

@@ -32,7 +32,7 @@
     users: [], shops: [], products: [], admins: [], customers: [], files: {}, sync_key: '', staff: [], invoices: [], invoice_items: [], inv_seq: 1000,
     purchases: [], purchase_items: [], pur_seq: 0,
     stock_moves: [], move_seq: 0, customer_payments: [], supplier_payments: [], pay_seq: 0, expenses: [], exp_seq: 0,
-    activity: [], act_seq: 0, price_changes: [], batch_seq: 0,
+    activity: [], act_seq: 0, price_changes: [], batch_seq: 0, passkeys: [],
     settings: { id: 1, admin_wa: '', notice: '', updated_at: now(), price_mode: 'all', brand_name: '', tagline: '', logo: '', accent: '', hero_title: '', hero_sub: '',
       about: '', contact_wa: '', contact_phone: '', address: '', open_signup: true, orders_enabled: false, brands: [], brand_logos: {}, bot_enabled: true, bot_welcome: '', bot_rules: [],
       hide_qty: false, hide_branches: false, shop_closed: false, closed_msg: '', no_below_cost: false, low_stock: 3, invoice_footer: '' }
@@ -220,8 +220,81 @@
         if (!session) return { data: null, error: { message: 'not authorized' } };
         const u = DB.users.find(x => x.id === uid()); if (u && password) u.password = password; save();
         return { data: { user: session.user }, error: null };
+      },
+      /* Passkeys (Face ID, Touch ID, a fingerprint): the same calls as supabase-js 2.105+ (auth.passkey.*). The ceremony is the
+         browser's own; this side checks the challenge, the page's origin, the site's hash and that the person was verified. */
+      passkey: {
+        async startRegistration() {
+          if (!session) return pkErr('not signed in', 'not_authenticated');
+          const id = uuid(), challenge = pkRand();
+          pkChallenges.set(id, { challenge, kind: 'reg', user: uid(), exp: Date.now() + 5 * 60e3 });
+          return later({ data: { challenge_id: id, expires_at: new Date(Date.now() + 5 * 60e3).toISOString(), options: {
+            challenge, rp: { id: location.hostname, name: CONF.appName || 'Sparat' },
+            user: { id: b64uEnc(new TextEncoder().encode(uid())), name: session.user.email, displayName: session.user.email },
+            pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }], timeout: 60000, attestation: 'none',
+            authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+            excludeCredentials: DB.passkeys.filter(p => p.user_id === uid()).map(p => ({ type: 'public-key', id: p.credential_id })) } }, error: null });
+        },
+        async verifyRegistration({ challengeId, credential }) {
+          const c = pkTake(challengeId, 'reg');
+          if (c.error) return c;
+          if (!session || uid() !== c.user) return pkErr('not signed in', 'not_authenticated');
+          const cd = pkClient(credential, 'webauthn.create', c.challenge);
+          if (!cd) return pkErr('verification failed', 'webauthn_verification_failed');
+          if (DB.passkeys.some(p => p.credential_id === credential.id)) return pkErr('already registered', 'webauthn_credential_exists');
+          const p = { id: uuid(), credential_id: credential.id, user_id: c.user, friendly_name: pkDevice(), created_at: now(), last_used_at: null };
+          DB.passkeys.push(p); save();
+          return { data: { id: p.id, friendly_name: p.friendly_name, created_at: p.created_at }, error: null };
+        },
+        async startAuthentication() {
+          const id = uuid(), challenge = pkRand();
+          pkChallenges.set(id, { challenge, kind: 'login', exp: Date.now() + 5 * 60e3 });
+          return later({ data: { challenge_id: id, expires_at: new Date(Date.now() + 5 * 60e3).toISOString(),
+            options: { challenge, rpId: location.hostname, timeout: 60000, userVerification: 'required', allowCredentials: [] } }, error: null });
+        },
+        async verifyAuthentication({ challengeId, credential }) {
+          const c = pkTake(challengeId, 'login');
+          if (c.error) return c;
+          if (!pkClient(credential, 'webauthn.get', c.challenge)) return pkErr('verification failed', 'webauthn_verification_failed');
+          const ad = new Uint8Array(b64uDec(credential.response.authenticatorData || ''));
+          const site = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(location.hostname)));
+          /* the site's hash, the person present (UP) and verified by Face ID or the fingerprint (UV) */
+          if (ad.length < 37 || site.some((b, i) => b !== ad[i]) || (ad[32] & 0x05) !== 0x05) return pkErr('verification failed', 'webauthn_verification_failed');
+          const p = DB.passkeys.find(x => x.credential_id === credential.id), u = p && DB.users.find(x => x.id === p.user_id);
+          if (!u) return pkErr('credential not found', 'webauthn_credential_not_found');
+          p.last_used_at = now();
+          session = { user: { id: u.id, email: u.email }, access_token: 'demo' }; save(); setTimeout(() => emit('SIGNED_IN'));
+          return { data: { user: session.user, session }, error: null };
+        },
+        async list() {
+          return later({ data: session ? DB.passkeys.filter(p => p.user_id === uid()).map(p => ({ id: p.id, friendly_name: p.friendly_name, created_at: p.created_at, last_used_at: p.last_used_at })) : [], error: null });
+        },
+        async delete({ passkeyId }) {
+          if (!session) return pkErr('not signed in', 'not_authenticated');
+          DB.passkeys = DB.passkeys.filter(p => !(p.id === passkeyId && p.user_id === uid())); save();
+          return { data: null, error: null };
+        }
       }
     };
+    /* passkey helpers: base64url, one-use challenges, the client data check, the device's name */
+    const pkChallenges = new Map();
+    const b64uEnc = b => { let x = ''; new Uint8Array(b).forEach(c => { x += String.fromCharCode(c); }); return btoa(x).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+    const b64uDec = v => Uint8Array.from(atob(String(v).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(v).length + 3) % 4)), c => c.charCodeAt(0)).buffer;
+    const pkRand = () => b64uEnc(crypto.getRandomValues(new Uint8Array(32)));
+    const pkErr = (message, code) => ({ data: null, error: { message, code, name: 'AuthApiError' } });
+    function pkTake(id, kind) {
+      const c = pkChallenges.get(id); pkChallenges.delete(id);
+      if (!c || c.kind !== kind) return pkErr('challenge not found', 'webauthn_challenge_not_found');
+      if (Date.now() > c.exp) return pkErr('challenge expired', 'webauthn_challenge_expired');
+      return c;
+    }
+    function pkClient(cred, type, challenge) {
+      try {
+        const cd = JSON.parse(new TextDecoder().decode(b64uDec(cred.response.clientDataJSON)));
+        return cd.type === type && cd.challenge === challenge && cd.origin === location.origin ? cd : null;
+      } catch (e) { return null; }
+    }
+    const pkDevice = () => { const ua = navigator.userAgent || ''; return /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Browser'; };
 
     const canRead = (name, r) => name === 'products' ? (isStaff() || r.owner_id === uid()) : name === 'customers' ? (r.user_id === uid() || hasPerm('customers') || hasPerm('sales'))
       : name === 'staff' ? (isAdmin() || (!!uid() && r.user_id === uid())) : (name === 'invoices' ? (hasPerm('invoices') || r.staff_id === uid()) : true);

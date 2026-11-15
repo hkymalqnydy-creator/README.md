@@ -88,6 +88,28 @@
   }
 
   /* Entry tiles on the account page for the owner and staff. */
+  /* ---------- the system, on its own tab next to home (staff and the owner) ---------- */
+  Object.assign(window.SP_IC, { sys: '<rect x="3.5" y="4.5" width="17" height="11.5" rx="2"/><path d="M8.5 20h7M12 16v4"/><path d="m7.5 12.3 2.6-2.9 2.4 1.9 3.9-4"/>' });
+  Object.assign(SP.L.T, {
+    tabSystem: ["المنظومة", "System"], sysB: ["البيع والمخزن والحسابات", "Sales, stock and accounts"],
+    sysSignIn: ["ادخل بحساب الموظف أو صاحب الشركة باش تفتح المنظومة.", "Sign in with a staff or owner account to open the system."],
+    sysStaffOnly: ["المنظومة للموظفين وصاحب الشركة بس.", "The system is for staff and the owner only."],
+    sysAdminT: ["تحكم المالك", "Owner controls"]
+  });
+  SP.systemLink = () => SP.isStaff() ? `<a class="admin-entry sys-entry" href="#system">${I('sys')}<span><b>${esc(t('tabSystem'))}</b><small>${esc(t('sysB'))}</small></span>${I('chevL', 'dirx')}</a>` : '';
+  SP.route(/^system$/, (m, n) => {
+    if (gate(n)) return;
+    const head = bar(t('tabSystem'), '', { noBack: true });
+    if (!S.user) { S.after = 'system'; shell(head + `<main class="wrap">${empty('lock', t('tabSystem'), t('sysSignIn'), `<a class="btn btn-ink" href="#login">${esc(t('signIn'))}</a>`)}</main>`); return SP.done(n); }
+    if (!SP.isStaff()) { shell(head + `<main class="wrap">${empty('lock', t('tabSystem'), t('sysStaffOnly'))}</main>`); return SP.done(n); }
+    const own = S.admin ? [['admin', 'shield', 'admin'], ['admin-control', 'lock', 'ctlT'], ['admin-log', 'history', 'logT'], ['admin-prices', 'percent', 'bpT']]
+      .filter(([h]) => h === 'admin' || SP.company).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('') : '';
+    shell(head + `<main class="wrap mine sys">${S.admin && SP.company && SP.adminToday ? '<div id="atoday"></div>' : ''}${SP.posEntry()}
+      ${own ? `<section class="mcard"><h2 class="lbl">${esc(t('sysAdminT'))}</h2><div class="pos-grid">${own}</div></section>` : ''}</main>`);
+    if ($('#atoday')) SP.adminToday($('#atoday'), n, { compact: true });
+    SP.done(n);
+  }, { tab: 'system' });
+
   SP.posEntry = () => {
     if (!SP.isStaff()) return '';
     const tiles = [['pos', 'tag', 'posSale', SP.can('sales')], ['receive', 'receipt', 'rcvT', SP.can('purchases')], ['invoices', 'copy', 'invList', SP.can('sales') || SP.can('invoices')],

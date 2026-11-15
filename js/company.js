@@ -153,7 +153,7 @@
       <section class="mcard acct"><div class="mc-head">${I('user')}<span><b>${esc(c.name || t('signedInT'))}</b><small class="ltr">${esc(S.user.email)}</small></span>
         <button type="button" class="btn btn-ghost sm" id="lo">${I('logout', 'dirx')} ${esc(t('logout'))}</button></div>
         ${mode === 'approved' ? `<div class="banner ${c.approved ? 'note' : 'warn'}">${I(c.approved ? 'verified' : 'clock')}<span>${esc(t(c.approved ? 'approvedYes' : 'approvedNo'))}</span></div>` : ''}</section>
-      ${SP.posEntry ? SP.posEntry() : ''}${cartLink}
+      ${SP.bioCard ? SP.bioCard() : ''}${SP.systemLink ? SP.systemLink() : ''}${cartLink}
       <form class="form mcard" id="pf" novalidate><h2 class="lbl">${esc(t('myAccount'))}</h2>
         <div class="field"><label for="pn">${esc(t('custName'))}</label><input id="pn" class="input" maxlength="80" value="${esc(c.name)}" autocomplete="name"></div>
         <div class="row2"><div class="field"><label for="pp">${esc(t('phoneNum'))}</label><input id="pp" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(c.phone)}"></div>
@@ -161,6 +161,7 @@
         <p class="form-err" id="perr" role="alert"></p><button class="btn btn-ink" id="pgo">${esc(t('saveProfile'))}</button></form>
       ${SP.prefs()}</main>`);
     SP.wirePrefs();
+    if (SP.wireBio) SP.wireBio(n);
     $('#lo').onclick = async () => { await SP.auth.signOut(); await SP.refreshUser(null); SP.toast(t('loggedOut')); SP.render(); };
     $('#pf').onsubmit = async e => {
       e.preventDefault();

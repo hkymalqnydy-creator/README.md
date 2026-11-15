@@ -28,9 +28,10 @@
     let nav = $('#tabs');
     if (!nav) { nav = document.createElement('nav'); nav.id = 'tabs'; nav.className = 'tabs'; document.body.appendChild(nav); }
     nav.setAttribute('aria-label', t('nav'));
-    const T = [['home', '', 'home', 'tabHome'], ['cats', 'cats', 'grid', 'tabCats'], ['shops', 'shops', 'store', SP.company ? 'tabBranches' : 'tabShops'], ['favs', 'favs', 'heart', 'tabFavs'], ['mine', 'mine', 'user', SP.company ? 'tabAccount' : 'tabMine']]
-      .filter(x => !(x[0] === 'shops' && SP.hideBranches && SP.hideBranches()));
-    nav.innerHTML = `<div class="tabs-in">${T.map(([id, h, ic, k]) => `<a class="tab${SP.tab === id ? ' on' : ''}" href="#${h}"${SP.tab === id ? ' aria-current="page"' : ''}>${I(ic)}<span>${esc(t(k))}</span></a>`).join('')}</div>`;
+    const staff = !!(S.user && SP.isStaff && SP.isStaff());
+    const T = [['home', '', 'home', 'tabHome'], ['system', 'system', 'sys', 'tabSystem'], ['cats', 'cats', 'grid', 'tabCats'], ['shops', 'shops', 'store', SP.company ? 'tabBranches' : 'tabShops'], ['favs', 'favs', 'heart', 'tabFavs'], ['mine', 'mine', 'user', SP.company ? 'tabAccount' : 'tabMine']]
+      .filter(x => !(x[0] === 'shops' && SP.hideBranches && SP.hideBranches()) && (x[0] !== 'system' || staff));
+    nav.innerHTML = `<div class="tabs-in" style="grid-template-columns:repeat(${T.length},minmax(0,1fr))">${T.map(([id, h, ic, k]) => `<a class="tab${SP.tab === id ? ' on' : ''}" href="#${h}"${SP.tab === id ? ' aria-current="page"' : ''}>${I(ic)}<span>${esc(t(k))}</span></a>`).join('')}</div>`;
   }
   function shell(html, o = {}) {
     document.body.classList.toggle('has-actionbar', !!o.actionbar);
