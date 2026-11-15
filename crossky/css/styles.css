@@ -1025,3 +1025,77 @@ a.astat:active{transform:scale(.98)}
 .sys-entry{margin-bottom:0}
 .tabs-in[style*="repeat(6"] .tab{font-size:10.5px}
 .tabs-in[style*="repeat(6"] .tab span{white-space:nowrap}
+/* ---------- ads at the top of the home screen (js/ads.js) ----------
+   Plan: the company's own poster in its own colours. A photo card with a deep shade on the reading side, the title in the
+   display face and one pill button; it opens the hero, above the headline and the search. Without a photo (or inside the
+   Claude app, which blocks outside photos) the card keeps the brand gradient. Several ads slide by themselves. */
+.ads{position:relative;margin:2px 0 18px}
+.ads-track{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;border-radius:18px;
+  box-shadow:0 18px 34px -22px rgba(3,10,48,.85),0 0 0 1px rgba(255,255,255,.12)}
+.ads-track::-webkit-scrollbar{display:none}
+.ad{--ad-a:#101215;--ad-b:#2d3139;--ad-glow:rgba(255,163,26,.3);--ad-shade:12,14,18;
+  position:relative;isolation:isolate;flex:0 0 100%;scroll-snap-align:center;scroll-snap-stop:always;aspect-ratio:16/9;max-height:340px;overflow:hidden;
+  display:flex;align-items:center;color:#fff;background:radial-gradient(120% 130% at 100% 0%,var(--ad-glow),transparent 58%),linear-gradient(140deg,var(--ad-a),var(--ad-b))}
+[data-skin=royal] .ad{--ad-a:#0B1542;--ad-b:#2343D2;--ad-glow:rgba(127,155,255,.5);--ad-shade:8,15,52}
+.ad-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
+.ad::before{content:"";position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(to left,rgba(var(--ad-shade),.9) 0%,rgba(var(--ad-shade),.66) 36%,rgba(var(--ad-shade),.14) 70%,rgba(var(--ad-shade),0) 84%),linear-gradient(to top,rgba(var(--ad-shade),.5),transparent 48%)}
+.ad[dir=ltr]::before{background:linear-gradient(to right,rgba(var(--ad-shade),.9) 0%,rgba(var(--ad-shade),.66) 36%,rgba(var(--ad-shade),.14) 70%,rgba(var(--ad-shade),0) 84%),linear-gradient(to top,rgba(var(--ad-shade),.5),transparent 48%)}
+.ad.pos-end{justify-content:flex-end}
+.ad.pos-end::before{background:linear-gradient(to right,rgba(var(--ad-shade),.9) 0%,rgba(var(--ad-shade),.66) 36%,rgba(var(--ad-shade),.14) 70%,rgba(var(--ad-shade),0) 84%),linear-gradient(to top,rgba(var(--ad-shade),.5),transparent 48%)}
+.ad[dir=ltr].pos-end::before{background:linear-gradient(to left,rgba(var(--ad-shade),.9) 0%,rgba(var(--ad-shade),.66) 36%,rgba(var(--ad-shade),.14) 70%,rgba(var(--ad-shade),0) 84%),linear-gradient(to top,rgba(var(--ad-shade),.5),transparent 48%)}
+.ad.pos-top{align-items:flex-start}
+.ad.pos-bottom{align-items:flex-end}
+.ad.pos-top::before,.ad[dir].pos-top::before{background:linear-gradient(to bottom,rgba(var(--ad-shade),.88) 0%,rgba(var(--ad-shade),.5) 46%,rgba(var(--ad-shade),0) 80%)}
+.ad.pos-bottom::before,.ad[dir].pos-bottom::before{background:linear-gradient(to top,rgba(var(--ad-shade),.9) 0%,rgba(var(--ad-shade),.52) 46%,rgba(var(--ad-shade),0) 82%)}
+.ad.noimg::before,.ad:has(>.ad-img.broken)::before{display:none}
+/* without a photo (or when it can't load): the brand gradient with a red and a white stripe across the far corner, like a rally livery */
+.ad.noimg::after,.ad:has(>.ad-img.broken)::after{content:"";position:absolute;z-index:-1;inset-inline-end:-10%;top:-90%;width:48%;height:280%;pointer-events:none;
+  background:linear-gradient(90deg,transparent 0 34%,var(--stripe,var(--signal)) 34% 47%,transparent 47% 55%,rgba(255,255,255,.88) 55% 59%,transparent 59%);transform:rotate(34deg)}
+.ad[dir=ltr].noimg::after,.ad[dir=ltr]:has(>.ad-img.broken)::after{transform:rotate(-34deg)}
+/* an ad reads in its own language's direction, whatever the app's language: its side, its shade and its arrow follow it */
+.ad[dir=rtl] .dirx{transform:none}
+.ad[dir=ltr] .dirx{transform:scaleX(-1)}
+.ad-copy{display:grid;justify-items:start;align-content:center;gap:5px;padding:16px 18px;max-width:min(62%,470px)}
+.ad.pos-top .ad-copy,.ad.pos-bottom .ad-copy{max-width:min(94%,640px)}
+.ad.noimg .ad-copy{max-width:min(78%,620px)}
+.ad-t{font-family:var(--font-display);font-weight:800;font-size:clamp(21px,6.2vw,36px);line-height:1.18;text-wrap:balance;text-shadow:0 1px 12px rgba(0,0,0,.25);
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.ad-s{font-size:13.5px;line-height:1.5;color:#E3E9FF;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.ad-cta{margin-top:7px;display:inline-flex;align-items:center;gap:3px;min-height:36px;padding:0 13px 0 15px;border-radius:999px;background:var(--signal);color:var(--on-signal);
+  font-weight:700;font-size:14px;line-height:1.2;white-space:nowrap;box-shadow:0 8px 18px -10px rgba(0,0,0,.6);transition:transform .12s ease}
+[data-skin=royal] .ad-cta{background:#fff;color:var(--royal)}
+.ad-cta .ic{width:16px;height:16px;stroke-width:2.3}
+a.ad:active .ad-cta{transform:scale(.96)}
+a.ad:focus-visible{outline:none}
+.ads-track:has(a.ad:focus-visible){outline:2.5px solid #fff;outline-offset:3px}
+@media (min-width:560px){.ad{aspect-ratio:12/5}.ad-s{font-size:14.5px}}
+@media (min-width:900px){.ads{margin:8px 0 26px}.ad{aspect-ratio:16/5}.ad-copy{padding:24px 30px}}
+.ads-dots{display:flex;justify-content:center;margin-top:6px}
+.ads-dots button{width:22px;height:22px;display:grid;place-items:center}
+.ads-dots button::before{content:"";width:6px;height:6px;border-radius:6px;background:rgba(255,255,255,.5);transition:width .25s ease,background-color .25s ease}
+.ads-dots button[aria-current="true"]::before{width:18px;background:#fff}
+.ads-edit{position:absolute;top:10px;inset-inline-end:10px;z-index:2;display:inline-flex;align-items:center;gap:4px;padding:4px 11px 4px 9px;border-radius:999px;
+  background:rgba(8,15,52,.6);color:#fff;font-size:12.5px;font-weight:700;line-height:1.5;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.ads-edit .ic{width:15px;height:15px}
+@media (prefers-reduced-motion:reduce){.ads-dots button::before,.ad-cta{transition:none}.ads-track{scroll-behavior:auto}}
+/* the editor's preview and the owner's list */
+.ads.prev{margin:0}
+.ads.prev .ads-track{box-shadow:none}
+.adform{display:grid;gap:14px}
+.adpick{display:flex;flex-wrap:wrap;gap:8px}
+.adlist{display:grid}
+.adlist .empty{padding:18px 8px}
+.adrow{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--line)}
+.adrow:last-child{border-bottom:0}
+.adrow-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:10px 0;text-align:start}
+.adrow-main .ar-main small{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.adrow-go{display:block!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ad-thumb{width:86px;height:50px;flex:none;border-radius:10px;overflow:hidden;display:grid;place-items:center;color:#fff;background:linear-gradient(140deg,#101215,#2d3139)}
+[data-skin=royal] .ad-thumb{background:linear-gradient(140deg,#0B1542,#2343D2)}
+.ad-thumb img{width:100%;height:100%;object-fit:cover}
+.ad-thumb .ic{width:22px;height:22px}
+.adrow.off .ad-thumb{opacity:.5;filter:grayscale(1)}
+.adrow-move{display:grid}
+.adrow-move .iconbtn{width:38px;height:34px}
+.adrow-move .iconbtn[disabled]{opacity:.28;pointer-events:none}

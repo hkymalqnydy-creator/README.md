@@ -102,7 +102,7 @@
     const head = bar(t('tabSystem'), '', { noBack: true });
     if (!S.user) { S.after = 'system'; shell(head + `<main class="wrap">${empty('lock', t('tabSystem'), t('sysSignIn'), `<a class="btn btn-ink" href="#login">${esc(t('signIn'))}</a>`)}</main>`); return SP.done(n); }
     if (!SP.isStaff()) { shell(head + `<main class="wrap">${empty('lock', t('tabSystem'), t('sysStaffOnly'))}</main>`); return SP.done(n); }
-    const own = S.admin ? [['admin', 'shield', 'admin'], ['admin-control', 'lock', 'ctlT'], ['admin-log', 'history', 'logT'], ['admin-prices', 'percent', 'bpT']]
+    const own = S.admin ? [['admin', 'shield', 'admin'], ['admin-control', 'lock', 'ctlT'], ['admin-log', 'history', 'logT'], ['admin-prices', 'percent', 'bpT'], ['admin-ads', 'megaphone', 'adsT']]
       .filter(([h]) => h === 'admin' || SP.company).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('') : '';
     shell(head + `<main class="wrap mine sys">${S.admin && SP.company && SP.adminToday ? '<div id="atoday"></div>' : ''}${SP.posEntry()}
       ${own ? `<section class="mcard"><h2 class="lbl">${esc(t('sysAdminT'))}</h2><div class="pos-grid">${own}</div></section>` : ''}</main>`);

@@ -71,8 +71,10 @@ const log = (() => { let n = 0; return s => console.log(`${++n}. ${s}`); })();
     must(await page.locator('.banner.inst').count() === 0, 'no install banner inside the Claude app');
     // the Claude app blocks outside photos, so its page keeps the bundled part pictures
     must(await page.evaluate(() => [...document.querySelectorAll('img')].every(i => !/^https?:/.test(i.getAttribute('src') || ''))), 'no outside photos inside the Claude app');
+    // the edition's ad still opens the home screen, on the brand gradient instead of its outside photo
+    must(await page.locator('.hero .ads .ad.noimg').count() === 1 && (await text('.ad-t')) === 'قطع غيار نيسان باترول', 'the Patrol ad without its photo');
     const cfg = await page.evaluate(() => window.SPARAT_CONFIG);
-    must(cfg.embedded && cfg.noServiceWorker && cfg.demo && !cfg.supabaseUrl, 'page config'); log('opens as a page with the demo, fonts unreachable, no install banner');
+    must(cfg.embedded && cfg.noServiceWorker && cfg.demo && !cfg.supabaseUrl, 'page config'); log('opens as a page with the demo, fonts unreachable, no install banner, the Patrol ad on the brand gradient');
     await go('login'); await see('#ae'); await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago');
     await page.waitForURL(/#mine/); await page.waitForTimeout(400);
     // barcode: no camera in the page frame, straight to photo or typing

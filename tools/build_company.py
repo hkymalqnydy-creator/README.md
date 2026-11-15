@@ -5,6 +5,7 @@ invoice-reader function, sync bridge, Android/iPhone/Windows packaging and the g
 
   python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand branding/crossky/png --out crossky \
       --skin royal --color '#2F54E6' --logo branding/crossky/svg/wordmark-white.svg --logo-ink branding/crossky/svg/wordmark-ink.svg \
+      --hero-car branding/crossky/svg/hero-car.svg --demo-extra branding/crossky/demo.json --demo-ads branding/crossky/ads.json \
       --site-url https://hkymalqnydy-creator.github.io/README.md/crossky/
 
 --demo (default on) lets the app run without a server, with sample data kept on the device; it switches itself off
@@ -61,6 +62,7 @@ def main():
     ap.add_argument('--logo-ink', default='', help='wordmark SVG for paper and light screens (invoice, about page)')
     ap.add_argument('--hero-car', default='', help='picture of a car for the blue hero (SVG or PNG with a clear background)')
     ap.add_argument('--demo-extra', default='', help='JSON list of the edition\'s own demo parts with real photos (see branding/crossky/demo.json)')
+    ap.add_argument('--demo-ads', default='', help='JSON list of the ads the demo shows at the top of the home screen (see branding/crossky/ads.json)')
     ap.add_argument('--site-url', default='', help='public address of this edition, for link previews (WhatsApp) and share links')
     ap.add_argument('--brands', default='KR,JP', help='brands shown until the owner picks them in the app: origin countries (KR,JP) or brand ids (toyota,kia); "all" for every brand')
     a = ap.parse_args()
@@ -121,6 +123,17 @@ def main():
                 copy(os.path.join(base, rel), os.path.join(out, dst))
                 imgs.append(dst)
             extra.append(dict(x, imgs=imgs))
+    # the demo's ads at the top of the home screen: a picture is an https address, one of the app's own pictures, or a file next to the list
+    ads = []
+    if a.demo_ads:
+        base = os.path.dirname(os.path.abspath(a.demo_ads))
+        for x in json.loads(read(a.demo_ads))[:5]:
+            img = x.get('img', '')
+            if img and not img.startswith(('https://', 'img/', 'icons/')):
+                dst = 'img/demo/' + os.path.basename(img)
+                copy(os.path.join(base, img), os.path.join(out, dst))
+                img = dst
+            ads.append(dict([(k, v) for k, v in x.items() if not k.startswith('_')], img=img))   # "_photo" and the like are notes
     svg = os.path.join(os.path.dirname(brand), 'svg', 'icon.svg')
     if os.path.exists(svg):
         copy(svg, os.path.join(out, 'icons', 'icon.svg'))
@@ -139,6 +152,7 @@ window.SPARAT_CONFIG = {
   logoInk: %(jink)s,              // wordmark for paper and light screens
   heroCar: %(jcar)s,              // picture of a car in the blue hero (skin royal)
   demoExtra: %(jextra)s,      // the edition's own demo parts, with real photos
+  demoAds: %(jads)s,      // the demo's ads at the top of the home screen (the owner changes them in Owner panel → Ads)
   defaultCountry: %(jcountry)s,
   defaultLang: '',          // '' = follow the phone's language; or 'ar', 'en', 'fr', 'es', 'de', 'tr', 'ru', 'zh'
   demo: %(demo)s,             // demo data on the device while no server is set
@@ -148,7 +162,7 @@ window.SPARAT_CONFIG = {
 };
 """ % {'name': name, 'jname': json.dumps(name), 'jcountry': json.dumps(a.country), 'demo': 'false' if a.no_demo else 'true', 'jemail': json.dumps(a.email), 'jbrands': json.dumps(brands), 'jsite': json.dumps(site), 'jskin': json.dumps(a.skin),
        'jlogo': json.dumps('icons/logo.svg' if a.logo else ''), 'jink': json.dumps('icons/logo-ink.svg' if a.logo_ink else ''),
-       'jcar': json.dumps(hero_car), 'jextra': json.dumps(extra, ensure_ascii=False)})
+       'jcar': json.dumps(hero_car), 'jextra': json.dumps(extra, ensure_ascii=False), 'jads': json.dumps(ads, ensure_ascii=False)})
 
     m = json.loads(read(os.path.join(ROOT, 'manifest.webmanifest')))
     m.update({'name': name, 'short_name': name, 'description': '%s · %s. %s' % (name, a.tagline_ar, a.tagline_en), 'background_color': a.color, 'theme_color': a.color,

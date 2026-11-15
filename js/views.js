@@ -369,7 +369,7 @@
     if (gate(n)) return;
     const car = S.car, notice = (S.settings && S.settings.notice) || '';
     const brands = SP.popularIds().slice(0, 16).map(id => BRAND.get(id)).filter(Boolean);
-    shell(homeBar() + `<section class="hero"><div class="wrap">
+    shell(homeBar() + `<section class="hero"><div class="wrap">${SP.adsBanner ? SP.adsBanner() : ''}
         ${S.settings.hero_title ? `<h1>${esc(S.settings.hero_title)}</h1>` : `<h1>${esc(t('heroA'))} <em>${esc(t('heroB'))}</em></h1>`}<p>${esc(S.settings.hero_sub || t('heroSub'))}</p>
         <form class="searchbox" role="search" id="hs">${I('search')}<input type="search" name="q" placeholder="${esc(t('searchPh'))}" enterkeyhint="search" aria-label="${esc(t('search'))}"><button class="go">${esc(t('search'))}</button></form>
         <div class="hero-row"><button type="button" class="plate" data-act="car"><span class="plate-band">${I('car')}</span>
@@ -390,6 +390,7 @@
         ${SP.company && SP.contactCta ? SP.contactCta() : `<section class="cta"><h2>${esc(t('ctaT'))}</h2><p>${esc(t('ctaB'))}</p><a class="btn btn-signal" href="#mine">${I('store')} ${esc(t('ctaBtn'))}</a></section>`}
       </main>`);
     wireInstall($('#home'));
+    if (SP.wireAds) SP.wireAds($('.hero'), n);
     $('#hs').onsubmit = e => { e.preventDefault(); S.f = { ...FDEF, q: e.target.q.value.trim(), fit: !!S.car && S.f.fit }; saveF(); SP.go('search'); };
     const cc = S.country;
     api.stats({ country: cc, city: S.city }).then(st => {

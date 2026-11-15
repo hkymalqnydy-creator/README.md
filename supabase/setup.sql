@@ -1435,7 +1435,7 @@ create trigger products_log after insert or update or delete on public.products 
 create or replace function public.settings_log() returns trigger language plpgsql security definer set search_path = public as $$
 declare v_keys text[]; v_ch jsonb;
 begin
-  select array_agg(n.key order by n.key), jsonb_object_agg(n.key, case when n.key in ('about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub') then null else jsonb_build_array(o.value, n.value) end)
+  select array_agg(n.key order by n.key), jsonb_object_agg(n.key, case when n.key in ('about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub', 'ads') then null else jsonb_build_array(o.value, n.value) end)
   into v_keys, v_ch
   from jsonb_each(to_jsonb(new)) n join jsonb_each(to_jsonb(old)) o using (key)
   where n.value is distinct from o.value and n.key <> 'updated_at';
@@ -1645,3 +1645,35 @@ grant execute on function public.undo_receipt(uuid) to authenticated;
 grant execute on function public.bulk_price(jsonb) to authenticated;
 grant execute on function public.undo_bulk_price(bigint) to authenticated;
 grant execute on function public.price_batches() to authenticated;
+
+-- ---------- 13) إعلانات أعلى الرئيسية ----------
+-- The company's own banners at the top of the home screen (js/ads.js): up to 5, each with a picture (a link to a photo uploaded
+-- to the photos bucket, or any https picture), a title, a line, a button text, where a tap goes ("q" search words, "b" a brand,
+-- "wa" a WhatsApp message to the company, "url" an https page), where the words sit on the picture ("pos": "" the start side,
+-- "end", "top" or "bottom") and an optional last day ("until", YYYY-MM-DD).
+-- Everyone reads them with the settings; only whoever may change the settings can change them, and the log names the change.
+--   [{"id": "a1", "img": "https://…", "title": "كل قطع الباترول عندنا", "sub": "…", "cta": "تسوّق توا", "go": "q", "to": "باترول", "until": "", "on": true}]
+alter table public.settings add column if not exists ads jsonb not null default '[]'::jsonb;
+create or replace function public.ads_ok(p jsonb) returns boolean language sql immutable as $$
+  select case
+    when p is null or jsonb_typeof(p) <> 'array' then false
+    when jsonb_array_length(p) > 5 or octet_length(p::text) > 16000 then false
+    else not exists (
+      select 1 from jsonb_array_elements(p) x
+      where jsonb_typeof(x) <> 'object'
+         or char_length(coalesce(x->>'id', '')) > 40
+         or char_length(coalesce(x->>'title', '')) > 60
+         or char_length(coalesce(x->>'sub', '')) > 120
+         or char_length(coalesce(x->>'cta', '')) > 24
+         or char_length(coalesce(x->>'to', '')) > 300
+         or coalesce(x->>'go', '') not in ('', 'q', 'b', 'wa', 'url')
+         or coalesce(x->>'pos', '') not in ('', 'end', 'top', 'bottom')
+         or (coalesce(x->>'img', '') <> '' and (char_length(x->>'img') > 600 or (x->>'img') !~ '^https://[^\s"''<>]+$'))
+         or (x->>'go' = 'url' and coalesce(x->>'to', '') !~ '^https://[^\s"''<>]+$')
+         or (coalesce(x->>'until', '') <> '' and (x->>'until') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+         or (x ? 'on' and jsonb_typeof(x->'on') <> 'boolean'))
+  end;
+$$;
+do $$ begin
+  alter table public.settings add constraint settings_ads_chk check (public.ads_ok(ads));
+exception when duplicate_object then null; end $$;

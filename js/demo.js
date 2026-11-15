@@ -35,8 +35,18 @@
     activity: [], act_seq: 0, price_changes: [], batch_seq: 0, passkeys: [],
     settings: { id: 1, admin_wa: '', notice: '', updated_at: now(), price_mode: 'all', brand_name: '', tagline: '', logo: '', accent: '', hero_title: '', hero_sub: '',
       about: '', contact_wa: '', contact_phone: '', address: '', open_signup: true, orders_enabled: false, brands: [], brand_logos: {}, bot_enabled: true, bot_welcome: '', bot_rules: [],
-      hide_qty: false, hide_branches: false, shop_closed: false, closed_msg: '', no_below_cost: false, low_stock: 3, invoice_footer: '' }
+      hide_qty: false, hide_branches: false, shop_closed: false, closed_msg: '', no_below_cost: false, low_stock: 3, invoice_footer: '', ads: [] }
   });
+  /* the edition's ads at the top of the home screen (config demoAds, from tools/build_company.py --demo-ads) */
+  const demoAds = () => (Array.isArray(CONF.demoAds) ? CONF.demoAds : []).filter(x => x && typeof x === 'object').slice(0, 5)
+    .map((x, k) => ({ id: String(x.id || 'ad' + (k + 1)).slice(0, 40), img: x.img || '', title: x.title || '', sub: x.sub || '', cta: x.cta || '', go: x.go || '', to: x.to || '', pos: x.pos || '', until: x.until || '', on: x.on !== false }));
+  /* the same checks as public.ads_ok in supabase/setup.sql, except that the demo keeps uploaded pictures on the device (data:) */
+  const URL_OK = /^https:\/\/[^\s"'<>]+$/;
+  const adsOk = v => Array.isArray(v) && v.length <= 5 && v.every(x => x && typeof x === 'object' && !Array.isArray(x)
+    && String(x.id || '').length <= 40 && String(x.title || '').length <= 60 && String(x.sub || '').length <= 120 && String(x.cta || '').length <= 24
+    && String(x.to || '').length <= 300 && ['', 'q', 'b', 'wa', 'url'].includes(x.go || '') && ['', 'end', 'top', 'bottom'].includes(x.pos || '')
+    && (!x.img || /^data:image\//.test(x.img) || (x.img.length <= 600 && URL_OK.test(x.img)) || /^(img|icons)\//.test(x.img))
+    && (x.go !== 'url' || URL_OK.test(x.to || '')) && (!x.until || /^\d{4}-\d{2}-\d{2}$/.test(x.until)) && (x.on == null || typeof x.on === 'boolean'));
 
   /* Picture for demo parts: the category icon on a soft gradient. */
   const PAL = [['#fff4e3', '#ffd9a3', '#a85a00'], ['#e8f1f6', '#c4dbe8', '#0d5b74'], ['#eef0e6', '#d6dcc4', '#4b5a1e'], ['#f3ecf8', '#ddcdea', '#5a3b85'], ['#f1f1ef', '#dcdcd6', '#3b3f45']];
@@ -60,7 +70,7 @@
       brand_name: app, tagline: 'قطع غيار السيارات الكورية واليابانية', hero_title: 'قطع الكوري والياباني… كلها عندنا',
       hero_sub: 'أصلي وتجاري بأسعار الجملة والقطاعي، مع التوصيل لكل المدن الليبية.',
       about: app + ' شركة متخصصة في قطع غيار السيارات الكورية واليابانية: هيونداي، كيا، تويوتا، نيسان، ميتسوبيشي وغيرها.\n\nنوفر القطع الأصلية والتجارية بضمان، ونخدم الزبائن والورش والتجار في كل ليبيا.',
-      contact_wa: '0912345678', contact_phone: '0912345678', address: 'طرابلس – طريق المطار', price_mode: 'all', orders_enabled: true, open_signup: false, brands: KJ,
+      contact_wa: '0912345678', contact_phone: '0912345678', address: 'طرابلس – طريق المطار', price_mode: 'all', orders_enabled: true, open_signup: false, brands: KJ, ads: demoAds(),
       bot_rules: [
         { k: 'توصيل, شحن, delivery', a: 'نعم، التوصيل متاح لكل المدن الليبية. ابعتلنا موقعك على واتساب ونحددلك الوقت والتكلفة.' },
         { k: 'ضمان, كفالة, warranty', a: 'القطع الأصلية عليها ضمان الوكيل، والتجاري عليه ضمان التركيب. التفاصيل مكتوبة في كل قطعة.' },
@@ -106,7 +116,7 @@
     /* the edition's own parts with real photos (config demoExtra, from tools/build_company.py --demo-extra): listed first */
     (Array.isArray(C.demoExtra) ? C.demoExtra : []).forEach((x, k) => x && x.sku && x.title && DB.products.push({
       id: uuid(), shop_id: s1.id, owner_id: owner.id, sku: String(x.sku), title: String(x.title), cat: x.cat || 'other', cond: x.cond || 'original',
-      price: x.price == null ? null : +x.price, nego: false, qty: x.qty == null ? 10 : +x.qty, make: x.make || 'any', model: x.model || '', y_from: null, y_to: null,
+      price: x.price == null ? null : +x.price, nego: false, qty: x.qty == null ? 10 : +x.qty, make: x.make || 'any', model: x.model || '', y_from: +x.y_from || null, y_to: +x.y_to || null,
       part_no: x.part_no || String(x.sku), descr: x.descr || DESCR, imgs: Array.isArray(x.imgs) ? x.imgs.slice(0, 6) : [], status: 'active', hide_price: false,
       search_text: '', created_at: ago(5 + k), updated_at: ago(1)
     }));
@@ -176,7 +186,20 @@
     let DB = null;
     if (opts.persist) { try { DB = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { DB = null; } }
     if (!DB) { DB = blank(); if (opts.seed && (window.SPARAT_CONFIG || {}).mode === 'company') seedCompany(DB); }
+    /* a phone that already had the demo before the ads came gets the edition's ads once (an owner who deleted them keeps none) */
+    const hadAds = !!(DB.settings && Object.prototype.hasOwnProperty.call(DB.settings, 'ads'));
     DB = Object.assign(blank(), DB); DB.settings = Object.assign(blank().settings, DB.settings);
+    const migrate = !hadAds && !!opts.seed && CONF.mode === 'company' && DB.users.length > 0;
+    if (!hadAds && opts.seed && CONF.mode === 'company') DB.settings.ads = demoAds();
+    /* and the edition's own parts that came later (found by their code) */
+    if (migrate && DB.shops.length) {
+      const s1 = DB.shops[0], owner = s1.owner_id;
+      (Array.isArray(CONF.demoExtra) ? CONF.demoExtra : []).forEach(x => x && x.sku && x.title && !DB.products.some(p => p.sku === String(x.sku)) && DB.products.push({
+        id: uuid(), shop_id: s1.id, owner_id: owner, sku: String(x.sku), title: String(x.title), cat: x.cat || 'other', cond: x.cond || 'original',
+        price: x.price == null ? null : +x.price, cost: x.price == null ? null : Math.round(+x.price * 0.72), nego: false, qty: x.qty == null ? 10 : +x.qty, make: x.make || 'any', model: x.model || '',
+        y_from: +x.y_from || null, y_to: +x.y_to || null, part_no: x.part_no || String(x.sku), descr: x.descr || '', imgs: Array.isArray(x.imgs) ? x.imgs.slice(0, 6) : [], status: 'active',
+        hide_price: false, barcode: null, search_text: '', created_at: now(), updated_at: now() }));
+    }
     window.__mockdb = DB;
     let session = null; const listeners = [];
     try { const s = opts.persist && JSON.parse(localStorage.getItem(KEY + '_session') || 'null'); if (s && DB.users.some(u => u.id === s.user.id)) session = s; } catch (e) { /* signed out */ }
@@ -184,6 +207,7 @@
       if (!opts.persist) return;
       try { localStorage.setItem(KEY, JSON.stringify(DB)); localStorage.setItem(KEY + '_session', JSON.stringify(session)); } catch (e) { /* storage full: keep working in memory */ }
     }
+    if (migrate) save();
     const later = v => new Promise(r => setTimeout(() => r(v), 15));
     const uid = () => session && session.user.id;
     const isAdmin = () => !!uid() && DB.admins.includes(uid());
@@ -331,6 +355,7 @@
         v.owner_id = (DB.shops.find(s => s.id === (v.shop_id || r.shop_id)) || {}).owner_id || r.owner_id;
       }
       if (name === 'customers' && !hasPerm('customers')) { delete v.approved; delete v.user_id; }
+      if (name === 'settings' && 'ads' in v && !adsOk(v.ads)) return { error: { message: 'new row for relation "settings" violates check constraint "settings_ads_chk"', code: '23514' } };
       if (name !== 'customers') v.updated_at = now();
       return { vals: v };
     }
@@ -425,7 +450,7 @@
     /* one line in the activity log (supabase/setup.sql section 12: log_act and the triggers) */
     const logAct = (kind, ref, title, amount, detail) => DB.activity.push({ id: ++DB.act_seq, created_at: now(), actor_id: uid() || null, actor_name: meName(), kind,
       ref: String(ref == null ? '' : ref).slice(0, 80), title: String(title == null ? '' : title).slice(0, 200), amount: amount == null ? null : amount, detail: detail || {} });
-    const LONG = ['about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub'];
+    const LONG = ['about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub', 'ads'];
     function logEdit(name, a, b) {
       const same = (x, y) => JSON.stringify(x == null ? null : x) === JSON.stringify(y == null ? null : y);
       if (name === 'settings') {

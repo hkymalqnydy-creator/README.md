@@ -11,6 +11,7 @@
 7. `receive_tests.sql` (R1…R14) — استلام البضاعة والباركود / receiving stock and barcodes
 8. `books_tests.sql` (B1…B37) — المخزن، ديون الزبائن والموردين، المصروفات، الأرباح والخسائر / stock, customer and supplier debts, expenses, profit and loss
 9. `controls_tests.sql` (K1…K59) — سجل الحركة، حد التخفيض، البيع تحت التكلفة، إخفاء الكميات، الأسعار بالجملة، إلغاء الاستلام / activity log, discount limits, selling below cost, hidden quantities, bulk prices, taking a receipt back
+10. `ads_tests.sql` (A1…A16) — إعلانات الرئيسية: الحفظ والقراءة، السجل، الروابط والصور المرفوضة، الحد 5، الموظف بدون صلاحية / home screen ads: saving and reading, the log, refused links and pictures, the limit of 5, staff without the right
 
 كل سطر نتيجة يبدأ برقم الاختبار، والأخطاء المتوقعة مكتوبة قبلها (expect …). / Each result line starts with its test number; expected errors are announced just before them.
 
