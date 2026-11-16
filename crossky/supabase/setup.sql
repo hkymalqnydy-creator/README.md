@@ -751,6 +751,21 @@ create table if not exists public.invoice_items (
   line_total numeric(12,2) not null
 );
 create index if not exists invoice_items_inv_idx on public.invoice_items (invoice_id);
+-- customer orders from the app (section 15): an invoice «قيد التجهيز» → «قيد الاستلام» → «تم الاستلام», or «ملغي»
+alter table public.invoices drop constraint if exists invoices_status_check;
+alter table public.invoices add constraint invoices_status_check check (status in ('done', 'returned', 'preparing', 'ready', 'cancelled'));
+alter table public.invoices add column if not exists source text not null default 'pos';
+do $$ begin
+  alter table public.invoices add constraint invoices_source_chk check (source in ('pos', 'app'));
+exception when duplicate_object then null; end $$;
+alter table public.invoices add column if not exists ordered_at    timestamptz;
+alter table public.invoices add column if not exists ready_at      timestamptz;
+alter table public.invoices add column if not exists cancelled_at  timestamptz;
+alter table public.invoices add column if not exists cancel_reason text not null default '' check (char_length(cancel_reason) <= 200);
+alter table public.invoices add column if not exists delivery      text not null default '' check (delivery in ('', 'pickup', 'delivery'));
+alter table public.invoices add column if not exists address       text not null default '' check (char_length(address) <= 300);
+create index if not exists invoices_orders_idx on public.invoices (status, ordered_at) where source = 'app';
+create index if not exists invoices_customer_idx on public.invoices (customer_id, created_at desc) where customer_id is not null;
 alter table public.invoices enable row level security;
 alter table public.invoice_items enable row level security;
 drop policy if exists "sparat invoices read" on public.invoices;
@@ -766,7 +781,7 @@ language sql stable security definer set search_path = public as $$
     'items', coalesce((select jsonb_agg((to_jsonb(it) - 'cost') || case when public.has_perm('costs') then jsonb_build_object('cost', it.cost) else '{}'::jsonb end order by it.id)
                        from public.invoice_items it where it.invoice_id = i.id), '[]'::jsonb))
   from public.invoices i
-  where i.id = p_id and auth.uid() is not null and (public.has_perm('invoices') or i.staff_id = auth.uid());
+  where i.id = p_id and auth.uid() is not null and (public.has_perm('invoices') or i.staff_id = auth.uid() or (i.source = 'app' and public.has_perm('sales')));
 $$;
 
 -- إنشاء فاتورة: يقفل صفوف القطع، يتحقق من المخزون والصلاحيات، وينقص الكمية في نفس العملية
@@ -839,6 +854,7 @@ begin
   select status into v_status from public.invoices where id = p_id for update;
   if v_status is null then raise exception 'invoice not found' using errcode = 'P0001'; end if;
   if v_status = 'returned' then raise exception 'invoice already returned' using errcode = 'P0001'; end if;
+  if v_status <> 'done' then raise exception 'order not received yet' using errcode = 'P0001'; end if;
   perform set_config('sparat.ctx', 'return', true);
   update public.products p set qty = p.qty + a.n, status = case when p.qty + a.n > 0 then 'active' else p.status end
   from (select product_id, sum(qty) as n from public.invoice_items where invoice_id = p_id group by product_id) a
@@ -1108,7 +1124,8 @@ create or replace function public.sup_key(p_name text) returns text language sql
 $$;
 create index if not exists invoices_cust_idx on public.invoices (public.cust_key(customer_name, customer_phone));
 create or replace function public.me_name() returns text language sql stable security definer set search_path = public as $$
-  select coalesce(nullif((select name from public.staff where user_id = auth.uid()), ''), (select email from auth.users where id = auth.uid()), '')
+  select coalesce(nullif((select name from public.staff where user_id = auth.uid()), ''), nullif((select name from public.customers where user_id = auth.uid()), ''),
+                  (select email from auth.users where id = auth.uid()), '')
 $$;
 
 -- المخزن: summary, one page of parts, the latest changes
@@ -1515,7 +1532,7 @@ begin
       and (p_actor is null or a.actor_id = p_actor)
       and (v_q is null or public.norm_ar(a.title) like '%' || public.norm_ar(v_q) || '%' or a.detail->>'no' = v_q or public.norm_ar(a.actor_name) like '%' || public.norm_ar(v_q) || '%')
       and (p_group is null or case p_group
-            when 'sales'  then a.kind in ('sale', 'return')
+            when 'sales'  then a.kind in ('sale', 'return', 'order', 'order_ready', 'order_done', 'order_cancelled')
             when 'stock'  then a.kind in ('receive', 'receipt_undo', 'stock', 'product_add', 'product_del', 'sync', 'import')
                                or (a.kind = 'product_edit' and (a.detail ? 'qty' or a.detail ? 'title' or a.detail ? 'status'))
             when 'prices' then a.kind in ('bulk_price', 'bulk_undo') or (a.kind = 'product_edit' and (a.detail ? 'price' or a.detail ? 'cost' or a.detail ? 'hide_price'))
@@ -1783,3 +1800,196 @@ grant execute on function public.ai_access() to authenticated;
 grant execute on function public.ai_gate(uuid) to authenticated;
 grant execute on function public.ai_log(text, text, text, text) to authenticated;
 grant execute on function public.ai_usage(integer) to authenticated;
+
+-- ---------- 15) طلبات الزبائن من التطبيق ----------
+-- The customer orders in the app itself (not on WhatsApp). The order is an invoice in the sales system with the status
+-- «قيد التجهيز» (preparing), then «قيد الاستلام» (ready: waiting for the customer to receive it), then «تم الاستلام»
+-- (done: from then on a sale like any other, in the reports and the customer's account, dated the day it was received),
+-- or «ملغي» (cancelled: the parts go back to stock). The parts are taken from stock when ordered, so two customers cannot
+-- order the last piece; the prices come from the database, never from the phone.
+-- (the columns for orders are with the invoices table above)
+
+-- may this person see the prices (the same rule as the parts list)
+create or replace function public.prices_shown() returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.is_staff() or coalesce((select case price_mode when 'all' then true when 'members' then auth.uid() is not null
+                                                              when 'approved' then public.customer_approved() else false end
+                                        from public.settings where id = 1), true);
+$$;
+
+-- one order, as its customer (or whoever handles orders) sees it
+create or replace function public.my_order(p_id uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', o.id, 'no', o.no, 'status', o.status, 'source', o.source, 'ordered_at', o.ordered_at, 'ready_at', o.ready_at,
+           'done_at', case when o.status in ('done', 'returned') then o.created_at end, 'cancelled_at', o.cancelled_at, 'cancel_reason', o.cancel_reason,
+           'delivery', o.delivery, 'address', o.address, 'note', o.note, 'customer_name', o.customer_name, 'customer_phone', o.customer_phone,
+           'currency', o.currency, 'payment', case when o.status in ('done', 'returned') then o.payment end,
+           'total', case when v.ok and not exists (select 1 from public.invoice_items it join public.products p on p.id = it.product_id where it.invoice_id = o.id and p.hide_price)
+                         or public.is_staff() then o.total end,
+           'branch', (select jsonb_build_object('id', s.id, 'name', s.name, 'city', s.city, 'area', s.area, 'phone', s.phone, 'whatsapp', s.whatsapp) from public.shops s where s.id = o.branch_id),
+           'items', coalesce((select jsonb_agg(jsonb_build_object('product_id', it.product_id, 'title', it.title, 'sku', it.sku, 'qty', it.qty,
+                       'price', case when public.is_staff() or (v.ok and not coalesce(p.hide_price, false)) then it.price end,
+                       'line_total', case when public.is_staff() or (v.ok and not coalesce(p.hide_price, false)) then it.line_total end) order by it.id)
+                     from public.invoice_items it left join public.products p on p.id = it.product_id where it.invoice_id = o.id), '[]'::jsonb))
+  from public.invoices o cross join lateral (select public.prices_shown() as ok) v
+  where o.id = p_id and o.source = 'app' and auth.uid() is not null
+    and (o.customer_id = auth.uid() or public.has_perm('sales') or public.has_perm('invoices'));
+$$;
+
+-- the customer's «اطلب»: the parts in the basket become an order (an invoice «قيد التجهيز»)
+create or replace function public.place_order(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_me uuid := auth.uid(); st public.settings; v_c public.customers; v_it jsonb; v_p public.products; v_qty integer;
+  v_sub numeric := 0; v_lines jsonb := '[]'::jsonb; v_branch uuid; v_cur text; v_id uuid; v_no bigint; v_units integer := 0;
+  v_name text; v_phone text; v_del text := coalesce(nullif(p->>'delivery', ''), 'pickup'); v_addr text := btrim(coalesce(p->>'address', ''));
+begin
+  if v_me is null then raise exception 'sign in to order' using errcode = '42501'; end if;
+  select * into st from public.settings where id = 1;
+  if not coalesce(st.orders_enabled, false) or coalesce(st.shop_closed, false) then raise exception 'orders are closed' using errcode = 'P0001'; end if;
+  select * into v_c from public.customers where user_id = v_me;
+  v_name := left(btrim(coalesce(nullif(btrim(p->>'name'), ''), v_c.name, '')), 80);
+  v_phone := left(regexp_replace(coalesce(nullif(btrim(p->>'phone'), ''), v_c.phone, ''), '[^0-9+]', '', 'g'), 30);
+  if char_length(v_name) < 2 then raise exception 'order needs a name' using errcode = '22023'; end if;
+  if char_length(v_phone) < 7 then raise exception 'order needs a phone' using errcode = '22023'; end if;
+  if v_del not in ('pickup', 'delivery') then raise exception 'bad delivery' using errcode = '22023'; end if;
+  if v_del = 'delivery' and char_length(v_addr) < 5 then raise exception 'delivery needs an address' using errcode = '22023'; end if;
+  if jsonb_typeof(p->'items') is distinct from 'array' or jsonb_array_length(p->'items') = 0 or jsonb_array_length(p->'items') > 100 then
+    raise exception 'order needs 1 to 100 items' using errcode = '22023';
+  end if;
+  -- at most 5 orders waiting per customer
+  if (select count(*) from public.invoices where customer_id = v_me and source = 'app' and status in ('preparing', 'ready')) >= 5 then
+    raise exception 'too many open orders' using errcode = 'P0001';
+  end if;
+  perform set_config('sparat.ctx', 'order', true);
+  for v_it in select value from jsonb_array_elements(p->'items') loop
+    v_qty := floor(coalesce(public.try_num(v_it->>'qty'), 0))::integer;
+    if v_qty < 1 or v_qty > 1000 then raise exception 'bad quantity' using errcode = '22023'; end if;
+    select * into v_p from public.products where id = (v_it->>'id')::uuid for update;
+    if v_p.id is null or v_p.status <> 'active' then raise exception 'part not available: %', coalesce(v_p.title, '') using errcode = 'P0001'; end if;
+    if v_p.price is null then raise exception 'part has no price: %', v_p.title using errcode = 'P0001'; end if;
+    if v_p.qty is not null and v_p.qty < v_qty then
+      -- the number stays hidden when the owner hides quantities from customers
+      if coalesce(st.hide_qty, false) and not public.is_staff() then raise exception 'not enough stock: %', v_p.title using errcode = 'P0001'; end if;
+      raise exception 'not enough stock: % (available %)', v_p.title, v_p.qty using errcode = 'P0001';
+    end if;
+    update public.products set
+      qty = case when qty is null then null else qty - v_qty end,
+      status = case when qty is not null and qty - v_qty <= 0 then 'sold' else status end
+    where id = v_p.id;
+    v_sub := v_sub + v_p.price * v_qty; v_units := v_units + v_qty;
+    v_lines := v_lines || jsonb_build_object('product_id', v_p.id, 'sku', coalesce(v_p.sku, nullif(v_p.part_no, '')), 'title', v_p.title,
+                                             'qty', v_qty, 'price', v_p.price, 'cost', v_p.cost, 'line_total', v_p.price * v_qty);
+    v_branch := coalesce(v_branch, v_p.shop_id);
+  end loop;
+  select currency into v_cur from public.shops where id = v_branch;
+  insert into public.invoices (branch_id, staff_id, staff_name, customer_id, customer_name, customer_phone, subtotal, discount, total, paid, payment, currency, note,
+                               status, source, ordered_at, delivery, address)
+  values (v_branch, null, '', v_me, v_name, v_phone, v_sub, 0, v_sub, 0, 'cash', coalesce(v_cur, 'LYD'), left(btrim(coalesce(p->>'note', '')), 500),
+          'preparing', 'app', now(), v_del, case when v_del = 'delivery' then left(v_addr, 300) else '' end)
+  returning id, no into v_id, v_no;
+  insert into public.invoice_items (invoice_id, product_id, sku, title, qty, price, cost, line_total)
+  select v_id, (x->>'product_id')::uuid, x->>'sku', x->>'title', (x->>'qty')::integer, (x->>'price')::numeric, (x->>'cost')::numeric, (x->>'line_total')::numeric
+  from jsonb_array_elements(v_lines) x;
+  perform public.log_act('order', v_id::text, v_name, v_sub, jsonb_build_object('no', v_no, 'units', v_units, 'lines', jsonb_array_length(v_lines), 'delivery', v_del));
+  return public.my_order(v_id);
+end $$;
+
+-- the customer's own orders, newest first
+create or replace function public.my_orders(p_limit integer default 30) returns setof jsonb
+language sql stable security definer set search_path = public as $$
+  select public.my_order(i.id) from public.invoices i
+  where i.customer_id = auth.uid() and i.source = 'app'
+  order by (i.status in ('preparing', 'ready')) desc, coalesce(i.ordered_at, i.created_at) desc
+  limit least(greatest(coalesce(p_limit, 30), 1), 100);
+$$;
+
+-- the parts go back to stock (an order cancelled before it was received)
+create or replace function public.order_restock(p_id uuid) returns void
+language sql security definer set search_path = public as $$
+  update public.products p set qty = p.qty + a.n, status = case when p.qty + a.n > 0 then 'active' else p.status end
+  from (select product_id, sum(qty) as n from public.invoice_items where invoice_id = p_id and product_id is not null group by product_id) a
+  where p.id = a.product_id and p.qty is not null;
+$$;
+revoke execute on function public.order_restock(uuid) from public, anon, authenticated;
+
+-- the customer may cancel while it is still being prepared
+create or replace function public.cancel_my_order(p_id uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v public.invoices;
+begin
+  select * into v from public.invoices where id = p_id and source = 'app' and customer_id = auth.uid() for update;
+  if v.id is null then raise exception 'order not found' using errcode = 'P0001'; end if;
+  if v.status <> 'preparing' then raise exception 'order can no longer be cancelled' using errcode = 'P0001'; end if;
+  perform set_config('sparat.ctx', 'order', true);
+  perform public.order_restock(p_id);
+  update public.invoices set status = 'cancelled', cancelled_at = now(), cancel_reason = 'customer' where id = p_id;
+  perform public.log_act('order_cancelled', p_id::text, nullif(btrim(v.customer_name), ''), v.total, jsonb_build_object('no', v.no, 'was', v.status, 'by', 'customer'));
+  return public.my_order(p_id);
+end $$;
+
+-- the orders for whoever prepares and hands them over: the open ones (preparing, ready) oldest first, or the done / cancelled ones
+create or replace function public.list_orders(p_status text default null, p_limit integer default 30, p_offset integer default 0) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_br uuid; r jsonb;
+begin
+  if auth.uid() is null or not (public.has_perm('sales') or public.has_perm('invoices')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  select branch_id into v_br from public.staff where user_id = auth.uid() and active and not public.is_admin();
+  with o as (select * from public.invoices i where i.source = 'app' and (v_br is null or i.branch_id = v_br)),
+       pick as (select * from o where case coalesce(p_status, '') when '' then status in ('preparing', 'ready') when 'all' then true else status = p_status end)
+  select jsonb_build_object(
+    'counts', jsonb_build_object('preparing', (select count(*) from o where status = 'preparing'), 'ready', (select count(*) from o where status = 'ready')),
+    'total', (select count(*) from pick),
+    'items', coalesce((select jsonb_agg(x.j order by x.rn) from (
+        select row_number() over (order by case when status in ('preparing', 'ready') then 0 else 1 end,
+                                           case when status in ('preparing', 'ready') then extract(epoch from ordered_at) else -extract(epoch from coalesce(cancelled_at, created_at)) end, no) rn,
+               jsonb_build_object('id', id, 'no', no, 'status', status, 'ordered_at', ordered_at, 'ready_at', ready_at, 'cancelled_at', cancelled_at,
+                 'done_at', case when status in ('done', 'returned') then created_at end, 'customer_name', customer_name, 'customer_phone', customer_phone,
+                 'delivery', delivery, 'address', address, 'note', note, 'total', total, 'currency', currency, 'payment', payment, 'staff_name', staff_name,
+                 'units', (select coalesce(sum(qty), 0) from public.invoice_items where invoice_id = pick.id),
+                 'lines', (select count(*) from public.invoice_items where invoice_id = pick.id)) j
+        from pick order by 1 limit least(greatest(coalesce(p_limit, 30), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) x), '[]'::jsonb)
+  ) into r;
+  return r;
+end $$;
+
+-- «قيد الاستلام» (ready), «تم الاستلام» (done, with how the customer paid) or «ملغي» (cancelled, the parts back in stock)
+create or replace function public.order_set(p_id uuid, p_status text, p_payment text default null, p_reason text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v public.invoices; v_staff public.staff; v_pay text := coalesce(nullif(p_payment, ''), 'cash'); v_reason text := left(btrim(coalesce(p_reason, '')), 200);
+begin
+  if auth.uid() is null or not public.has_perm('sales') then raise exception 'not authorized' using errcode = '42501'; end if;
+  select * into v from public.invoices where id = p_id and source = 'app' for update;
+  if v.id is null then raise exception 'order not found' using errcode = 'P0001'; end if;
+  select * into v_staff from public.staff where user_id = auth.uid() and active;
+  if not public.is_admin() and v_staff.branch_id is not null and v.branch_id is distinct from v_staff.branch_id then raise exception 'not authorized' using errcode = '42501'; end if;
+  if p_status = 'ready' then
+    if v.status <> 'preparing' then raise exception 'bad order status' using errcode = 'P0001'; end if;
+    update public.invoices set status = 'ready', ready_at = now() where id = p_id;
+  elsif p_status = 'done' then
+    if v.status not in ('preparing', 'ready') then raise exception 'bad order status' using errcode = 'P0001'; end if;
+    if v_pay not in ('cash', 'card', 'transfer', 'credit') then raise exception 'bad payment' using errcode = '22023'; end if;
+    -- from now on a sale like any other, dated the day it was received
+    update public.invoices set status = 'done', created_at = now(), ready_at = coalesce(ready_at, now()), payment = v_pay,
+           paid = case when v_pay = 'credit' then 0 else total end, staff_id = auth.uid(), staff_name = coalesce(public.me_name(), '')
+    where id = p_id;
+  elsif p_status = 'cancelled' then
+    if v.status not in ('preparing', 'ready') then raise exception 'bad order status' using errcode = 'P0001'; end if;
+    perform set_config('sparat.ctx', 'order', true);
+    perform public.order_restock(p_id);
+    update public.invoices set status = 'cancelled', cancelled_at = now(), cancel_reason = v_reason where id = p_id;
+  else
+    raise exception 'bad order status' using errcode = '22023';
+  end if;
+  perform public.log_act('order_' || p_status, p_id::text, nullif(btrim(v.customer_name), ''), v.total,
+    jsonb_build_object('no', v.no, 'was', v.status) || case p_status when 'done' then jsonb_build_object('payment', v_pay) when 'cancelled' then jsonb_build_object('reason', v_reason) else '{}'::jsonb end);
+  return public.get_invoice(p_id);
+end $$;
+
+grant execute on function public.prices_shown() to anon, authenticated;
+grant execute on function public.my_order(uuid) to authenticated;
+grant execute on function public.place_order(jsonb) to authenticated;
+grant execute on function public.my_orders(integer) to authenticated;
+grant execute on function public.cancel_my_order(uuid) to authenticated;
+grant execute on function public.list_orders(text, integer, integer) to authenticated;
+grant execute on function public.order_set(uuid, text, text, text) to authenticated;

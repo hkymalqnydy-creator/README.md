@@ -43,6 +43,8 @@
     logEveryone: ["كل الناس", "Everyone"], logSearchPh: ["اسم، مورّد، أو رقم فاتورة", "Name, supplier or invoice number"], logEmpty: ["ما فيش حركات في الفترة هذي.", "Nothing in this period."],
     logToday: ["اليوم", "Today"], logYesterday: ["امس", "Yesterday"], logSystem: ["المنظومة", "The system"], logAuto: ["دخلت بروحها من صورة فاتورة", "Entered by itself from an invoice photo"],
     logMore: ["التفاصيل", "Details"], logExport: ["نزّل السجل Excel", "Download as Excel"], logCount: ["{n} حركة", "{n} entries"], logSeeAll: ["شوف السجل كامل", "See the full log"], logLatest: ["آخر الحركات", "Latest activity"],
+    lk_order: ["طلب من التطبيق رقم {no}: {t}", "App order {no}: {t}"], lk_order_ready: ["جهّز الطلب {no}", "Prepared order {no}"], lk_order_done: ["سلّم الطلب {no}", "Handed over order {no}"],
+    lk_order_cancelled: ["لغى الطلب {no}", "Cancelled order {no}"], lk_order_cancelled_c: ["الزبون لغى طلبه {no}", "The customer cancelled order {no}"],
     lk_sale: ["باع فاتورة {no}", "Sold invoice {no}"], lk_saleTo: ["باع فاتورة {no} لـ {t}", "Sold invoice {no} to {t}"], lk_return: ["رجّع فاتورة {no}", "Returned invoice {no}"],
     lk_receive: ["استلم بضاعة (استلام {no})", "Received stock (receipt {no})"], lk_receiveFrom: ["استلم بضاعة من {t} (استلام {no})", "Received stock from {t} (receipt {no})"],
     lk_receipt_undo: ["ألغى الاستلام {no}", "Took back receipt {no}"], lk_stockOut: ["نقّص {n} من «{t}»", "Took {n} out of “{t}”"], lk_stockIn: ["زاد {n} على «{t}»", "Added {n} to “{t}”"],
@@ -107,10 +109,10 @@
   /* ---------- the log as sentences ---------- */
   const GROUP = { sale: 'sales', return: 'sales', receive: 'stock', receipt_undo: 'stock', stock: 'stock', product_add: 'stock', product_del: 'stock', sync: 'stock', import: 'stock',
     bulk_price: 'prices', bulk_undo: 'prices', pay_in: 'money', pay_in_del: 'money', pay_out: 'money', pay_out_del: 'money', expense: 'money', expense_del: 'money',
-    staff: 'admin', staff_del: 'admin', settings: 'admin', customer: 'admin', ai: 'ai' };
+    staff: 'admin', staff_del: 'admin', settings: 'admin', customer: 'admin', ai: 'ai', order: 'sales', order_ready: 'sales', order_done: 'sales', order_cancelled: 'sales' };
   const ICON = { sale: 'tag', return: 'undo', receive: 'receipt', receipt_undo: 'undo', stock: 'stack', product_add: 'plus', product_del: 'trash', product_edit: 'edit', sync: 'copy', import: 'download',
     bulk_price: 'percent', bulk_undo: 'undo', pay_in: 'wallet', pay_in_del: 'trash', pay_out: 'truck', pay_out_del: 'trash', expense: 'wallet', expense_del: 'trash',
-    staff: 'users', staff_del: 'users', settings: 'shield', customer: 'user', ai: 'spark' };
+    staff: 'users', staff_del: 'users', settings: 'shield', customer: 'user', ai: 'spark', order: 'bag', order_ready: 'bell', order_done: 'check', order_cancelled: 'close' };
   const groupOf = x => x.kind === 'product_edit' ? (x.detail && (x.detail.price || x.detail.cost || x.detail.hide_price) ? 'prices' : 'stock') : GROUP[x.kind] || 'admin';
   const v2 = v => v == null || v === '' ? '—' : typeof v === 'boolean' ? t(v ? 'lgYes' : 'lgNo') : typeof v === 'number' || /^-?\d+(\.\d+)?$/.test(String(v)) ? num(+v) : String(v);
   const moneyOrDash = v => v == null ? '—' : money(v);
@@ -139,6 +141,9 @@
         return t('lk_settings', { t: [...new Set(keys)].join('، ') });
       }
       case 'customer': return t(d.approved ? 'lk_customerOk' : 'lk_customerNo', { t: tt });
+      case 'order': return t('lk_order', { no: d.no, t: tt });
+      case 'order_ready': case 'order_done': return t('lk_' + x.kind, { no: d.no }) + (tt ? ' · ' + tt : '');
+      case 'order_cancelled': return t(d.by === 'customer' ? 'lk_order_cancelled_c' : 'lk_order_cancelled', { no: d.no }) + (tt && d.by !== 'customer' ? ' · ' + tt : '');
       default: return SP.L.T['lk_' + x.kind] ? t('lk_' + x.kind, { t: tt }) : x.kind;
     }
   }
@@ -153,6 +158,9 @@
     if ((x.kind === 'pay_in' || x.kind === 'pay_out' || x.kind.endsWith('_del')) && d.note && !x.kind.startsWith('expense')) f.push(d.note);
     if (x.kind === 'stock' && d.note) f.push(d.note);
     if (x.kind === 'ai' && d.ask) f.push('«' + d.ask + '»');
+    if (x.kind === 'order') { if (d.units) f.push(t('lgUnits', { n: num(d.units) })); f.push(t(d.delivery === 'delivery' ? 'ordDelivery' : 'ordPickup')); }
+    if (x.kind === 'order_done' && d.payment) f.push(t('pay_' + d.payment));
+    if (x.kind === 'order_cancelled' && d.reason) f.push(d.reason);
     return f;
   }
   /* what opens under "details": the lines of a receipt, old → new values, permissions */

@@ -74,10 +74,9 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('#grid .card-link'); await see('#padd'); await page.click('#padd'); await page.waitForTimeout(200);
     must(await text('.cartbtn .badge').catch(() => '') !== '' || true, 'badge'); await go('cart'); await see('.crow');
     await page.click('.crow [data-d="1"]'); await page.waitForTimeout(150); must((await text('.crow .stepper b')) === '2', 'qty 2');
-    // a real link (not window.open), so it also works inside the Claude app's page frame; it follows the form as it is typed
-    await page.fill('#on', 'زبون'); const opened = (await page.getAttribute('#ogo', 'href')) || '';
-    must(opened.includes('wa.me/218912345678') && decodeURIComponent(opened).includes('× 2') && decodeURIComponent(opened).includes('زبون'), 'order on whatsapp: ' + opened.slice(0, 80));
-    must((await page.getAttribute('#ogo', 'target')) === '_blank', 'order link opens outside'); log('basket sends the order to the company WhatsApp');
+    // the order is placed in the app (tests/browser/run_orders.js), not on WhatsApp: a visitor is asked to sign in first
+    must(await page.locator('#cl .btn-wa').count() === 0 && await page.locator('.ord-signin a[href="#login"]').count() === 1, 'basket: sign in to order, no WhatsApp');
+    log('basket: no WhatsApp; a visitor is asked to sign in to place the order in the app');
     await shot('03-cart');
 
     await go('mine'); await see('.onb a[href="#signup"]'); await page.click('.onb a[href="#signup"]'); await see('#anm');
@@ -120,7 +119,7 @@ const log = s => console.log(`${++step}. ${s}`);
     // ----- sales system -----
     await login('owner@crossky.ly', '123456'); await go('system'); await see('.pos-tile');
     const hrefs = await page.$$eval('.pos-tile', l => l.map(a => a.getAttribute('href')));
-    must(hrefs.length === 17 && ['#admin', '#admin-control', '#admin-log', '#admin-prices', '#admin-ads', '#admin-ai', '#pos', '#receive', '#invoices', '#purchases', '#reports', '#staff', '#stock', '#buyers', '#suppliers', '#expenses', '#pnl'].every(h => hrefs.includes(h)), 'owner has 6 sales + 5 accounts + 6 owner tiles: ' + hrefs.join('|'));
+    must(hrefs.length === 18 && ['#admin', '#admin-control', '#admin-log', '#admin-prices', '#admin-ads', '#admin-ai', '#pos', '#orders', '#receive', '#invoices', '#purchases', '#reports', '#staff', '#stock', '#buyers', '#suppliers', '#expenses', '#pnl'].every(h => hrefs.includes(h)), 'owner has 7 sales (with orders) + 5 accounts + 6 owner tiles: ' + hrefs.join('|'));
     await go('staff'); await see('#sadd2'); await page.click('#sadd2'); await see('#se');
     await page.fill('#se', 'seller2@test.ly'); await page.fill('#sn2', 'سالم'); must(await page.locator('.perm-list input[value="sales"]').isChecked(), 'sell permission pre-ticked');
     must(await page.locator('.perm-list input[value="purchases"]').count() === 1 && !(await page.locator('.perm-list input[value="purchases"]').isChecked()), 'receiving permission offered, off by default');
@@ -129,7 +128,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await go('mine'); await page.click('#lo'); await page.waitForTimeout(300); await go('signup'); await see('#anm');
     await page.fill('#anm', 'سالم'); await page.fill('#aph', '0931234567'); await page.fill('#ae', 'seller2@test.ly'); await page.fill('#ap', 'secret777'); await page.click('#ago');
     await page.waitForURL(/#mine/); await see('a.sys-entry'); await go('system'); await see('.pos-tile'); const tl = await page.locator('.pos-tile').allInnerTexts();
-    must(tl.length === 2 && !tl.join().includes('التقارير'), 'seller tiles: ' + tl.join('|')); log('salesperson signed up and got exactly: ' + tl.join(' + '));
+    must(tl.length === 3 && tl.includes('الطلبات') && !tl.join().includes('التقارير'), 'seller tiles (sale, orders, invoices): ' + tl.join('|')); log('salesperson signed up and got exactly: ' + tl.join(' + '));
     await go('pos'); await see('#pq'); await page.fill('#pq', 'KI-26300'); await page.press('#pq', 'Enter'); await see('.pline');
     await page.click('.pline [data-d="1"]'); await page.waitForTimeout(150); must((await text('.pline .stepper b')) === '2', 'qty 2');
     must(await page.locator('#pdisc').count() === 0 && await page.locator('.pl-price').count() === 0, 'no discount/price edit without permission');

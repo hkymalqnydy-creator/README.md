@@ -112,7 +112,7 @@
 
   SP.posEntry = () => {
     if (!SP.isStaff()) return '';
-    const tiles = [['pos', 'tag', 'posSale', SP.can('sales')], ['receive', 'receipt', 'rcvT', SP.can('purchases')], ['invoices', 'copy', 'invList', SP.can('sales') || SP.can('invoices')],
+    const tiles = [['pos', 'tag', 'posSale', SP.can('sales')], ['orders', 'bag', 'ordT', SP.company && !!SP.ordPill && (SP.can('sales') || SP.can('invoices'))], ['receive', 'receipt', 'rcvT', SP.can('purchases')], ['invoices', 'copy', 'invList', SP.can('sales') || SP.can('invoices')],
       ['purchases', 'box', 'purT', SP.can('purchases') || SP.can('reports')], ['reports', 'grid', 'repT', SP.can('reports')], ['staff', 'user', 'staffT', S.admin]]
       .filter(x => x[3]).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('');
     return tiles ? `<section class="mcard"><h2 class="lbl">${esc(t('posT'))}</h2><div class="pos-grid">${tiles}</div></section>` : '';
@@ -269,10 +269,10 @@
     };
     const draw = v => {
       shell(bar(t('invT', { n: v.no }), canPrint ? `<button type="button" class="iconbtn" onclick="window.print()" aria-label="${esc(t('invPrint'))}">${I('copy')}</button>` : '') + `<main class="wrap invoice-wrap">
-        <article class="invoice${v.status === 'returned' ? ' returned' : ''}" id="invoice">
+        <article class="invoice${v.status === 'returned' || v.status === 'cancelled' ? ' returned' : ''}" id="invoice">
           <header class="inv-head">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : SP.CFG.logoInk ? '' : `<span class="brand-mark">${I('nut')}</span>`}<div>${!st.logo && SP.CFG.logoInk ? `<img class="inv-wm" src="${esc(SP.CFG.logoInk)}" alt="${esc(app)}">` : `<b>${esc(app)}</b>`}<small>${esc([br.name, br.city, br.phone ? SP.prettyPhone(br.phone, S.country) : ''].filter(Boolean).join(' · '))}</small></div>
             <div class="inv-no"><small>${esc(t('invT', { n: '' }).trim())}</small><b class="num">${esc(v.no)}</b></div></header>
-          ${v.status === 'returned' ? `<p class="inv-stamp">${esc(t('invReturned'))}</p>` : ''}
+          ${v.status === 'returned' ? `<p class="inv-stamp">${esc(t('invReturned'))}</p>` : ''}${v.status === 'cancelled' ? `<p class="inv-stamp">${esc(t('ordCancelled'))}</p>` : ''}
           <dl class="inv-meta"><div><dt>${esc(t('invDate'))}</dt><dd>${esc(when(v.created_at))}</dd></div><div><dt>${esc(t('invStaff'))}</dt><dd>${esc(v.staff_name || '—')}</dd></div>
             ${v.customer_name || v.customer_phone ? `<div><dt>${esc(t('custName'))}</dt><dd>${esc([v.customer_name, v.customer_phone].filter(Boolean).join(' · '))}</dd></div>` : ''}<div><dt>${esc(t('posPay'))}</dt><dd>${esc(t('pay_' + v.payment))}</dd></div></dl>
           <table class="inv-items"><thead><tr><th>${esc(t('invItem'))}</th><th>${esc(t('posQty'))}</th><th>${esc(t('posPrice'))}</th><th>${esc(t('posTotal'))}</th></tr></thead>
@@ -281,6 +281,7 @@
             <div class="big"><dt>${esc(t('posTotal'))}</dt><dd class="num">${esc(money(v.total, cur))}</dd></div>
             ${v.payment === 'credit' ? `<div><dt>${esc(t('posPaid'))}</dt><dd class="num">${esc(money(v.paid, cur))}</dd></div><div><dt>${esc(t('posRemain'))}</dt><dd class="num">${esc(money(v.total - v.paid, cur))}</dd></div>` : ''}</dl>
           ${v.note ? `<p class="inv-note">${esc(v.note)}</p>` : ''}${st.invoice_footer ? `<p class="inv-foot">${esc(st.invoice_footer)}</p>` : ''}</article>
+        ${v.source === 'app' && SP.ordPill ? `<div class="banner note noprint">${I('bag')}<span>${esc(t('ordFromApp'))} ${SP.ordPill(v.status)}${v.status !== 'done' && v.status !== 'returned' ? `<small>${esc(t('ordInvBanner', { s: t('ordFromApp') }).split(': ').slice(1).join(': '))}</small>` : ''}</span><a class="btn btn-ghost sm" href="#order-${esc(v.id)}">${esc(t('ordOpenOrder'))}</a></div>` : ''}
         <div class="form-actions noprint">${canPrint ? `<button type="button" class="btn btn-ink" onclick="window.print()">${I('copy')} ${esc(t('invPrint'))}</button>` : ''}
           <a class="btn btn-wa" id="ish" href="${esc(waHref(v))}" target="_blank" rel="noopener">${I('chat')} ${esc(t('invShare'))}</a>
           ${SP.can('returns') && v.status === 'done' ? `<button type="button" class="btn btn-danger" id="iret">${I('back', 'dirx')} ${esc(t('invReturn'))}</button>` : ''}
@@ -316,7 +317,7 @@
     $('#iq').onsubmit = e => { e.preventDefault(); S.invQ = $('#iq input').value.trim(); SP.render(); };
     const [from, to] = range(S.invRange);
     const args = off => ({ p_from: from ? from.toISOString() : null, p_to: to ? to.toISOString() : null, p_q: S.invQ || null, p_limit: 30, p_offset: off });
-    const row = v => `<a class="arow inv-row${v.status === 'returned' ? ' ret' : ''}" href="#inv-${v.id}"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${esc(v.customer_name || t('pay_' + v.payment))}${v.status === 'returned' ? ` <span class="pill demo">${esc(t('invReturned'))}</span>` : ''}</b>
+    const row = v => `<a class="arow inv-row${v.status === 'returned' || v.status === 'cancelled' ? ' ret' : ''}" href="#inv-${v.id}"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${v.source === 'app' ? I('bag', 'inv-app') + ' ' : ''}${esc(v.customer_name || t('pay_' + v.payment))}${v.status === 'returned' ? ` <span class="pill demo">${esc(t('invReturned'))}</span>` : v.status !== 'done' && SP.ordPill ? ' ' + SP.ordPill(v.status) : ''}</b>
       <small>${esc(when(v.created_at))} · ${esc(v.staff_name || '')} · ${esc(SP.count(+v.items_count || 0, 'parts'))}</small></span><b class="num">${esc(money(v.total, v.currency))}</b></a>`;
     await SP.pager(n, $('#il'), $('#more'), off => P.list(args(off)), items => items.map(row).join(''), (r, first) => {
       if (!first) return;

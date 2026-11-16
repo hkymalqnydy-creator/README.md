@@ -459,10 +459,13 @@
       return sum;
     }
     /* ---------- accounts helpers (supabase/setup.sql section 11) ---------- */
-    const meName = () => { const st = DB.staff.find(x => x.user_id === uid()), me = DB.users.find(u => u.id === uid()); return (st && st.name) || (me && me.email) || ''; };
+    const meName = () => { const st = DB.staff.find(x => x.user_id === uid()), cu = DB.customers.find(x => x.user_id === uid()), me = DB.users.find(u => u.id === uid());
+      return (st && st.name) || (cu && cu.name) || (me && me.email) || ''; };
     /* one line in the activity log (supabase/setup.sql section 12: log_act and the triggers) */
     const logAct = (kind, ref, title, amount, detail) => DB.activity.push({ id: ++DB.act_seq, created_at: now(), actor_id: uid() || null, actor_name: meName(), kind,
       ref: String(ref == null ? '' : ref).slice(0, 80), title: String(title == null ? '' : title).slice(0, 200), amount: amount == null ? null : amount, detail: detail || {} });
+    /* the parts of an order go back to stock (cancelled before it was received) */
+    const restock = id => DB.invoice_items.filter(i => i.invoice_id === id).forEach(i => { const pr = DB.products.find(x => x.id === i.product_id); if (pr && pr.qty != null) { pr.qty += i.qty; if (pr.qty > 0) pr.status = 'active'; } });
     const LONG = ['about', 'bot_rules', 'bot_welcome', 'logo', 'brands', 'brand_logos', 'hero_sub', 'ads', 'ai_rules'];
     function logEdit(name, a, b) {
       const same = (x, y) => JSON.stringify(x == null ? null : x) === JSON.stringify(y == null ? null : y);
@@ -582,7 +585,7 @@
       },
       get_invoice(a) {
         const v = DB.invoices.find(x => x.id === a.p_id);
-        if (!v || !uid() || !(hasPerm('invoices') || v.staff_id === uid())) return null;
+        if (!v || !uid() || !(hasPerm('invoices') || v.staff_id === uid() || (v.source === 'app' && hasPerm('sales')))) return null;
         const s = shopOf(v.branch_id);
         return { ...v, branch: s ? { id: s.id, name: s.name, city: s.city, area: s.area, phone: s.phone, whatsapp: s.whatsapp } : null,
           items: DB.invoice_items.filter(i => i.invoice_id === v.id).map(i => { const o = { ...i }; if (!hasPerm('costs')) delete o.cost; return o; }) };
@@ -632,6 +635,7 @@
         if (!hasPerm('returns')) fail('not authorized', '42501');
         const v = DB.invoices.find(x => x.id === a.p_id);
         if (!v) fail('invoice not found'); if (v.status === 'returned') fail('invoice already returned');
+        if (v.status && v.status !== 'done') fail('order not received yet');
         DB.invoice_items.filter(i => i.invoice_id === v.id).forEach(i => { const pr = DB.products.find(x => x.id === i.product_id); if (pr && pr.qty != null) { pr.qty += i.qty; if (pr.qty > 0) pr.status = 'active'; } });
         v.status = 'returned'; v.returned_at = now();
         logAct('return', v.id, v.customer_name.trim() || null, v.total, { no: v.no }); save();
@@ -645,6 +649,112 @@
           .sort((x, y) => y.created_at.localeCompare(x.created_at) || y.no - x.no);
         const total = L.length, off = a.p_offset || 0, lim = Math.min(Math.max(a.p_limit || 30, 1), 100);
         return L.slice(off, off + lim).map(v => ({ ...v, branch_name: (shopOf(v.branch_id) || {}).name || null, items_count: DB.invoice_items.filter(i => i.invoice_id === v.id).reduce((k, i) => k + i.qty, 0), total_count: total }));
+      },
+      /* ---------- customer orders from the app (supabase/setup.sql section 15): «قيد التجهيز» → «قيد الاستلام» → «تم الاستلام», or «ملغي» ---------- */
+      prices_shown() {
+        const mode = DB.settings.price_mode || 'all';
+        return isStaff() || mode === 'all' || (mode === 'members' && !!uid()) || (mode === 'approved' && DB.customers.some(c => c.user_id === uid() && c.approved));
+      },
+      my_order(a) {
+        const o = DB.invoices.find(x => x.id === a.p_id && x.source === 'app');
+        if (!o || !uid() || !(o.customer_id === uid() || hasPerm('sales') || hasPerm('invoices'))) return null;
+        const ok = RPC.prices_shown(), items = DB.invoice_items.filter(i => i.invoice_id === o.id).sort((x, y) => x.id - y.id), s = shopOf(o.branch_id);
+        const shows = i => { const pr = DB.products.find(x => x.id === i.product_id); return isStaff() || (ok && !(pr && pr.hide_price)); };
+        const all = items.every(shows), done = ['done', 'returned'].includes(o.status);
+        return { id: o.id, no: o.no, status: o.status, source: o.source, ordered_at: o.ordered_at, ready_at: o.ready_at || null, done_at: done ? o.created_at : null,
+          cancelled_at: o.cancelled_at || null, cancel_reason: o.cancel_reason || '', delivery: o.delivery || '', address: o.address || '', note: o.note || '',
+          customer_name: o.customer_name, customer_phone: o.customer_phone, currency: o.currency, payment: done ? o.payment : null, total: all ? o.total : null,
+          branch: s ? { id: s.id, name: s.name, city: s.city, area: s.area, phone: s.phone, whatsapp: s.whatsapp } : null,
+          items: items.map(i => ({ product_id: i.product_id, title: i.title, sku: i.sku, qty: i.qty, price: shows(i) ? i.price : null, line_total: shows(i) ? i.line_total : null })) };
+      },
+      place_order(a) {
+        const p = a.p || {}, me = uid(), st = DB.settings;
+        if (!me) fail('sign in to order', '42501');
+        if (!st.orders_enabled || st.shop_closed) fail('orders are closed');
+        const c = DB.customers.find(x => x.user_id === me) || {};
+        const name = String(String(p.name || '').trim() || c.name || '').trim().slice(0, 80), phone = String(String(p.phone || '').trim() || c.phone || '').replace(/[^0-9+]/g, '').slice(0, 30);
+        const del = p.delivery || 'pickup', addr = String(p.address || '').trim();
+        if (name.length < 2) fail('order needs a name', '22023');
+        if (phone.length < 7) fail('order needs a phone', '22023');
+        if (!['pickup', 'delivery'].includes(del)) fail('bad delivery', '22023');
+        if (del === 'delivery' && addr.length < 5) fail('delivery needs an address', '22023');
+        const items = Array.isArray(p.items) ? p.items : [];
+        if (!items.length || items.length > 100) fail('order needs 1 to 100 items', '22023');
+        if (DB.invoices.filter(x => x.customer_id === me && x.source === 'app' && ['preparing', 'ready'].includes(x.status)).length >= 5) fail('too many open orders');
+        const snap = DB.products.map(x => ({ id: x.id, qty: x.qty, status: x.status })), lines = [];
+        let sub = 0, units = 0, branch = null;
+        try {
+          for (const it of items) {
+            const q = Math.floor(Number(it.qty) || 0), pr = DB.products.find(x => x.id === it.id);
+            if (q < 1 || q > 1000) fail('bad quantity', '22023');
+            if (!pr || pr.status !== 'active') fail('part not available: ' + ((pr && pr.title) || ''));
+            if (pr.price == null) fail('part has no price: ' + pr.title);
+            if (pr.qty != null && pr.qty < q) fail(st.hide_qty && !isStaff() ? 'not enough stock: ' + pr.title : 'not enough stock: ' + pr.title + ' (available ' + pr.qty + ')');
+            if (pr.qty != null) { pr.qty -= q; if (pr.qty <= 0) pr.status = 'sold'; }
+            sub += pr.price * q; units += q; branch = branch || pr.shop_id;
+            lines.push({ product_id: pr.id, sku: pr.sku || pr.part_no || null, title: pr.title, qty: q, price: pr.price, cost: pr.cost == null ? null : pr.cost, line_total: pr.price * q });
+          }
+        } catch (e) { snap.forEach(x => { const pr = DB.products.find(y => y.id === x.id); if (pr) { pr.qty = x.qty; pr.status = x.status; } }); throw e; }
+        const shop = shopOf(branch), t = now();
+        const v = { id: uuid(), no: ++DB.inv_seq, branch_id: branch, staff_id: null, staff_name: '', customer_id: me, customer_name: name, customer_phone: phone,
+          subtotal: money2(sub), discount: 0, total: money2(sub), paid: 0, payment: 'cash', currency: (shop && shop.currency) || 'LYD', status: 'preparing', note: String(p.note || '').trim().slice(0, 500),
+          created_at: t, returned_at: null, source: 'app', ordered_at: t, ready_at: null, cancelled_at: null, cancel_reason: '', delivery: del, address: del === 'delivery' ? addr.slice(0, 300) : '' };
+        DB.invoices.push(v);
+        lines.forEach(l => DB.invoice_items.push({ id: DB.invoice_items.length + 1, invoice_id: v.id, ...l }));
+        logAct('order', v.id, name, v.total, { no: v.no, units, lines: lines.length, delivery: del });
+        save();
+        return RPC.my_order({ p_id: v.id });
+      },
+      my_orders(a) {
+        if (!uid()) return [];
+        return DB.invoices.filter(x => x.customer_id === uid() && x.source === 'app')
+          .sort((x, y) => (['preparing', 'ready'].includes(y.status) - ['preparing', 'ready'].includes(x.status)) || (y.ordered_at || y.created_at).localeCompare(x.ordered_at || x.created_at))
+          .slice(0, Math.min(Math.max((a && a.p_limit) || 30, 1), 100)).map(x => RPC.my_order({ p_id: x.id }));
+      },
+      cancel_my_order(a) {
+        const v = DB.invoices.find(x => x.id === a.p_id && x.source === 'app' && x.customer_id === uid());
+        if (!v) fail('order not found');
+        if (v.status !== 'preparing') fail('order can no longer be cancelled');
+        restock(v.id);
+        v.status = 'cancelled'; v.cancelled_at = now(); v.cancel_reason = 'customer';
+        logAct('order_cancelled', v.id, v.customer_name.trim() || null, v.total, { no: v.no, was: 'preparing', by: 'customer' }); save();
+        return RPC.my_order({ p_id: v.id });
+      },
+      list_orders(a) {
+        if (!uid() || !(hasPerm('sales') || hasPerm('invoices'))) fail('not authorized', '42501');
+        const st = isAdmin() ? null : staffRow(), br = st && st.branch_id, want = (a && a.p_status) || '';
+        const o = DB.invoices.filter(x => x.source === 'app' && (!br || x.branch_id === br));
+        const open = x => ['preparing', 'ready'].includes(x.status);
+        const pick = o.filter(x => !want ? open(x) : want === 'all' ? true : x.status === want)
+          .sort((x, y) => (open(y) - open(x)) || (open(x) ? x.ordered_at.localeCompare(y.ordered_at) : (y.cancelled_at || y.created_at).localeCompare(x.cancelled_at || x.created_at)) || x.no - y.no);
+        const off = (a && a.p_offset) || 0, lim = Math.min(Math.max((a && a.p_limit) || 30, 1), 100);
+        return { counts: { preparing: o.filter(x => x.status === 'preparing').length, ready: o.filter(x => x.status === 'ready').length }, total: pick.length,
+          items: pick.slice(off, off + lim).map(x => { const its = DB.invoice_items.filter(i => i.invoice_id === x.id);
+            return { id: x.id, no: x.no, status: x.status, ordered_at: x.ordered_at, ready_at: x.ready_at || null, cancelled_at: x.cancelled_at || null,
+              done_at: ['done', 'returned'].includes(x.status) ? x.created_at : null, customer_name: x.customer_name, customer_phone: x.customer_phone, delivery: x.delivery || '',
+              address: x.address || '', note: x.note || '', total: x.total, currency: x.currency, payment: x.payment, staff_name: x.staff_name,
+              units: its.reduce((k, i) => k + i.qty, 0), lines: its.length }; }) };
+      },
+      order_set(a) {
+        if (!uid() || !hasPerm('sales')) fail('not authorized', '42501');
+        const v = DB.invoices.find(x => x.id === a.p_id && x.source === 'app');
+        if (!v) fail('order not found');
+        const st = staffRow();
+        if (!isAdmin() && st && st.branch_id && v.branch_id !== st.branch_id) fail('not authorized', '42501');
+        const was = v.status, to = a.p_status, pay = a.p_payment || 'cash', reason = String(a.p_reason || '').trim().slice(0, 200);
+        if (to === 'ready') { if (was !== 'preparing') fail('bad order status'); v.status = 'ready'; v.ready_at = now(); }
+        else if (to === 'done') {
+          if (!['preparing', 'ready'].includes(was)) fail('bad order status');
+          if (!['cash', 'card', 'transfer', 'credit'].includes(pay)) fail('bad payment', '22023');
+          /* from now on a sale like any other, dated the day it was received */
+          Object.assign(v, { status: 'done', created_at: now(), ready_at: v.ready_at || now(), payment: pay, paid: pay === 'credit' ? 0 : v.total, staff_id: uid(), staff_name: meName() });
+        } else if (to === 'cancelled') {
+          if (!['preparing', 'ready'].includes(was)) fail('bad order status');
+          restock(v.id); Object.assign(v, { status: 'cancelled', cancelled_at: now(), cancel_reason: reason });
+        } else fail('bad order status', '22023');
+        logAct('order_' + to, v.id, v.customer_name.trim() || null, v.total, { no: v.no, was, ...(to === 'done' ? { payment: pay } : to === 'cancelled' ? { reason } : {}) });
+        save();
+        return RPC.get_invoice({ p_id: v.id });
       },
       sales_report(a) {
         if (!hasPerm('reports')) fail('not authorized', '42501');
@@ -915,7 +1025,7 @@
       list_activity(a) {
         if (!uid() || !isAdmin()) fail('not authorized', '42501');
         const q = String(a.p_q || '').trim(), nq = norm(q), g = a.p_group || null, has = (x, k) => !!x.detail && Object.prototype.hasOwnProperty.call(x.detail, k);
-        const inGroup = x => !g || (g === 'sales' ? ['sale', 'return'].includes(x.kind)
+        const inGroup = x => !g || (g === 'sales' ? ['sale', 'return', 'order', 'order_ready', 'order_done', 'order_cancelled'].includes(x.kind)
           : g === 'stock' ? ['receive', 'receipt_undo', 'stock', 'product_add', 'product_del', 'sync', 'import'].includes(x.kind) || (x.kind === 'product_edit' && (has(x, 'qty') || has(x, 'title') || has(x, 'status')))
           : g === 'prices' ? ['bulk_price', 'bulk_undo'].includes(x.kind) || (x.kind === 'product_edit' && (has(x, 'price') || has(x, 'cost') || has(x, 'hide_price')))
           : g === 'money' ? ['pay_in', 'pay_in_del', 'pay_out', 'pay_out_del', 'expense', 'expense_del'].includes(x.kind)

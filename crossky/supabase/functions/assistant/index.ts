@@ -27,6 +27,7 @@ const TOOL_PERMS: Record<string, Perm> = {
   find_customers: ['invoices', 'reports'], record_customer_payment: 'invoices', find_suppliers: 'costs',
   record_supplier_payment: { all: ['costs', 'purchases'] }, record_expense: 'expenses', expenses_report: ['expenses', 'reports'],
   change_stock: 'products', set_price: 'products', bulk_prices: 'admin', receive_stock: 'purchases', invoice_from_photo: ['purchases', 'sales'], shop_settings: 'settings',
+  find_orders: ['sales', 'invoices'], order_status: 'sales', my_orders: null,
   create_ad: 'admin', recent_activity: 'admin',
 };
 function allowed(perm: Perm, role: string, perms: string[]): boolean {

@@ -51,7 +51,7 @@
     aiLocErr: ["ما قدرتش: {e}", "I couldn’t: {e}"],
     aiS1: ["كم بعنا اليوم؟", "Sales today?"], aiS2: ["شنو الناقص في المخزن؟", "What is running low?"], aiS3: ["مين عليه ديون؟", "Who owes us?"], aiS4: ["الأرباح هالشهر", "Profit this month"],
     aiS5: ["كيف نعطي المساعد لموظف؟", "How do I give the assistant to an employee?"], aiS6: ["بيع فلتر زيت باترول", "Sell a Patrol oil filter"], aiS7: ["كيف نرجع فاتورة؟", "How do I return an invoice?"],
-    aiS8: ["عندكم فحمات باترول؟", "Do you have Patrol brake pads?"], aiS9: ["وين فروعكم؟", "Where are your branches?"], aiS10: ["كيف نطلب؟", "How do I order?"], aiS12: ["نزّل فاتورة من صورة", "Enter an invoice from a photo"], aiInvAsk: ["نزّل الفاتورة", "Enter this invoice"],
+    aiS8: ["عندكم فحمات باترول؟", "Do you have Patrol brake pads?"], aiS13: ["شنو الطلبات الجديدة؟", "Any new orders?"], aiS14: ["وين طلبي؟", "Where is my order?"], aiS9: ["وين فروعكم؟", "Where are your branches?"], aiS10: ["كيف نطلب؟", "How do I order?"], aiS12: ["نزّل فاتورة من صورة", "Enter an invoice from a photo"], aiInvAsk: ["نزّل الفاتورة", "Enter this invoice"],
     aiPhotoNoInv: ["هنا على الجهاز نقرا الصور كفواتير بس، والمدير ما عطانيش صلاحية البيع ولا الاستلام ليك.", "On the device I read photos only as invoices, and the manager hasn’t given me sales or receiving for you."],
     /* the manager's page */
     aiSetT: ["المساعد", "Assistant"], aiSetHead: ["المساعد الذكي", "AI assistant"],
@@ -368,6 +368,17 @@
       const q = words(cut(s, ['زيد', 'ضيف', 'دخل', 'نقص', 'شيل', 'اطرح', 'جرد', 'عدينا', 'للمخزن', 'المخزن', 'مخزن', 'تالف', 'تالفه', 'ضايع', 'ضايعه', 'damaged', 'lost', 'add', 'remove', 'count', 'stock', 'to']));
       return part(q, async p => done(await ctx.run('change_stock', sSet ? { id: p.id, set: n[0], reason } : { id: p.id, add: sOut ? -n[0] : n[0], reason })));
     }
+    /* customer orders from the app: «شنو الطلبات الجديدة؟», «الطلب 1008 جاهز», «سلّم الطلب 1008 بطاقة»; customers: «وين طلبي؟» */
+    if (has(s, ['طلب', 'الطلب', 'طلبات', 'الطلبات', 'طلبي', 'طلباتي', 'order', 'orders']) && !has(s, ['افتح', 'اقفل', 'سكر', 'قفل', 'فتح'])) {
+      if (!staff) { if (can('my_orders')) return done(await ctx.run('my_orders', {})); }
+      else {
+        const no = n[0], to = has(s, ['جاهز', 'جاهزه', 'جهز', 'جهزت', 'ready']) ? 'ready' : has(s, ['سلم', 'سلمت', 'تسلم', 'استلم', 'استلمه', 'تم الاستلام', 'delivered', 'received']) ? 'done'
+          : has(s, ['الغي', 'لغي', 'الغاء', 'cancel']) ? 'cancelled' : '';
+        if (to && no) return can('order_status') ? done(await ctx.run('order_status', { number: no, to, payment: (PAY.find(([w]) => has(s, w)) || [0, 'cash'])[1] })) : deny();
+        if (can('find_orders')) return done(await ctx.run('find_orders', no ? { number: no } : { status: has(s, ['قيد التجهيز', 'تجهيز', 'جديده', 'الجديده', 'new']) ? 'preparing'
+          : has(s, ['قيد الاستلام', 'جاهزه', 'ready']) ? 'ready' : has(s, ['المستلمه', 'تم الاستلام', 'done']) ? 'done' : has(s, ['الملغيه', 'ملغيه', 'cancelled']) ? 'cancelled' : 'open' }));
+      }
+    }
     /* returning an invoice: «رجع فاتورة رقم 1001» */
     if (has(s, ['رجع', 'ترجيع', 'ارجاع', 'return']) && has(s, ['فاتوره', 'invoice', 'رقم'])) {
       if (!can('return_invoice')) return deny();
@@ -539,8 +550,9 @@
   }
   function chips() {
     const r = role(), out = [];
-    if (r === 'customer') return ['aiS8', 'aiS9', 'aiS10'];
+    if (r === 'customer') return ['aiS8', 'aiS14', 'aiS10'];
     if (SP.aiAllowed('purchases')) out.push('aiS12');
+    if (SP.company && SP.aiAllowed(['sales', 'invoices'])) out.push('aiS13');
     if (SP.aiAllowed('reports')) out.push('aiS1');
     if (SP.aiAllowed('sales')) out.push('aiS6');
     if (SP.aiAllowed(['products', 'purchases', 'reports'])) out.push('aiS2');
@@ -549,7 +561,7 @@
     if (SP.aiAllowed({ all: ['reports', 'costs'] })) out.push('aiS4');
     if (SP.aiAllowed('returns')) out.push('aiS7');
     if (out.length < 2) out.push('aiS8');
-    return out.slice(0, 6);
+    return out.slice(0, 7);
   }
   let BOX = null;
   function box() {

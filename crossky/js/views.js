@@ -502,10 +502,13 @@
           <button type="button" class="btn btn-danger sm" id="pdel">${I('trash')} ${esc(t('del'))}</button></div>` : ''}
         <section class="pd-more" id="pmore" hidden><h2>${esc(t('moreShop'))}</h2><div class="grid" id="pmg"></div></section>
       </div></div>
-      <div class="actionbar"><div class="wrap">${p.status === 'sold' ? `<p class="note">${esc(t('soldNote'))}</p>` : (S.settings.orders_enabled && !closed ? `<button type="button" class="btn btn-signal" id="padd">${I('plus')} ${esc(t('addCart'))}</button>` : '') + (wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('whatsapp'))}</a>` : '') + (tel ? `<a class="btn btn-ghost" href="${esc(tel)}">${I('phone')} ${esc(t('call'))}</a>` : '') + (!wa && !tel ? `<p class="note">${esc(t('noNumber'))}</p>` : '')}</div></div>`, { actionbar: true });
+      <div class="actionbar"><div class="wrap">${p.status === 'sold' ? `<p class="note">${esc(t('soldNote'))}</p>`
+        /* the company takes orders in the app (js/orders.js), not on WhatsApp: add it, then confirm the basket */
+        : SP.company && S.settings.orders_enabled && !closed ? `<button type="button" class="btn btn-signal" id="padd">${I('plus')} ${esc(t('addCart'))}</button><a class="btn btn-ghost" id="pcart" href="#cart"${SP.cart.count() ? '' : ' hidden'}>${I('bag')} ${esc(t('ordGoCart'))}</a>`
+        : (S.settings.orders_enabled && !closed ? `<button type="button" class="btn btn-signal" id="padd">${I('plus')} ${esc(t('addCart'))}</button>` : '') + (wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('whatsapp'))}</a>` : '') + (tel ? `<a class="btn btn-ghost" href="${esc(tel)}">${I('phone')} ${esc(t('call'))}</a>` : '') + (!wa && !tel ? `<p class="note">${esc(t('noNumber'))}</p>` : '')}</div></div>`, { actionbar: true });
     const gt = $('#gt'), gc = $('#gc');
     if (gc) gt.addEventListener('scroll', SP.debounce(() => { gc.textContent = (Math.round(Math.abs(gt.scrollLeft) / gt.clientWidth) + 1) + '/' + p.imgs.length; }, 60), { passive: true });
-    if ($('#padd')) $('#padd').onclick = () => { SP.cart.add(p.id); SP.toast(t('addedCart')); };
+    if ($('#padd')) $('#padd').onclick = () => { SP.cart.add(p.id); SP.toast(t('addedCart')); if ($('#pcart')) $('#pcart').hidden = false; };
     $('#psh').onclick = () => share(t('sharePart'), [p.title, t('shPrice', { p: SP.priceText(p.price, cur, p.price_hidden) }), t('shFits', { f: SP.fitText(p) }), sh.name ? t('shAt', { s: sh.name + ' · ' + sh.city }) : '', t('shVia')].filter(Boolean).join('\n'), SP.siteUrl() + '#p-' + p.id);
     if (mine) {
       $('#psold').onclick = async () => {

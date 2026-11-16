@@ -146,6 +146,7 @@
   SP.customerView = (m, n) => {
     const demo = SP.demo ? `<div class="banner warn">${I('info')}<span>${esc(t('demoB', { e: CFG.demoEmail || 'owner@demo.app' }))}</span></div>` : '';
     const cartLink = S.settings.orders_enabled ? `<a class="admin-entry" href="#cart">${I('bag')}<span><b>${esc(t('cart'))}</b><small>${esc(SP.count(SP.cart.count(), 'parts'))}</small></span>${I('chevL', 'dirx')}</a>` : '';
+    const ordLink = SP.ordersLink && S.settings.orders_enabled ? SP.ordersLink() : '';
     if (!S.user) {
       shell(bar(t('tabAccount'), '', { noBack: true }) + `<main class="wrap mine">${demo}<section class="onb"><h2>${esc(t('myAccount'))}</h2><p>${esc(t('signInToOrder'))}</p>
         <div class="form-actions"><a class="btn btn-signal" href="#login">${esc(t('signIn'))}</a><a class="btn btn-ghost" href="#signup">${esc(t('createAcct'))}</a></div></section>${cartLink}${SP.prefs()}</main>`);
@@ -157,7 +158,7 @@
       <section class="mcard acct"><div class="mc-head">${I('user')}<span><b>${esc(c.name || t('signedInT'))}</b><small class="ltr">${esc(S.user.email)}</small></span>
         <button type="button" class="btn btn-ghost sm" id="lo">${I('logout', 'dirx')} ${esc(t('logout'))}</button></div>
         ${mode === 'approved' ? `<div class="banner ${c.approved ? 'note' : 'warn'}">${I(c.approved ? 'verified' : 'clock')}<span>${esc(t(c.approved ? 'approvedYes' : 'approvedNo'))}</span></div>` : ''}</section>
-      ${SP.bioCard ? SP.bioCard() : ''}${SP.systemLink ? SP.systemLink() : ''}${cartLink}
+      ${SP.bioCard ? SP.bioCard() : ''}${SP.systemLink ? SP.systemLink() : ''}${cartLink}${ordLink}
       <form class="form mcard" id="pf" novalidate><h2 class="lbl">${esc(t('myAccount'))}</h2>
         <div class="field"><label for="pn">${esc(t('custName'))}</label><input id="pn" class="input" maxlength="80" value="${esc(c.name)}" autocomplete="name"></div>
         <div class="row2"><div class="field"><label for="pp">${esc(t('phoneNum'))}</label><input id="pp" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(c.phone)}"></div>
@@ -199,12 +200,7 @@
           <span class="cr-main"><a href="#p-${i.id}"><b>${esc(i.p.title)}</b></a><small>${esc([i.p.part_no || i.p.sku, SP.fitText(i.p)].filter(Boolean).join(' · '))}</small>${SP.priceHTML(i.p.price, cur, i.p.price_hidden)}</span>
           <span class="stepper"><button type="button" data-d="-1" aria-label="−">−</button><b class="num">${i.qty}</b><button type="button" data-d="1" aria-label="+">+</button></span></div>`).join('')
         + (allPriced && total ? `<p class="cart-total">${esc(t('orderTotal', { t: SP.priceText(total, cur) }))}</p>` : '')
-        + `<form class="form" id="of" novalidate style="margin-top:14px">
-          <div class="row2"><div class="field"><label for="on">${esc(t('custName'))}</label><input id="on" class="input" maxlength="80" value="${esc(c.name || '')}"></div>
-          <div class="field"><label for="op">${esc(t('phoneNum'))}</label><input id="op" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(c.phone || '')}"></div></div>
-          <div class="field"><label for="ox">${esc(t('cartNote'))}</label><textarea id="ox" class="input" maxlength="500" placeholder="${esc(t('cartNotePh'))}"></textarea></div>
-          <p class="form-err" id="oerr" role="alert"></p>
-          ${SP.shopClosed && SP.shopClosed() ? SP.closedBanner() : ''}<div class="form-actions">${SP.shopClosed && SP.shopClosed() ? '' : `<a class="btn btn-wa" id="ogo" href="#cart" target="_blank" rel="noopener">${I('chat')} ${esc(t('sendOrder'))}</a>`}<button type="button" class="btn btn-ghost" id="oclr">${I('trash')} ${esc(t('clearCart'))}</button></div></form>`;
+        + SP.orderForm(list);
       $('#cl').onclick = e => {
         const b = e.target.closest('[data-d]');
         if (!b) return;
@@ -212,29 +208,8 @@
         SP.cart.qty(id, (it ? it.qty : 0) + +b.dataset.d);
         draw();
       };
-      $('#oclr').onclick = () => { SP.cart.clear(); SP.toast(t('cartCleared')); SP.render(); };
-      /* A real link rather than window.open: it opens WhatsApp from Safari, from the installed app and from the
-         in-app page alike (the Claude app's page frame does not allow window.open). It follows the form as it is typed. */
-      function orderLink() {
-        const num = contactNum();
-        if (!SP.waNum(num, S.country)) return '';
-        const lines = [t('orderMsg'), ''];
-        list.forEach((i, k) => lines.push(`${k + 1}. ${i.p.title}${i.p.part_no || i.p.sku ? ' [' + (i.p.part_no || i.p.sku) + ']' : ''} × ${i.qty}${i.p.price != null ? ' — ' + SP.priceText(i.p.price, cur) : ''}`));
-        if (allPriced && total) lines.push('', t('orderTotal', { t: SP.priceText(total, cur) }));
-        const nm = $('#on').value.trim(), ph = SP.digits($('#op').value).trim(), note = $('#ox').value.trim();
-        lines.push('');
-        if (nm) lines.push(t('orderFrom', { n: nm }));
-        if (ph) lines.push(t('orderPhone', { p: ph }));
-        if (S.car) lines.push(t('waCar', { car: SP.carText(S.car) }).trim() + (S.car.vin ? t('vinMsg', { v: S.car.vin }) : ''));
-        if (note) lines.push(t('orderNote', { x: note }));
-        return SP.waLink(num, lines.join('\n'), S.country);
-      }
-      /* orders closed by the owner: the basket stays, nothing is sent */
-      if (!$('#ogo')) { $('#of').onsubmit = e => e.preventDefault(); return; }
-      const link = () => { $('#ogo').setAttribute('href', orderLink() || '#cart'); };
-      $('#of').oninput = link; link();
-      $('#ogo').onclick = e => { if (!orderLink()) { e.preventDefault(); $('#oerr').textContent = t('noCompanyWa'); } };
-      $('#of').onsubmit = e => { e.preventDefault(); $('#ogo').click(); };
+      /* the order is placed in the app (js/orders.js): it lands in the sales system «قيد التجهيز» */
+      SP.orderWire(list, draw);
     }
     draw();
     SP.done(n);

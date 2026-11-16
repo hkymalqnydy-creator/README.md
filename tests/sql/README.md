@@ -13,6 +13,7 @@
 9. `controls_tests.sql` (K1…K59) — سجل الحركة، حد التخفيض، البيع تحت التكلفة، إخفاء الكميات، الأسعار بالجملة، إلغاء الاستلام / activity log, discount limits, selling below cost, hidden quantities, bulk prices, taking a receipt back
 10. `ads_tests.sql` (A1…A16) — إعلانات الرئيسية: الحفظ والقراءة، السجل، الروابط والصور المرفوضة، الحد 5، الموظف بدون صلاحية / home screen ads: saving and reading, the log, refused links and pictures, the limit of 5, staff without the right
 11. `ai_tests.sql` (I1…I28) — المساعد الذكي: للمدير دايماً، يعطيه لموظف بصلاحيات من صلاحياته، الزبائن، حد الرسائل اليومي، الخطوات، السجل، الاستعمال / the AI assistant: always the manager's, granted per employee within his own permissions, customers, the daily message limit, steps per message, the log, usage
+12. `orders_tests.sql` (O1…O35) — طلبات الزبائن من التطبيق: الطلب والحجز من المخزن، الأسعار من قاعدة البيانات، قيد التجهيز ← قيد الاستلام ← تم الاستلام، الإلغاء ورجوع القطع، التقارير والديون، الصلاحيات، السجل / in-app customer orders: placing and reserving stock, prices from the database, preparing → ready → received, cancelling with the parts back, reports and debts, permissions, the log
 
 كل سطر نتيجة يبدأ برقم الاختبار، والأخطاء المتوقعة مكتوبة قبلها (expect …). / Each result line starts with its test number; expected errors are announced just before them.
 

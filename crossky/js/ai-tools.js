@@ -129,7 +129,7 @@
   });
   tool({
     name: 'add_to_cart', perm: null, company: true, customer: true,
-    desc: 'Put a part in the customer\'s order cart (the cart is sent to the company on WhatsApp from the cart page). Use for customers who want to order.',
+    desc: 'Put a part in the customer\'s order basket. The customer then confirms the order in the basket (#cart) in the app: it goes to the company\'s system «قيد التجهيز» (no WhatsApp). Use for customers who want to order.',
     props: { id: str('the part id'), qty: int('how many, default 1') }, req: ['id'],
     async run(a, ctx) {
       const p = await getPart(a.id), n = Math.min(Math.max(parseInt(a.qty, 10) || 1, 1), 99);
@@ -138,13 +138,75 @@
       return { in_cart: SP.cart.count(), added: { title: p.title, qty: n } };
     }
   });
+  /* ----- customer orders from the app (js/orders.js) ----- */
+  const OPAYS = ['cash', 'card', 'transfer', 'credit'];
+  const OST = { preparing: 'ordPreparing', ready: 'ordReady', done: 'ordDone', cancelled: 'ordCancelled' };
+  const orderRow = o => ({ t: t('ordNo', { n: o.no }) + ' · ' + (o.customer_name || ''), s: [t(OST[o.status] || 'ordPreparing'), SP.count(+o.units || (o.items || []).reduce((k, i) => k + (+i.qty || 0), 0), 'parts'),
+    t(o.delivery === 'delivery' ? 'ordDelivery' : 'ordPickup')].join(' · '), v: o.total != null ? money(o.total, o.currency) : '', href: '#order-' + o.id });
+  const orderFact = o => ({ id: o.id, no: o.no, status: o.status, customer: o.customer_name, phone: o.customer_phone, delivery: o.delivery, address: o.address || undefined, total: o.total, units: o.units, ordered: dayStr(new Date(o.ordered_at)) });
+  tool({
+    name: 'find_orders', perm: ['sales', 'invoices'], company: true,
+    desc: 'The customers\' orders placed in the app. status: open (preparing and ready, the default), preparing («قيد التجهيز»), ready («قيد الاستلام»), done (received) or cancelled. Or one order by its number.',
+    props: { status: { type: 'string', enum: ['open', 'preparing', 'ready', 'done', 'cancelled'] }, number: int('an order number') },
+    async run(a, ctx) {
+      if (a.number) {
+        const r = await SP.orders.list('all', 0, 100), o = (r.items || []).find(x => +x.no === +a.number);
+        if (!o) return { error: 'no order with that number' };
+        ctx.card({ type: 'list', title: t('ordNo', { n: o.no }), rows: [orderRow(o)] });
+        return { order: orderFact(o) };
+      }
+      const st = a.status && a.status !== 'open' ? a.status : '', r = await SP.orders.list(st, 0, 20), c = r.counts || {};
+      ctx.card({ type: 'list', title: t('ordT') + ' · ' + t(st ? OST[st] : 'ordOpen') + ' (' + num(r.total) + ')', rows: (r.items || []).slice(0, 10).map(orderRow), more: r.total > 10 ? { href: '#orders', label: t('aiMore') } : null });
+      return { preparing: +c.preparing || 0, ready: +c.ready || 0, shown: (r.items || []).slice(0, 20).map(orderFact) };
+    }
+  });
+  tool({
+    name: 'order_status', perm: 'sales', company: true,
+    desc: 'Move a customer order on: ready («قيد الاستلام»: prepared, waiting to be received), done («تم الاستلام»: received; it becomes a sale, with how the customer paid), or cancelled (the parts go back to stock). Prepares a card to confirm.',
+    props: { number: int('the order number'), to: { type: 'string', enum: ['ready', 'done', 'cancelled'] }, payment: { type: 'string', enum: OPAYS, description: 'for done: how the customer paid (default cash)' }, reason: str('for cancelled: why') },
+    req: ['number', 'to'],
+    async run(a, ctx) {
+      const r = await SP.orders.list('', 0, 100), o = (r.items || []).find(x => +x.no === +a.number);
+      if (!o) return { error: 'no open order with that number (only orders being prepared or ready can move on)' };
+      if (a.to === 'ready' && o.status !== 'preparing') return { error: 'this order is already ready' };
+      const pay = OPAYS.includes(a.payment) ? a.payment : 'cash', reason = clip(a.reason, 200);
+      ctx.propose({
+        title: t(a.to === 'ready' ? 'ordToReady' : a.to === 'done' ? 'ordToDone' : 'ordCancel') + ' · ' + t('ordNo', { n: o.no }), tool: 'order_status',
+        go: t(a.to === 'ready' ? 'ordToReady' : a.to === 'done' ? 'ordToDone' : 'ordCancel'),
+        rows: [[t('ordCustomer'), o.customer_name], [t('ordWhere'), t(o.delivery === 'delivery' ? 'ordDelivery' : 'ordPickup')], [t('ordItems'), SP.count(+o.units || 0, 'parts')],
+          ...(a.to === 'done' ? [[t('posPay'), t('pay_' + pay)]] : []), ...(a.to === 'cancelled' && reason ? [[t('ordCancelReason'), reason]] : [])],
+        total: [t('ordTotal'), money(o.total, o.currency)],
+        warn: a.to === 'cancelled' ? [t('ordCancelQ', { n: o.no })] : [],
+        alt: { label: t('ordOpenOrder'), run: () => '#order-' + o.id },
+        async run() {
+          const v = await SP.orders.set(o.id, a.to, a.to === 'done' ? pay : null, a.to === 'cancelled' ? reason : null);
+          const text = a.to === 'ready' ? t('ordReadyOk', { n: o.no }) : a.to === 'done' ? t('ordDoneOk', { n: v.no }) : t('ordCancelOk');
+          return { text, links: [{ href: '#order-' + o.id, label: t('ordOpenOrder') }], what: text, ref: String(o.no) };
+        }
+      });
+      return { prepared: true, waiting_for_confirmation: true, order: orderFact(o), to: a.to };
+    }
+  });
+  tool({
+    name: 'my_orders', perm: null, company: true, mine: true,
+    desc: 'The signed-in customer\'s own orders and where each stands: «قيد التجهيز» (being prepared), «قيد الاستلام» (ready), «تم الاستلام» (received) or «ملغي» (cancelled).',
+    props: {},
+    async run(a, ctx) {
+      const L = await SP.orders.mine();
+      if (!L.length) return { orders: [], note: 'no orders yet: add parts to the basket and confirm the order there (#cart)' };
+      ctx.card({ type: 'list', title: t('ordMine'), rows: L.slice(0, 8).map(o => ({ t: t('ordNo', { n: o.no }), s: t(OST[o.status] || 'ordPreparing') + ' · ' + dayStr(new Date(o.ordered_at)), v: o.total != null ? money(o.total, o.currency) : '', href: '#order-' + o.id })),
+        more: { href: '#my-orders', label: t('aiMore') } });
+      return { orders: L.slice(0, 10).map(o => ({ no: o.no, status: o.status, ordered: dayStr(new Date(o.ordered_at)), delivery: o.delivery, total: o.total, items: (o.items || []).map(i => i.title + ' × ' + i.qty) })) };
+    }
+  });
   const PAGES = {
     home: [''], search: ['search'], cart: ['cart', null, true], vin: ['vin'], branches: ['shops'], favorites: ['favs'], account: ['mine'], brands: ['brands'], about: ['about', null, true],
     system: ['system', 'staff'], pos: ['pos', 'sales'], receive: ['receive', 'purchases'], invoices: ['invoices', ['sales', 'invoices']], purchases: ['purchases', ['purchases', 'reports']],
     reports: ['reports', 'reports'], stock: ['stock', ['products', 'purchases', 'reports']], customers: ['buyers', ['invoices', 'reports']], suppliers: ['suppliers', 'costs'],
     expenses: ['expenses', ['expenses', 'reports']], profit: ['pnl', { all: ['reports', 'costs'] }], staff: ['staff', 'admin'], admin: ['admin', 'admin'],
     controls: ['admin-control', 'admin'], activity: ['admin-log', 'admin'], bulk_prices: ['admin-prices', 'admin'], ads: ['admin-ads', 'admin'], company_settings: ['admin-company', 'admin'],
-    customer_approvals: ['admin-customers', 'admin'], auto_reply: ['admin-bot', 'admin'], sync: ['admin-sync', 'admin'], assistant_settings: ['admin-ai', 'admin']
+    customer_approvals: ['admin-customers', 'admin'], auto_reply: ['admin-bot', 'admin'], sync: ['admin-sync', 'admin'], assistant_settings: ['admin-ai', 'admin'],
+    orders: ['orders', ['sales', 'invoices'], true], my_orders: ['my-orders', null, true]
   };
   tool({
     name: 'open_page', perm: null,
@@ -663,7 +725,7 @@
   });
 
   /* what the assistant may use for this person, in this edition */
-  SP.aiTools = () => TOOLS.filter(x => SP.aiAllowed(x.perm) && (!x.company || SP.company) && (!x.customer || !SP.aiStaff() || SP.company));
+  SP.aiTools = () => TOOLS.filter(x => SP.aiAllowed(x.perm) && (!x.company || SP.company) && (!x.customer || !SP.aiStaff() || SP.company) && (!x.mine || !SP.aiStaff()));
   SP.aiToolPerm = name => { const x = TOOLS.find(y => y.name === name); return x ? x.perm : undefined; };
   SP.aiSchemas = () => SP.aiTools().map(x => ({ name: x.name, description: x.desc, input_schema: { type: 'object', properties: x.props || {}, required: x.req || [] } }));
 
@@ -690,7 +752,8 @@
     ['ads', 'admin', 'اعلان اعلانات الرئيسية', 'الإعلانات (#admin-ads): لحد 5 إعلانات فوق في الرئيسية، بصورة وعنوان وزر، ويوقف وحده في يوم تحدده.', 'Ads (#admin-ads): up to 5 ads at the top of the home screen with a picture, title and button, ending on a set day.'],
     ['faceid', null, 'فيس بصمة face id دخول', 'Face ID أو البصمة: من «حسابي» فعّله مرة، وبعدها تدخل بضغطة من صفحة الدخول.', 'Face ID or fingerprint: turn it on once in Account, then sign in with one tap.'],
     ['vin', null, 'شاصي vin هيكل سيارتي', 'رقم الشاصي (#vin): اكتب رقم الشاصي ونعرفو السيارة والقطع اللي تركب عليها.', 'VIN (#vin): enter the VIN to identify the car and the parts that fit.'],
-    ['order', null, 'طلب اطلب سلة واتساب توصيل', 'الطلب: زيد القطع للسلة (#cart) وابعت الطلب على واتساب الشركة من السلة.', 'Ordering: add parts to the cart (#cart) and send the order on the company WhatsApp.'],
+    ['order', null, 'طلب اطلب سلة توصيل استلام طلبي طلباتي', 'الطلب من التطبيق: زيد القطع لطلبك، وافتح السلة (#cart) واختار استلام من الفرع أو توصيل، واضغط «أكّد الطلب». يوصل للشركة «قيد التجهيز»، وبعدها «قيد الاستلام» لما يكون جاهز، وتتابعه في «طلباتي» (#my-orders). الدفع عند الاستلام، وتقدر تلغيه وهو قيد التجهيز.', 'Ordering in the app: add parts, open the basket (#cart), choose pickup or delivery and tap Place order. The company gets it “being prepared”, then “ready”; follow it in My orders (#my-orders). Pay when you receive it; you can cancel while it is being prepared.'],
+    ['orders', ['sales', 'invoices'], 'طلبات الزبائن التطبيق جاهز تجهيز استلام سلم', 'طلبات الزبائن (#orders): الطلب يوصل «قيد التجهيز» ويطلع رقم على تبويب المنظومة. جهّز القطع واضغط «جاهز للاستلام»، ولما الزبون يستلم اضغط «تم الاستلام» واختار كيف دفع: تولي فاتورة بيع في المبيعات. «إلغاء الطلب» يرجّع القطع للمخزن.', 'Customer orders (#orders): an order arrives “being prepared” with a count on the System tab. Prepare it and tap Ready; when the customer receives it tap Received and choose how they paid: it becomes a sale. Cancel puts the parts back in stock.'],
     ['barcode', 'staff', 'باركود كاميرا', 'الباركود: في نقطة البيع والاستلام زر الكاميرا يقرا الباركود، أو استعمل جهاز باركود (يكتب الرقم ويضغط Enter).', 'Barcodes: the camera button in point of sale and receiving reads them, or use a scanner.'],
     ['settings', 'admin', 'اعدادات الشركة الشعار الالوان', 'إعدادات الشركة (#admin-company): الاسم والشعار والألوان والنصوص وأرقام التواصل والتنبيه.', 'Company settings (#admin-company): name, logo, colours, texts, contacts and notice.'],
     ['sync', 'admin', 'ربط مزامنة اكسل excel منظومة', 'الربط مع منظومة ثانية (#admin-sync): ملف Excel/CSV أو برنامج المزامنة.', 'Sync with another system (#admin-sync): Excel/CSV or the sync program.']
