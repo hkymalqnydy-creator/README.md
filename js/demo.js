@@ -890,6 +890,7 @@
             if (price != null && (price < 0 || price > 99999999 || !canPrice)) price = null;
             const sku = String(it.sku || '').trim().slice(0, 60), bar = String(it.barcode || '').trim().slice(0, 60), pn = String(it.part_no || '').trim().toUpperCase().slice(0, 60);
             const code = sku || bar || pn || null, here = list => list.sort((x, y) => (y.shop_id === branch.id) - (x.shop_id === branch.id))[0];
+            const mk = String(it.maker || '').trim().slice(0, 60);
             let pr = it.product_id ? DB.products.find(x => x.id === it.product_id) : null;
             if (it.product_id && !pr) fail('part not found');
             const codes = [sku, bar, pn].filter(Boolean);
@@ -899,16 +900,17 @@
             if (pr) {
               prev = { prev_cost: pr.cost == null ? null : pr.cost, prev_price: pr.price == null ? null : pr.price };
               pr.qty = (pr.qty || 0) + q; if (cost != null) pr.cost = cost; if (price != null) pr.price = price; pr.status = 'active'; pr.updated_at = now(); nUpd++;
+              if (!pr.maker && mk) { pr.maker = mk; if (pr.search_text) pr.search_text = (pr.search_text + ' ' + norm(mk)).slice(0, 3000); } // fills a part with none; one already set stays
             } else {
               const title = String(it.title || '').trim().slice(0, 120);
               if (title.length < 2) fail('new item needs a name', '22023');
               pr = { id: uuid(), shop_id: branch.id, owner_id: branch.owner_id, sku: sku || null, barcode: bar || null,
                 title, cat: CATS.includes(it.cat) ? it.cat : 'other', cond: 'original', price, cost, nego: false, qty: q, make: String(it.make || '').trim().toLowerCase().slice(0, 20) || 'any',
-                model: String(it.model || '').slice(0, 60), y_from: null, y_to: null, part_no: pn || sku || '', descr: '', imgs: [], status: 'active',
+                model: String(it.model || '').slice(0, 60), y_from: null, y_to: null, part_no: pn || sku || '', maker: mk, descr: '', imgs: [], status: 'active',
                 hide_price: false, search_text: '', created_at: now(), updated_at: now() };
               DB.products.push(pr); nNew++;
             }
-            lines.push({ product_id: pr.id, code, title: pr.title, qty: q, cost, prev_cost: prev ? prev.prev_cost : null, prev_price: prev ? prev.prev_price : null, set_price: price, created: !prev });
+            lines.push({ product_id: pr.id, code, title: pr.title, qty: q, cost, prev_cost: prev ? prev.prev_cost : null, prev_price: prev ? prev.prev_price : null, set_price: price, created: !prev, maker: pr.maker || '' });
             total += (cost || 0) * q;
           }
           /* paid less than the total: the rest is owed to the supplier, so the receipt needs the supplier's name */
@@ -925,11 +927,16 @@
         save();
         return { id: v.id, no: v.no, new: nNew, updated: nUpd, total };
       },
+      /* p_q finds receipts like the sales: the number, the supplier, or a part on it by name, code, manufacturer or the car it fits */
       list_purchases(a) {
         if (!uid() || !(hasPerm('purchases') || hasPerm('reports'))) return [];
-        const L = DB.purchases.slice().sort((x, y) => y.created_at.localeCompare(x.created_at)), off = a.p_offset || 0, lim = Math.min(Math.max(a.p_limit || 30, 1), 100), costs = hasPerm('costs');
+        const q = String(a.p_q || '').trim(), nq = norm(q), bare = v => String(v || '').replace(/[\s\-./]/g, '').toUpperCase();
+        const prod = i => DB.products.find(x => x.id === i.product_id);
+        const hit = v => !q || String(v.no) === q || norm(v.supplier).includes(nq) || DB.purchase_items.some(i => i.purchase_id === v.id
+          && (norm([i.title, i.code, i.maker].filter(Boolean).join(' ')).includes(nq) || (i.code && bare(i.code) === bare(q)) || (prod(i) && text(prod(i)).includes(nq))));
+        const L = DB.purchases.filter(hit).sort((x, y) => y.created_at.localeCompare(x.created_at)), off = a.p_offset || 0, lim = Math.min(Math.max(a.p_limit || 30, 1), 100), costs = hasPerm('costs');
         return L.slice(off, off + lim).map(v => ({ ...v, total: costs ? v.total : null, paid: costs ? (v.paid == null ? v.total : v.paid) : null, branch_name: (shopOf(v.branch_id) || {}).name || null, total_count: L.length,
-          items: DB.purchase_items.filter(i => i.purchase_id === v.id).map(i => ({ title: i.title, code: i.code, qty: i.qty, cost: costs ? i.cost : null })) }));
+          items: DB.purchase_items.filter(i => i.purchase_id === v.id).map(i => { const pr = prod(i); return { title: i.title, code: i.code, qty: i.qty, maker: i.maker || '', make: pr ? pr.make : null, model: pr ? pr.model : null, cost: costs ? i.cost : null }; }) }));
       }
 ,
 
@@ -1174,6 +1181,10 @@
           stock_adj: money2(stockAdj), stock_by_reason: byReason, returned_count: ret.length, returned_total: sum(ret, v => v.total),
           by_staff: Object.values(st).map(x => ({ name: x.name, count: x.count, total: x.total, profit: money2(x.total - x.c) })).sort((x, y) => y.total - x.total || x.name.localeCompare(y.name)),
           receivable: money2(sum(buyers().filter(b => b.balance > 0), b => b.balance)), payable: money2(sum(suppliers().filter(r => r.balance > 0), r => r.balance)),
+          /* the money that came in and went out in the period (the System tab's «الرصيد الكلي») */
+          cash_in: money2(sum(inv, v => v.paid) + sum(DB.customer_payments.filter(p => span(p.created_at)), p => p.amount)),
+          cash_out: money2(sum(DB.purchases.filter(p => span(p.created_at) && br(p.branch_id)), p => p.paid == null ? p.total : p.paid) + sum(DB.supplier_payments.filter(p => span(p.created_at)), p => p.amount)
+            + expenses + sum(ret, v => v.paid)),
           gross: money2(sales - cogs), net: money2(sales - cogs - expenses + stockAdj) };
       },
 

@@ -74,6 +74,7 @@
     if (k === 'today') return [day0, end];
     if (k === '7') return [new Date(d.getFullYear(), d.getMonth(), d.getDate() - 6), end];
     if (k === 'month') return [new Date(d.getFullYear(), d.getMonth(), 1), end];
+    if (k === 'year') return [new Date(d.getFullYear(), 0, 1), end];
     if (k === 'lastmonth') return [new Date(d.getFullYear(), d.getMonth() - 1, 1), new Date(d.getFullYear(), d.getMonth(), 1)];
     return [new Date(2000, 0, 1), end];
   }

@@ -175,3 +175,15 @@ select 'MC49 (expect 218911111111, t)' t, phone, phone_confirmed_at is not null 
 set role authenticated; select set_config('request.jwt.claim.sub', '88888888-8888-8888-8888-888888888888', false);
 select 'MC50 an email account has no number to take (expect f)' t, public.link_login_phone() linked;
 reset role;
+
+-- the System tab's «الرصيد الكلي»: the money in and out in the profit report (pnl_report cash_in / cash_out)
+set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+select 'MC51 money in = paid at the sale + customers'' payments; out = purchases paid + supplier payments + expenses + refunds (expect t, t)' t,
+  (r->>'cash_in')::numeric = (select coalesce(sum(paid), 0) from public.invoices where status = 'done' and created_at >= now() - interval '1 day')
+                           + (select coalesce(sum(amount), 0) from public.customer_payments where created_at >= now() - interval '1 day') in_ok,
+  (r->>'cash_out')::numeric = (select coalesce(sum(coalesce(paid, total)), 0) from public.purchases where created_at >= now() - interval '1 day')
+                            + (select coalesce(sum(amount), 0) from public.supplier_payments where created_at >= now() - interval '1 day')
+                            + (select coalesce(sum(amount), 0) from public.expenses where spent_on >= (now() - interval '1 day')::date and spent_on < (now() + interval '1 day')::date)
+                            + (select coalesce(sum(paid), 0) from public.invoices where status = 'returned' and returned_at >= now() - interval '1 day') out_ok
+from public.pnl_report(now() - interval '1 day', now() + interval '1 day') r;
+reset role;

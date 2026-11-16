@@ -1,0 +1,144 @@
+// The System tab for the owner: the windows (اليوم، المبيعات، الأرباح والخسائر، الرصيد الكلي), swiped or tapped, with the right numbers;
+// and the Face ID lock (Chrome's virtual platform authenticator stands in for Face ID). Same set-up as run_controls.js.
+const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
+const fs = require('fs'), path = require('path');
+fs.mkdirSync(path.join(__dirname, 'shots'), { recursive: true });
+const ROOT = path.resolve(__dirname, '../..'), SITE = process.env.SITE || ROOT, ORIGIN = 'https://crossky.test/';
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.jpg': 'image/jpeg' };
+const ADS = JSON.parse(fs.readFileSync(path.join(ROOT, 'branding/crossky/ads.json'), 'utf8')).map(a => Object.fromEntries(Object.entries(a).filter(([k]) => !k.startsWith('_'))));
+const EXTRA = JSON.parse(fs.readFileSync(path.join(ROOT, 'branding/crossky/demo.json'), 'utf8'));
+const CONFIG = `window.SPARAT_CONFIG={mode:'company',appName:'CROSSKY',demo:true,demoEmail:'owner@crossky.ly',defaultCountry:'LY',noServiceWorker:true,skin:'royal',siteUrl:'https://crossky.test/',demoAds:${JSON.stringify(ADS)},demoExtra:${JSON.stringify(EXTRA)}};`;
+const errors = []; let step = 0;
+const log = s => console.log(`${++step}. ${s}`);
+(async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--no-sandbox'] });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'ar-LY', serviceWorkers: 'block' });
+  await ctx.route('**/*', async route => {
+    const u = new URL(route.request().url());
+    if (u.origin + '/' !== ORIGIN) return route.abort();
+    const p = u.pathname === '/' ? '/index.html' : decodeURIComponent(u.pathname);
+    if (p === '/config.js' && !process.env.SITE) return route.fulfill({ contentType: 'text/javascript', body: CONFIG });
+    const f = path.join(SITE, p);
+    return fs.existsSync(f) ? route.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }) : route.fulfill({ status: 404, body: '' });
+  });
+  const page = await ctx.newPage();
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+  page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+  page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource|net::ERR|NotAllowedError/.test(m.text())) errors.push('console: ' + m.text()); });
+  const shot = n => page.screenshot({ path: path.join(__dirname, 'shots', 'sys-' + n + '.png') });
+  const see = (sel, ms) => page.locator(sel).first().waitFor({ state: 'visible', timeout: ms || 6000 });
+  const text = async sel => (await page.locator(sel).first().innerText()).trim();
+  const must = (c, m) => { if (!c) throw new Error('assert: ' + m); };
+  const go = async h => { await page.evaluate(x => { location.hash = x; }, h); await page.waitForTimeout(450); };
+  const db = (f, a) => page.evaluate(f, a);
+  const digits = s => String(s).replace(/[^\d−-]/g, '').replace('−', '-');
+  const report = per => db(async k => { const [f, to] = window.SP.bk.span(k); const r = await window.SP.sb.rpc('pnl_report', { p_from: f.toISOString(), p_to: to.toISOString(), p_branch: null, p_tz: 'Africa/Tripoli' }); return r.data; }, per);
+  const sales = per => db(async k => { const [f, to] = window.SP.bk.span(k); const r = await window.SP.sb.rpc('sales_report', { p_from: f.toISOString(), p_to: to.toISOString(), p_branch: null, p_tz: window.SP.bk.tz() }); return r.data; }, per);
+  const dayOf = (per, i) => db(([k, j]) => { const d = window.SP.bk.span(k)[0]; const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + j); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }, [per, i]);
+  try {
+    await page.goto(ORIGIN); await page.waitForTimeout(1200);
+    await go('login'); await see('#ap'); await page.click('[data-by="email"]'); await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago'); await page.waitForURL(/#mine/);
+    // a month with something in it: a sale on credit, an expense
+    await db(async () => { const p = window.__mockdb.products.find(x => x.price != null && x.status === 'active' && x.cost != null && (x.qty == null || x.qty > 3));
+      await window.SP.sb.rpc('create_invoice', { p: { payment: 'credit', customer_name: 'ورشة الشهر', customer_phone: '0915556677', items: [{ id: p.id, qty: 2 }] } }); });
+
+    await go('system'); await see('.sysp');
+    must(await page.locator('.sysp-tabs [data-sp]').count() === 4 && /اليوم/.test(await text('[data-sp="0"]')) && /المبيعات/.test(await text('[data-sp="1"]')) && /الأرباح والخسائر/.test(await text('[data-sp="2"]')) && /الرصيد الكلي/.test(await text('[data-sp="3"]')), 'four windows');
+    await see('#sp0 .today .astat');
+    await shot('01-today');
+
+    // ----- «المبيعات» -----
+    await page.click('[data-sp="1"]'); await page.waitForTimeout(700); await see('#sp1 .pl-net b');
+    const wk = await sales('7');
+    must(digits(await text('#sp1 .pl-net b')) === String(Math.round(wk.total)) && (await text('#sp1 .pl-net')).includes(wk.count + ' فاتورة'), 'the week\'s sales ' + wk.total + ' / ' + await text('#sp1 .pl-net'));
+    must(await page.locator('#sp1 .sc-col').count() === 7 && await page.locator('#sp1 .sc-col').last().evaluate(e => e.classList.contains('cur') && e.classList.contains('sel')), 'seven columns, today the darker one and read out');
+    const byDay = Object.fromEntries((wk.by_day || []).map(x => [String(x.day).slice(0, 10), +x.total]));
+    must(digits(await text('#sp1 .sc-read b')) === String(Math.round(byDay[await dayOf('7', 6)] || 0)), 'today read out');
+    await shot('06-sales-week');
+    await page.locator('#sp1 .sc-col').first().click(); await page.waitForTimeout(150);
+    must(digits(await text('#sp1 .sc-read b')) === String(Math.round(byDay[await dayOf('7', 0)] || 0)) && await page.locator('#sp1 .sc-col').first().evaluate(e => e.classList.contains('sel')), 'tapping the first day reads it');
+    await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(150);
+    const lab1 = await page.locator('#sp1 .sc-col').nth(1).getAttribute('aria-label');
+    must(lab1.startsWith(await text('#sp1 .sc-read small')) && await page.evaluate(() => document.activeElement && document.activeElement.dataset.i) === '1', 'the arrow key moves to the next day (right to left)');
+    must(await db(() => { document.querySelector('#sp1 [data-per="month"]').click(); return document.querySelector('#sp1 .pl-body').classList.contains('stale') && !!document.querySelector('#sp1 .sc'); }), 'another period keeps the old numbers, faded');
+    await page.waitForTimeout(700);
+    const mo = await sales('month');
+    must(digits(await text('#sp1 .pl-net b')) === String(Math.round(mo.total)) && await page.locator('#sp1 .sc-col').count() === new Date().getDate(), 'the month: a column a day');
+    must((await text('#sp1')).includes('أحسن يوم كان') === ((mo.by_day || []).filter(x => +x.total > 0).length > 1), 'the best day');
+    const top = (mo.top || [])[0];
+    must(!top || (await text('#sp1')).includes(top.title), 'the best seller: ' + (top && top.title));
+    const pays = Object.values(mo.by_payment || {}).filter(v => +v > 0).length;
+    must(await page.locator('#sp1 .rbar').count() === pays && (await text('#sp1')).includes('كيف تخلّصت'), 'how it was paid: ' + pays);
+    await shot('07-sales-month');
+    await page.click('#sp1 [data-per="year"]'); await page.waitForTimeout(700);
+    must(await page.locator('#sp1 .sc-col').count() === new Date().getMonth() + 1 && /شهر بشهر/.test(await text('#sp1 .sc-tbl summary')), 'the year: a column a month');
+    await page.click('#sp1 .sc-tbl summary'); await page.waitForTimeout(200);
+    must(await page.locator('#sp1 .sc-tbl tr').count() === new Date().getMonth() + 1, 'the numbers as a table');
+    await page.click('#sp1 [data-per="today"]'); await page.waitForTimeout(700);
+    const td = await sales('today');
+    must(digits(await text('#sp1 .pl-net b')) === String(Math.round(td.total)) && await page.locator('#sp1 .sc').count() === 0, 'today: no chart');
+    log('«المبيعات»: the week ' + wk.total + ' in ' + wk.count + ' invoices, a column a day (tap or arrow keys to read a day); the month, with the best day, how it was paid and the best seller; the year month by month, also as a table; today');
+
+    await page.click('[data-sp="2"]'); await page.waitForTimeout(700); await see('#sp2 .pl-net b');
+    const m = await report('month');
+    must(digits(await text('#sp2 .pl-net b')) === String(Math.round(Math.abs(m.net))) && /صافي/.test(await text('#sp2 .pl-net small')), 'the month\'s net: ' + m.net + ' / ' + await text('#sp2 .pl-net b'));
+    must((await text('#sp2 .pl-body')).includes('تكلفة البضاعة') && (await text('#sp2 .pl-body')).includes('المصروفات'), 'sales, cost, gross, expenses');
+    await shot('02-pnl');
+    await page.click('#sp2 [data-per="year"]'); await page.waitForTimeout(800);
+    const y = await report('year');
+    must(digits(await text('#sp2 .pl-net b')) === String(Math.round(Math.abs(y.net))), 'the year');
+    log('«الأرباح والخسائر»: the month\'s net ' + m.net + ' from sales ' + m.sales + ', cost, gross, expenses; the year too');
+    await page.click('[data-sp="3"]'); await page.waitForTimeout(700); await see('#sp3 .pl-net b');
+    const s = await db(async () => (await window.SP.sb.rpc('stock_report', { p_limit: 1 })).data.summary);
+    const total = (+s.value_cost || 0) + (+m.receivable) - (+m.payable);
+    must(digits(await text('#sp3 .pl-net b')) === String(Math.round(Math.abs(total))), 'the total balance ' + total + ' / ' + await text('#sp3 .pl-net b'));
+    must((await text('#sp3')).includes('ديون لينا') && (await text('#sp3')).includes('ديون علينا') && (await text('#sp3')).includes('دخلت'), 'stock, owed, owing, money in and out');
+    await shot('03-balance');
+    log('«الرصيد الكلي»: stock at cost ' + s.value_cost + ' + owed to us ' + m.receivable + ' − we owe ' + m.payable + ' = ' + total + ', and the month\'s money in and out');
+    await db(() => { const tr = document.querySelector('#spt'); tr.scrollTo({ left: 0, behavior: 'auto' }); }); await page.waitForTimeout(600);
+    must(await page.locator('[data-sp="0"].on').count() === 1, 'swiping back marks «اليوم»');
+    await go('vin'); await go('system'); await see('.sysp'); await page.waitForTimeout(500);
+    must(await page.locator('[data-sp="0"].on').count() === 1, 'the window seen last opens again');
+    log('swiping moves the tabs; the last window opens again');
+
+    // ----- the Face ID lock -----
+    await see('#lkc .lock-row', 8000);
+    await page.click('#lkt'); await see('#lkreg', 8000);
+    await page.click('#lkreg'); await page.waitForTimeout(900);
+    must(/تتحل بـ/.test(await text('#lkc')) && await db(() => localStorage.getItem('sp_sys_lock') !== null), 'Face ID set up on this phone and the lock on');
+    await shot('04-lock-card');
+    log('the lock: «شغّل القفل» asks for Face ID; none on this phone yet, so «فعّل Face ID» sets it up and turns the lock on');
+    await page.reload(); await page.waitForTimeout(1200); await go('system'); await see('.lock-card');
+    must(await page.locator('.sysp').count() === 0 && /مقفولة/.test(await text('.lock-card h2')), 'after reopening the app the system is locked');
+    await go('invoices'); await see('.lock-card');
+    must(await page.locator('.lock-card').count() === 1, 'every page of the system');
+    await go(''); await page.waitForTimeout(500);
+    must(await page.locator('.lock-card').count() === 0, 'not the store');
+    await go('system'); await see('#lkgo');
+    await shot('05-locked');
+    await page.click('#lkgo'); await see('.sysp', 8000);
+    log('reopened: the system and its pages ask for Face ID (the store does not); Face ID opens it');
+    await db(() => { const real = Date.now; Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange'));
+      Date.now = () => real() + 61000; Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); window.__realNow = real; });
+    await see('.lock-card');
+    await db(() => { Date.now = window.__realNow; });
+    log('away more than a minute: locked again');
+    await page.click('#lkpw'); await see('#lpi'); await page.fill('#lpi', 'nope00'); await page.click('#lpf .btn-signal'); await page.waitForTimeout(500);
+    must(/غلط/.test(await text('#lpe')), 'a wrong password');
+    await page.fill('#lpi', '123456'); await page.click('#lpf .btn-signal'); await see('.sysp', 8000);
+    log('or the password (a wrong one is refused)');
+    await see('#lkt'); await page.click('#lkt'); await page.waitForTimeout(400);
+    must(await db(() => localStorage.getItem('sp_sys_lock')) === null, 'turned off');
+    await page.reload(); await page.waitForTimeout(1200); await go('system'); await see('.sysp');
+    log('turned off: the system opens straight away');
+    if (errors.length) throw new Error('page errors:\n' + errors.join('\n'));
+    console.log('\nALL ' + step + ' SYSTEM CHECKS PASSED');
+  } catch (e) {
+    console.error('FAILED at step ' + (step + 1) + ': ' + e.message);
+    if (errors.length) console.error(errors.join('\n'));
+    await shot('zz-fail').catch(() => {});
+    process.exitCode = 1;
+  } finally { await browser.close(); }
+})();

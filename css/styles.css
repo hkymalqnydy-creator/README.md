@@ -1391,3 +1391,83 @@ body.ai-open{overflow:hidden}
 .input.otp{font-size:24px;letter-spacing:.42em;text-align:center;font-weight:800}
 .rs-timer{margin:-4px 2px 10px;font-weight:800;color:var(--royal,var(--ink));font-variant-numeric:tabular-nums}
 .rs-timer.gone{color:var(--bad)}
+/* the System tab's windows: today, profit and loss, the total balance; the Face ID lock (js/sysview.js) */
+#atoday,.sysp,.sysp-track{min-width:0;max-width:100%}
+.sysp{margin-bottom:14px}
+.sysp-tabs{margin:0 0 10px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.sysp-tabs::-webkit-scrollbar{display:none}
+.sysp-tabs .chip{flex:none}
+.sysp-track{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;align-items:flex-start;transition:height .25s ease}
+@media (prefers-reduced-motion:reduce){.sysp-track{transition:none}}
+.sysp-pane .today>h2.lbl:first-child{display:none}
+.sysp-track::-webkit-scrollbar{display:none}
+.sysp-pane{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always}
+.sysp-pane>.mcard,.sysp-pane>section{margin:0}
+.sysp-per{margin:0 0 12px}
+.sysp-card .pl-net{display:grid;gap:2px;margin:0 0 8px;padding:0;border-radius:0;background:none}
+.sysp-card .pl-net small{color:var(--muted);font-weight:700;font-size:13px}
+.sysp-card .pl-net b{font-family:var(--font-display);font-size:34px;line-height:1.1;color:var(--good)}
+.sysp-card .pl-net.down b{color:var(--bad)}
+.sysp-card .pl-net.flat b{color:var(--ink)}
+.sysp-card .pl-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
+.sysp-card .pl-row>span{flex:1;min-width:0;display:grid;gap:2px;overflow-wrap:anywhere}
+.sysp-card .pl-row small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.sysp-card .pl-row b{white-space:nowrap;font-size:16px}
+.sysp-card .pl-row.sum span{font-weight:800}
+.sysp-card .pl-row.sum b{font-size:19px}
+.sysp-card .pl-row>.ic{width:16px;height:16px;flex:none;color:var(--muted)}
+.sysp-card a.pl-row:active{opacity:.7}
+.pl-body{transition:opacity .15s}
+.pl-body.stale{opacity:.45;pointer-events:none}
+.sp-h{margin:18px 0 2px}
+.sp-acts{flex-wrap:wrap}
+.sp-best{margin-top:2px}
+.sp-none{margin:4px 0 10px}
+/* «المبيعات» day by day: a column a day, the latest one in the accent, the rest a lighter step of it; y labels in a gutter at the end */
+.sc{margin:4px 0 2px}
+.sc-read{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;min-height:26px;margin:0 0 8px}
+.sc-read b{font-size:17px;color:var(--ink)}
+.sc-read small{color:var(--muted);font-size:12.5px}
+.sc-plot{position:relative;height:128px}
+.sc-grid{position:absolute;top:0;bottom:0;inset-inline-start:0;inset-inline-end:44px;pointer-events:none}
+.sc-grid span{position:absolute;inset-inline:0;height:0;border-top:1px solid var(--line)}
+.sc-grid em{position:absolute;inset-inline-start:calc(100% + 6px);top:-8px;font-style:normal;font-size:11px;line-height:16px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.sc-cols{position:absolute;top:0;bottom:0;inset-inline-start:0;inset-inline-end:44px;display:flex;align-items:stretch;border-bottom:1px solid var(--line);touch-action:pan-y}
+.sc-col{position:relative;flex:1 1 0;min-width:0;display:flex;align-items:flex-end;justify-content:center;padding:0 1px;margin:0;border:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;font:inherit;color:inherit}
+.sc-col i{display:block;width:100%;max-width:24px;border-radius:4px 4px 0 0;background:var(--signal);background:color-mix(in srgb,var(--signal) 66%,var(--surface))}
+.sc-col.cur i{background:var(--signal)}
+.sc-col.sel i{box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--ink)}
+.sc-col.sel i[style="height:0%"]{box-shadow:none}
+.sc-col.sel::after{content:"";position:absolute;bottom:-8px;inset-inline-start:50%;width:5px;height:5px;margin-inline-start:-2.5px;border-radius:50%;background:var(--ink)}
+.sc-col:focus-visible{outline:2px solid var(--signal);outline-offset:-1px;border-radius:6px}
+.sc-x{display:flex;margin-top:10px;padding-inline-end:44px}
+.sc-x span{flex:1 1 0;min-width:0;text-align:center;font-size:11px;line-height:14px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.sc-tbl{margin-top:6px}
+.sc-tbl summary{cursor:pointer;color:var(--signal);font-weight:700;font-size:13.5px;padding:6px 0;width:max-content}
+.sc-tbl table{width:100%;border-collapse:collapse;font-size:13.5px}
+.sc-tbl td{padding:7px 0;border-bottom:1px solid var(--line)}
+.sc-tbl td.num{text-align:end;font-weight:700;white-space:nowrap;padding-inline-start:12px}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .sc-col i{background:color-mix(in srgb,var(--signal) 50%,var(--surface))}
+  :root:not([data-theme="light"]) .sc-col.cur i{background:color-mix(in srgb,var(--signal) 85%,var(--surface))}
+}
+:root[data-theme="dark"] .sc-col i{background:color-mix(in srgb,var(--signal) 50%,var(--surface))}
+:root[data-theme="dark"] .sc-col.cur i{background:color-mix(in srgb,var(--signal) 85%,var(--surface))}
+@media (forced-colors:active){.sc-col i{background:CanvasText}.sc-col.cur i{background:Highlight}}
+.pl-sep{height:10px}
+.up-t{color:var(--good)}
+.down-t{color:var(--bad)}
+.lockv{display:grid;place-items:center;min-height:62vh}
+.lock-card{text-align:center;display:grid;justify-items:center;gap:8px;width:min(100%,380px);padding:20px 4px}
+.lock-card h2{font-family:var(--font-display);font-size:24px;margin-top:6px}
+.lock-card p{color:var(--muted)}
+.lock-card .form-actions{flex-direction:column;align-items:stretch;width:100%;margin-top:10px}
+.lock-ic{width:84px;height:84px;border-radius:26px;display:grid;place-items:center;background:var(--royal,var(--signal));color:#fff;box-shadow:0 14px 30px -14px rgba(20,40,140,.6)}
+.lock-ic .ic{width:46px;height:46px}
+.lock-ic.sm{width:44px;height:44px;border-radius:14px;flex:none;box-shadow:none}
+.lock-ic.sm .ic{width:24px;height:24px}
+.lock-row{display:flex;align-items:center;gap:12px}
+.lr-main{flex:1;min-width:0;display:grid;gap:2px}
+.lr-main small{color:var(--muted);font-size:13px}
+.lr-acts{display:grid;gap:6px;justify-items:end}
+.pur-search{margin:0 0 12px}

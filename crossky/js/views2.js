@@ -71,6 +71,7 @@
   /* the usual companies for Korean and Japanese parts, offered while typing the manufacturer (anything else can be typed) */
   const MAKERS = ['موبيس', 'دنسو', 'ماندو', 'سانغ شين', 'إن جي كي', 'كيه واي بي', 'إكسيدي', 'كويتو', 'أيسين', 'بوش', 'فاليو', 'فارتا',
     'تويوتا أصلي', 'نيسان أصلي', 'هيونداي أصلي', 'كيا أصلي', 'ميتسوبيشي أصلي', 'هوندا أصلي', 'مازدا أصلي'];
+  SP.MAKERS = MAKERS; // also offered on the receiving screen (js/scan.js)
 
   /* ---------- sign in / sign up ---------- */
   SP.route(/^(login|signup)$/, (m, n) => {

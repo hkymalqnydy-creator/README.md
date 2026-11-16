@@ -24,7 +24,7 @@
     scanBtn: ["مسح بالكاميرا", "Scan with the camera"], barcodeL: ["الباركود", "Barcode"],
     barcodeHint: ["امسحه بالكاميرا أو بجهاز الباركود، باش تلقى القطعة بسرعة في البيع والاستلام.", "Scan it with the camera or a barcode scanner to find the part fast when selling and receiving."],
     rcvT: ["استلام بضاعة", "Receive stock"], rcvPhoto: ["صوّر فاتورة المورّد", "Photograph the supplier invoice"], rcvPhotoSub: ["يقرا الأصناف والكميات والأسعار", "Reads items, quantities and prices"],
-    rcvScan: ["امسح باركود القطع", "Scan part barcodes"], rcvScanSub: ["قطعة قطعة بالكاميرا", "One by one with the camera"], rcvSearchPh: ["أضف قطعة بالاسم أو الكود أو الباركود…", "Add a part by name, code or barcode…"],
+    rcvScan: ["امسح باركود القطع", "Scan part barcodes"], rcvScanSub: ["قطعة قطعة بالكاميرا", "One by one with the camera"], rcvSearchPh: ["أضف قطعة: اسم، رقم صنف، باركود أو شركة…", "Add a part: name, item code, barcode or maker…"],
     rcvSupplier: ["المورّد", "Supplier"], rcvNote: ["ملاحظة", "Note"],
     rcvPayT: ["الدفع للمورّد", "Paying the supplier"], rcvPaidFull: ["دفعت كاملة", "Paid in full"], rcvCredit: ["آجل (دين للمورّد)", "On credit"], rcvPart: ["دفعت جزء", "Part paid"],
     rcvPaidNow: ["المدفوع توا", "Paid now"], purOwed: ["باقي للمورّد {m}", "{m} still owed"], rcvNeedSupplier: ["اكتب اسم المورّد باش يتسجّل الدين عليه.", "Enter the supplier's name so the debt is recorded."], rcvReading: ["جاري قراءة الفاتورة…", "Reading the invoice…"],
@@ -56,7 +56,8 @@
     purUndo: ["رجّع الاستلام", "Take back"], rcvNewShort: ["جديدة", "New"], rcvToPosSkip: ["{n} صنف مش في الكتالوج ما انضافش للبيع", "{n} lines not in the catalog were left out of the sale"],
     rcvClear: ["امسح القائمة", "Clear the list"], rcvClearQ: ["تمسح كل الأصناف من القائمة؟", "Remove all lines from the list?"], rcvFromPhoto: ["من الصورة", "From the photo"],
     rcvNeedLines: ["ما فيش أصناف للإدخال", "There are no lines to save"], rcvMany: ["الحد 300 صنف في الاستلام الواحد", "A receipt can have up to 300 lines"],
-    purT: ["سجل الاستلام", "Receiving history"], purEmpty: ["ما فيش استلام بضاعة بعد.", "No stock has been received yet."], purNo: ["استلام {n}", "Receipt {n}"],
+    purT: ["سجل الاستلام", "Receiving history"], purEmpty: ["ما فيش استلام بضاعة بعد.", "No stock has been received yet."],
+    purSearchPh: ["المورّد، اسم القطعة، رقم الصنف أو الشركة…", "Supplier, part name, item code or maker…"], purNoHit: ["ما فيش استلام فيه «{q}».", "No receipt has «{q}»."], purNo: ["استلام {n}", "Receipt {n}"],
     perm_purchases: ["استلام البضاعة وإدخال فواتير الموردين", "Receive stock and enter supplier invoices"]
   });
 
@@ -350,7 +351,7 @@
   const saveR = v => { try { sessionStorage.setItem(RCV, JSON.stringify(v)); } catch (e) { /* private mode */ } };
   const lid = () => Math.random().toString(36).slice(2, 10);
   const money = (v, cur) => SP.priceText(Number(v || 0), cur || SP.currencyOf(S.country));
-  const matchOf = p => ({ id: p.id, title: p.title, qty: p.qty, sku: p.sku || '', part_no: p.part_no || '', barcode: p.barcode || '', price: p.price, cost: p.cost, cur: p.shop && p.shop.currency });
+  const matchOf = p => ({ id: p.id, title: p.title, qty: p.qty, sku: p.sku || '', part_no: p.part_no || '', barcode: p.barcode || '', price: p.price, cost: p.cost, cur: p.shop && p.shop.currency, mm: SP.makerModel(p) });
   /* the assistant's «edit in Receive»: an invoice it read, opened in this page to change before entering (lines: {code, barcode, title, qty, cost, p}) */
   SP.rcvLoad = (lines, o) => {
     const st = loadR();
@@ -457,7 +458,7 @@
         const k = key(q), exact = r.items.filter(p => (p.sku && key(p.sku) === k) || (p.barcode && key(p.barcode) === k) || (p.part_no && key(p.part_no) === k));
         if (exact.length === 1) { addPart(exact[0]); $('#rq').value = ''; $('#rres').innerHTML = ''; return; }
         const asNew = k.length >= 4 && !/\s/.test(q) ? `<button type="button" class="pres-row" data-new="1"><span><b>${esc(t('rcvAsNew'))}</b><small class="mono">${esc(q)}</small></span>${I('plus')}</button>` : '';
-        $('#rres').innerHTML = r.items.map(p => `<button type="button" class="pres-row" data-id="${p.id}"><span><b>${esc(p.title)}</b><small>${esc([p.sku || p.part_no, p.barcode, p.qty != null ? t('posInStock', { n: p.qty }) : ''].filter(Boolean).join(' · '))}</small></span>${I('plus')}</button>`).join('') + asNew
+        $('#rres').innerHTML = r.items.map(p => `<button type="button" class="pres-row" data-id="${p.id}"><span><b>${esc(p.title)}</b><small>${esc([p.sku || p.part_no, SP.makerModel(p), p.qty != null ? t('posInStock', { n: p.qty }) : ''].filter(Boolean).join(' · '))}</small></span>${I('plus')}</button>`).join('') + asNew
           || `<p class="muted-p">${esc(t('noResT'))}</p>`;
         $('#rres').onclick = e => {
           const b = e.target.closest('[data-id],[data-new]');
@@ -545,7 +546,7 @@
       $('#rhead').textContent = st.lines.length ? t('rcvLines', { n: st.lines.length }) : '';
       $('#rlines').innerHTML = st.lines.length ? st.lines.map(l => {
         const state = l.state === 'checking' ? `<span class="rl-state">${esc(t('rcvChecking'))}</span>`
-          : l.match ? `<span class="rl-state ok">${I('check')}<span><b>${esc(l.match.title)}</b><small>${esc([l.match.sku || l.match.part_no, t('rcvMatched', { n: l.match.qty == null ? '—' : l.match.qty })].filter(Boolean).join(' · '))}</small></span></span>`
+          : l.match ? `<span class="rl-state ok">${I('check')}<span><b>${esc(l.match.title)}</b><small>${esc([l.match.sku || l.match.part_no, l.match.mm, t('rcvMatched', { n: l.match.qty == null ? '—' : l.match.qty })].filter(Boolean).join(' · '))}</small></span></span>`
           : `<span class="rl-state new">${I('plus')}<span><b>${esc(t('rcvNew'))}</b>${l.src === 'photo' && l.title ? `<small>${esc(l.title)}</small>` : ''}</span></span>`;
         return `<div class="rline ${l.match ? 'ok' : l.state === 'checking' ? '' : 'new'}" data-k="${l.k}">
           <div class="rl-head">${state}<button type="button" class="iconbtn sm" data-a="pick" aria-label="${esc(t('rcvChange'))}">${I('edit')}</button><button type="button" class="iconbtn sm" data-a="del" aria-label="${esc(t('rcvDel'))}">${I('trash')}</button></div>
@@ -554,9 +555,10 @@
             <label>${esc(t('rcvCost'))}<input class="input num" dir="ltr" inputmode="decimal" data-f="cost" maxlength="12" value="${l.cost == null ? '' : esc(l.cost)}"></label></div>
           ${!l.match && l.state !== 'checking' ? `<div class="rl-new"><label class="wide"><span>${esc(t('rcvName'))} <span class="req">*</span></span><input class="input" data-f="title" maxlength="120" value="${esc(l.title)}"></label>
             <label>${esc(t('category'))}<select class="input" data-f="cat">${D.CATS.map(c => opt(c.id, SP.catName(c.id), l.cat || 'other')).join('')}</select></label>
+            <label>${esc(t('makerL'))}<input class="input" data-f="maker" maxlength="60" list="rmkl" autocomplete="off" placeholder="${esc(t('makerPh'))}" value="${esc(l.maker || '')}"></label>
             ${canPrice ? `<label>${esc(t('rcvSell'))}<input class="input num" dir="ltr" inputmode="decimal" data-f="price" maxlength="12" value="${l.price == null ? '' : esc(l.price)}"></label>` : ''}</div>` : ''}
         </div>`;
-      }).join('') : `<p class="muted-p pos-empty">${esc(t('rcvEmpty'))}</p>`;
+      }).join('') + (st.lines.some(l => !l.match) ? `<datalist id="rmkl">${(SP.MAKERS || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist>` : '') : `<p class="muted-p pos-empty">${esc(t('rcvEmpty'))}</p>`;
       $('#rsum').innerHTML = st.lines.length ? `<div class="mcard psum"><div class="prow"><span>${esc(t('rcvUnits'))}</span><b class="num">${esc(SP.fmtNum(units))}</b></div>
           <div class="prow big"><span>${esc(t('rcvTotal'))}</span><b class="num" id="rtot">${esc(money(total, cur))}</b></div>
           <div class="field"><label for="rnote">${esc(t('rcvNote'))}</label><input id="rnote" class="input" maxlength="500" value="${esc(st.note || '')}"></div>
@@ -641,7 +643,7 @@
         const r = await chk(await sb().rpc('receive_stock', { p: {
           branch: st.branch || null, supplier: (st.supplier || '').trim(), note: (st.note || '').trim(), ...(paid != null ? { paid } : {}), source, auto: !!o.auto,
           items: st.lines.map(l => l.match ? { product_id: l.match.id, qty: Number(l.qty), cost: l.cost }
-            : { part_no: l.code || '', barcode: l.barcode || '', title: l.title.trim(), qty: Number(l.qty), cost: l.cost, price: canPrice ? l.price : null, cat: l.cat || 'other' })
+            : { part_no: l.code || '', barcode: l.barcode || '', title: l.title.trim(), qty: Number(l.qty), cost: l.cost, price: canPrice ? l.price : null, cat: l.cat || 'other', maker: String(l.maker || '').trim() })
         } }));
         sessionStorage.removeItem(RCV);
         if (o.auto) return entered(r, o.url);
@@ -690,12 +692,15 @@
   const when = v => { try { return new Intl.DateTimeFormat(SP.LANG + '-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(v)); } catch (e) { return String(v).slice(0, 16).replace('T', ' '); } };
   SP.route(/^purchases$/, async (m, n) => {
     if (gate(n) || !guard(['purchases', 'reports'], t('purT'))) return;
-    shell(bar(t('purT'), SP.can('purchases') ? `<a class="iconbtn" href="#receive" aria-label="${esc(t('rcvT'))}">${I('plus')}</a>` : '') + `<main class="wrap"><div id="pl"><div class="sk sk-row"></div></div>
+    const q = S.purQ || '';
+    shell(bar(t('purT'), SP.can('purchases') ? `<a class="iconbtn" href="#receive" aria-label="${esc(t('rcvT'))}">${I('plus')}</a>` : '') + `<main class="wrap">
+      <form class="searchbox flat pur-search" id="puf" role="search">${I('search')}<input type="search" value="${esc(q)}" placeholder="${esc(t('purSearchPh'))}" aria-label="${esc(t('search'))}" enterkeyhint="search"></form>
+      <div id="pl"><div class="sk sk-row"></div></div>
       <div class="center"><button type="button" class="btn btn-ghost more-btn" id="more" hidden></button></div></main>`);
     const cur = SP.currencyOf(S.country);
     const row = v => `<details class="pur"><summary class="arow"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${esc(v.supplier || t('purNo', { n: v.no }))}${v.total != null && v.paid != null && +v.paid < +v.total ? ` <span class="pill demo">${esc(t('purOwed', { m: money(v.total - v.paid, cur) }))}</span>` : ''}</b>
         <small>${[when(v.created_at), v.staff_name, v.branch_name, SP.count(+v.items_count || 0, 'parts')].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small></span>${v.total != null ? `<b class="num">${esc(money(v.total, cur))}</b>` : ''}</summary>
-      <table class="inv-items pur-items"><tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.code ? `<small class="mono">${esc(it.code)}</small>` : ''}</td><td class="num">× ${esc(it.qty)}</td>${it.cost != null ? `<td class="num">${esc(money(it.cost, cur))}</td>` : ''}</tr>`).join('')}</tbody></table>
+      <table class="inv-items pur-items"><tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.code || SP.makerModel(it) ? `<small>${[it.code ? `<bdi class="mono">${esc(it.code)}</bdi>` : '', SP.makerModel(it) ? `<bdi>${esc(SP.makerModel(it))}</bdi>` : ''].filter(Boolean).join(' · ')}</small>` : ''}</td><td class="num">× ${esc(it.qty)}</td>${it.cost != null ? `<td class="num">${esc(money(it.cost, cur))}</td>` : ''}</tr>`).join('')}</tbody></table>
       ${canUndo(v) ? `<div class="form-actions"><button type="button" class="btn btn-ghost sm" data-undo="${esc(v.id)}" data-no="${esc(v.no)}">${I('undo')} ${esc(t('purUndo'))}</button></div>` : ''}</details>`;
     /* taking a receipt back: the owner any receipt, staff their own on the same day (the database checks again) */
     const canUndo = v => SP.can('purchases') && (S.admin || (S.user && v.staff_id === S.user.id && Date.now() - Date.parse(v.created_at) < 864e5));
@@ -706,8 +711,12 @@
       try { await chk(await sb().rpc('undo_receipt', { p_id: b.dataset.undo })); SP.toast(t('rcvUndoneList', { n: b.dataset.no })); SP.render(); }
       catch (x) { b.classList.remove('busy'); SP.toast(undoErr(x), 5000); }
     });
-    await SP.pager(n, $('#pl'), $('#more'), async off => { const rows = chk(await sb().rpc('list_purchases', { p_limit: 30, p_offset: off })) || []; return { items: rows, total: rows.length ? +rows[0].total_count : 0 }; },
-      items => items.map(row).join(''), (r, first) => { if (first && !r.total) $('#pl').innerHTML = empty('box', t('purEmpty'), '', SP.can('purchases') ? `<a class="btn btn-signal" href="#receive">${I('plus')} ${esc(t('rcvT'))}</a>` : ''); });
+    // searched on the keyboard's search key, like the stock list; the field's ✕ shows them all again
+    const sf = $('#puf'), go = () => { const v = $('input', sf).value.trim(); if (v === (S.purQ || '')) return; S.purQ = v; SP.render(); };
+    sf.onsubmit = e => { e.preventDefault(); go(); };
+    $('input', sf).addEventListener('search', go);
+    await SP.pager(n, $('#pl'), $('#more'), async off => { const rows = chk(await sb().rpc('list_purchases', { p_limit: 30, p_offset: off, ...(q ? { p_q: q } : {}) })) || []; return { items: rows, total: rows.length ? +rows[0].total_count : 0 }; },
+      items => items.map(row).join(''), (r, first) => { if (first && !r.total) $('#pl').innerHTML = q ? `<p class="muted-p">${esc(t('purNoHit', { q }))}</p>` : empty('box', t('purEmpty'), '', SP.can('purchases') ? `<a class="btn btn-signal" href="#receive">${I('plus')} ${esc(t('rcvT'))}</a>` : ''); });
     SP.done(n);
   });
 })();

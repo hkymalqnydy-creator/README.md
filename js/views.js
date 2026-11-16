@@ -59,7 +59,8 @@
   const sf = o => `href="#search" data-sf="${esc(JSON.stringify(o))}"`;
 
   function gate(n) {
-    if (!S.err) return false;
+    /* the sales system behind Face ID, when the owner has turned the lock on (js/sysview.js) */
+    if (!S.err) return !!(SP.sysGate && SP.sysGate(n));
     shell(homeBar() + `<main class="wrap">${S.err === 'lib'
       ? empty('warn', t('loadFailT'), t('libFail'), `<button type="button" class="btn btn-ink" onclick="location.reload()">${esc(t('retry'))}</button>`)
       : empty('wrench', t('setupT'), t('setupB'))}</main>`);

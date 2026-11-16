@@ -966,6 +966,8 @@ alter table public.purchase_items add column if not exists prev_cost  numeric(12
 alter table public.purchase_items add column if not exists prev_price numeric(12,2);
 alter table public.purchase_items add column if not exists set_price  numeric(12,2);
 alter table public.purchase_items add column if not exists created    boolean not null default false;
+-- the part's manufacturer (الشركة المصنّعة) as it was when received, so a receipt reads and is found like an invoice
+alter table public.purchase_items add column if not exists maker      text not null default '' check (char_length(maker) <= 60);
 create index if not exists purchase_items_prod_idx on public.purchase_items (product_id);
 alter table public.purchases enable row level security;
 alter table public.purchase_items enable row level security;
@@ -981,7 +983,7 @@ declare
   v_me uuid := auth.uid(); v_staff public.staff; v_branch uuid; v_owner uuid; v_it jsonb; v_id uuid; v_qty integer;
   v_cost numeric; v_price numeric; v_pid uuid; v_total numeric := 0; n_new integer := 0; n_upd integer := 0; v_code text; v_title text; v_paid numeric;
   v_sku text; v_bar text; v_pn text; v_can_price boolean := public.has_perm('products');
-  v_pc numeric; v_pp numeric; v_made boolean; v_units integer := 0;
+  v_pc numeric; v_pp numeric; v_made boolean; v_units integer := 0; v_mk text; v_maker text;
 begin
   if v_me is null or not public.has_perm('purchases') then raise exception 'not authorized' using errcode = '42501'; end if;
   perform set_config('sparat.ctx', 'receive', true);
@@ -1008,6 +1010,7 @@ begin
     v_bar := nullif(left(btrim(coalesce(v_it->>'barcode', '')), 60), '');
     v_pn  := nullif(left(upper(btrim(coalesce(v_it->>'part_no', ''))), 60), '');
     v_code := coalesce(v_sku, v_bar, v_pn);
+    v_mk := nullif(left(btrim(coalesce(v_it->>'maker', '')), 60), '');
     -- the same part: any given code as item code first, then as barcode, then as part number (this branch first)
     if v_id is null and v_code is not null then
       select id into v_id from public.products p
@@ -1020,23 +1023,26 @@ begin
     v_made := false; v_pc := null; v_pp := null;
     if v_id is not null then
       select cost, price into v_pc, v_pp from public.products where id = v_id for update;
-      update public.products set qty = coalesce(qty, 0) + v_qty, cost = coalesce(v_cost, cost), price = coalesce(v_price, price), status = 'active'
-      where id = v_id returning title into v_title;
+      -- a manufacturer given on the line fills in a part that has none (and is found by it from then on); one already set stays
+      update public.products set qty = coalesce(qty, 0) + v_qty, cost = coalesce(v_cost, cost), price = coalesce(v_price, price), status = 'active',
+             maker = case when maker = '' and v_mk is not null then v_mk else maker end,
+             search_text = case when maker = '' and v_mk is not null then left(concat_ws(' ', search_text, public.norm_ar(v_mk)), 3000) else search_text end
+      where id = v_id returning title, maker into v_title, v_maker;
       if v_title is null then raise exception 'part not found' using errcode = 'P0001'; end if;
       n_upd := n_upd + 1;
     else
       v_title := left(btrim(coalesce(v_it->>'title', '')), 120);
       if char_length(v_title) < 2 then raise exception 'new item needs a name' using errcode = '22023'; end if;
-      insert into public.products (shop_id, owner_id, sku, barcode, title, cat, cond, price, cost, qty, make, model, part_no, status)
+      insert into public.products (shop_id, owner_id, sku, barcode, title, cat, cond, price, cost, qty, make, model, part_no, maker, status)
       values (v_branch, v_owner, v_sku, v_bar, v_title,
               case when v_it->>'cat' in ('engine','brakes','suspension','electrical','lights','body','oils','cooling','ac','transmission','tires','interior','other') then v_it->>'cat' else 'other' end,
               'original', v_price, v_cost, v_qty, coalesce(nullif(left(lower(btrim(coalesce(v_it->>'make', ''))), 20), ''), 'any'),
-              left(coalesce(v_it->>'model', ''), 60), coalesce(v_pn, v_sku, ''), 'active')
-      returning id into v_id;
+              left(coalesce(v_it->>'model', ''), 60), coalesce(v_pn, v_sku, ''), coalesce(v_mk, ''), 'active')
+      returning id, maker into v_id, v_maker;
       n_new := n_new + 1; v_made := true;
     end if;
-    insert into public.purchase_items (purchase_id, product_id, code, title, qty, cost, prev_cost, prev_price, set_price, created)
-    values (v_pid, v_id, v_code, v_title, v_qty, v_cost, v_pc, v_pp, v_price, v_made);
+    insert into public.purchase_items (purchase_id, product_id, code, title, qty, cost, prev_cost, prev_price, set_price, created, maker)
+    values (v_pid, v_id, v_code, v_title, v_qty, v_cost, v_pc, v_pp, v_price, v_made, coalesce(v_maker, ''));
     v_total := v_total + coalesce(v_cost, 0) * v_qty; v_units := v_units + v_qty;
   end loop;
   -- paid less than the total: the rest is owed to the supplier, so the receipt needs the supplier's name
@@ -1053,19 +1059,30 @@ begin
   return jsonb_build_object('id', v_pid, 'no', (select no from public.purchases where id = v_pid), 'new', n_new, 'updated', n_upd, 'total', v_total);
 end $$;
 
-create or replace function public.list_purchases(p_limit integer default 30, p_offset integer default 0)
+-- the receipts, newest first. p_q finds them like the sales: the receipt number, the supplier (the company bought from), or a part on it
+-- by its name, item code or barcode, manufacturer, or the car it fits (the part's search text)
+drop function if exists public.list_purchases(integer, integer);
+create or replace function public.list_purchases(p_limit integer default 30, p_offset integer default 0, p_q text default null)
 returns setof jsonb language sql stable security definer set search_path = public as $$
+  with q as (select nullif(btrim(coalesce(p_q, '')), '') as raw)
   select (to_jsonb(pu) - 'total' - 'paid') || jsonb_build_object('total', case when public.has_perm('costs') then pu.total end,
            'paid', case when public.has_perm('costs') then coalesce(pu.paid, pu.total) end, 'branch_name', s.name, 'total_count', count(*) over (),
-           'items', coalesce((select jsonb_agg(jsonb_build_object('title', it.title, 'code', it.code, 'qty', it.qty, 'cost', case when public.has_perm('costs') then it.cost end) order by it.id)
-                              from public.purchase_items it where it.purchase_id = pu.id), '[]'::jsonb))
-  from public.purchases pu left join public.shops s on s.id = pu.branch_id
+           'items', coalesce((select jsonb_agg(jsonb_build_object('title', it.title, 'code', it.code, 'qty', it.qty, 'maker', it.maker, 'make', pr.make, 'model', pr.model,
+                                                                   'cost', case when public.has_perm('costs') then it.cost end) order by it.id)
+                              from public.purchase_items it left join public.products pr on pr.id = it.product_id where it.purchase_id = pu.id), '[]'::jsonb))
+  from public.purchases pu left join public.shops s on s.id = pu.branch_id cross join q
   where auth.uid() is not null and (public.has_perm('purchases') or public.has_perm('reports'))
+    and (q.raw is null or pu.no::text = q.raw
+         or public.norm_ar(pu.supplier) like '%' || public.norm_ar(q.raw) || '%'
+         or exists (select 1 from public.purchase_items it left join public.products pr on pr.id = it.product_id
+                    where it.purchase_id = pu.id
+                      and (public.norm_ar(concat_ws(' ', it.title, it.code, it.maker)) like '%' || public.norm_ar(q.raw) || '%'
+                           or upper(regexp_replace(coalesce(it.code, ''), '[\s\-./]', '', 'g')) = upper(regexp_replace(q.raw, '[\s\-./]', '', 'g'))
+                           or pr.search_text like '%' || public.norm_ar(q.raw) || '%')))
   order by pu.created_at desc
   limit least(greatest(coalesce(p_limit, 30), 1), 100) offset greatest(coalesce(p_offset, 0), 0);
 $$;
-grant execute on function public.receive_stock(jsonb) to authenticated;
-grant execute on function public.list_purchases(integer, integer) to authenticated;
+grant execute on function public.list_purchases(integer, integer, text) to authenticated;
 grant select on public.purchases, public.purchase_items to authenticated;
 
 -- ---------- 11) الحسابات: المخزن، الزبائن (الشاري)، الموردين (البايع)، المصروفات، الأرباح والخسائر ----------
@@ -1390,6 +1407,10 @@ begin
        ex as (select * from public.expenses e where e.spent_on >= v_d0 and e.spent_on < v_d1 and (p_branch is null or e.branch_id = p_branch)),
        mv as (select * from public.stock_moves m where m.created_at >= p_from and m.created_at < p_to and (p_branch is null or m.branch_id = p_branch)),
        ret as (select * from public.invoices i where i.status = 'returned' and i.returned_at >= p_from and i.returned_at < p_to and (p_branch is null or i.branch_id = p_branch)),
+       -- the money that came in and went out in the period (the System tab's «الرصيد الكلي»)
+       pu as (select * from public.purchases p where p.created_at >= p_from and p.created_at < p_to and (p_branch is null or p.branch_id = p_branch)),
+       cpay as (select * from public.customer_payments c where c.created_at >= p_from and c.created_at < p_to),
+       spay as (select * from public.supplier_payments x where x.created_at >= p_from and x.created_at < p_to),
        cb as (select g.due - coalesce(p.paid, 0) as bal
               from (select public.cust_key(customer_name, customer_phone) k, sum(greatest(total - paid, 0)) as due from public.invoices where status = 'done' group by 1) g
               left join (select cust_key k, sum(amount) as paid from public.customer_payments group by 1) p on p.k = g.k where g.k is not null),
@@ -1411,7 +1432,11 @@ begin
                  from (select coalesce(nullif(inv.staff_name, ''), '—') as name, count(*) as n, sum(inv.total) as s, sum(coalesce(ci.c, 0)) as c
                        from inv left join ci on ci.invoice_id = inv.id group by 1) t), '[]'::jsonb),
     'receivable', coalesce((select sum(bal) from cb where bal > 0), 0),
-    'payable', coalesce((select sum(bal) from sb where bal > 0), 0)
+    'payable', coalesce((select sum(bal) from sb where bal > 0), 0),
+    -- in: what was paid at the sale and the customers' payments; out: purchases paid, payments to suppliers, expenses, refunds
+    'cash_in', coalesce((select sum(paid) from inv), 0) + coalesce((select sum(amount) from cpay), 0),
+    'cash_out', coalesce((select sum(coalesce(paid, total)) from pu), 0) + coalesce((select sum(amount) from spay), 0)
+                + coalesce((select sum(amount) from ex), 0) + coalesce((select sum(paid) from ret), 0)
   ) into r;
   return r || jsonb_build_object('gross', (r->>'sales')::numeric - (r->>'cogs')::numeric,
                                  'net', (r->>'sales')::numeric - (r->>'cogs')::numeric - (r->>'expenses')::numeric + (r->>'stock_adj')::numeric);

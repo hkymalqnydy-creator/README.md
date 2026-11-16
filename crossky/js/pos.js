@@ -105,8 +105,10 @@
     const own = S.admin ? [['admin', 'shield', 'admin'], ['admin-control', 'lock', 'ctlT'], ['admin-log', 'history', 'logT'], ['admin-prices', 'percent', 'bpT'], ['admin-ads', 'megaphone', 'adsT'], ['admin-ai', 'spark', 'aiSetT']]
       .filter(([h]) => h === 'admin' || SP.company).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('') : '';
     shell(head + `<main class="wrap mine sys">${S.admin && SP.company && SP.adminToday ? '<div id="atoday"></div>' : ''}${SP.posEntry()}
-      ${own ? `<section class="mcard"><h2 class="lbl">${esc(t('sysAdminT'))}</h2><div class="pos-grid">${own}</div></section>` : ''}</main>`);
-    if ($('#atoday')) SP.adminToday($('#atoday'), n, { compact: true });
+      ${own ? `<section class="mcard"><h2 class="lbl">${esc(t('sysAdminT'))}</h2><div class="pos-grid">${own}</div></section>` : ''}${SP.lockCard ? SP.lockCard() : ''}</main>`);
+    /* the owner's windows: today, profit and loss, the total balance (js/sysview.js) */
+    if ($('#atoday')) { if (SP.adminPanels) SP.adminPanels($('#atoday'), n); else SP.adminToday($('#atoday'), n, { compact: true }); }
+    if (SP.wireLockCard) SP.wireLockCard(n);
     SP.done(n);
   }, { tab: 'system' });
 
