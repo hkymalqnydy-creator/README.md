@@ -457,6 +457,7 @@
       try {
         const r = await api.search({ ...SP.searchArgs({ ...SP.FDEF, q }, { limit: 8 }), p_country: null, p_city: null, p_include_sold: true });
         if (!SP.alive(n) || !$('#rres')) return;
+        if ($('#rq').value.trim() !== q) return; // the box changed since: an old answer (a code + Enter would go on twice)
         const k = key(q), exact = r.items.filter(p => (p.sku && key(p.sku) === k) || (p.barcode && key(p.barcode) === k) || (p.part_no && key(p.part_no) === k));
         if (exact.length === 1) { addPart(exact[0]); $('#rq').value = ''; $('#rres').innerHTML = ''; return; }
         // not in the catalog: a new item, by its code (letters and digits, no spaces) or by its name

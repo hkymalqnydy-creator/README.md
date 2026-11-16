@@ -269,6 +269,9 @@
       try {
         const r = await api.search({ ...SP.searchArgs({ ...SP.FDEF, q }, { limit: 8 }), p_country: null, p_city: null, p_include_sold: true });
         if (!SP.alive(n) || !$('#pres')) return;
+        /* the box has changed since (the code went on the invoice from Enter, or more was typed): this answer is old. Without it a
+           scanner's code + Enter went on twice, once from Enter and once from the search that follows typing */
+        if ($('#pq').value.trim() !== q) return;
         /* a barcode scanner types the full code and Enter: an exact item code, barcode or part number goes straight on the invoice */
         const k = codeKey(q), exact = r.items.filter(p => (p.sku && codeKey(p.sku) === k) || (p.barcode && codeKey(p.barcode) === k) || (p.part_no && codeKey(p.part_no) === k));
         if (exact.length === 1) return add(exact[0]);

@@ -1602,3 +1602,9 @@ body.ai-open{overflow:hidden}
 .sys-act .nbadge{top:12px;inset-inline-end:12px;min-width:22px;height:22px;font-size:12.5px;line-height:22px}
 .rl-loc{display:inline-flex;align-items:center;gap:4px;color:var(--ink)!important;font-weight:700}
 .rl-loc .ic{width:13px;height:13px;color:var(--signal)}
+/* the Face ID card: «اطلب Face ID لما تفتح المنظومة» */
+.bio-sys{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.switch .bs-t{width:auto;height:auto;background:none;border-radius:0;display:grid;gap:2px;flex:1;min-width:0}
+.switch .bs-t::after{content:none}
+.bs-t b{font-size:15px}
+.bs-t small{color:var(--muted);font-weight:500;font-size:12.5px;line-height:1.45}

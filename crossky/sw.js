@@ -1,6 +1,6 @@
 /* Sparat offline support: app files network-first, libraries and fonts stale-while-revalidate,
    product photos cache-first (bounded). Database and VIN lookups always go to the network. */
-const VERSION = 'crossky-v20';
+const VERSION = 'crossky-v21';
 const LIB = 'crossky-lib-v1';
 const IMG = 'crossky-img-v1';
 const SHELL = ['./', 'index.html', 'css/styles.css', 'config.js', 'js/data.js', 'js/i18n.js', 'js/vin.js', 'js/icons.js',

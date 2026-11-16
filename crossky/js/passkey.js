@@ -74,17 +74,23 @@
   const fail = r => { if (r && r.error) throw r.error; return r ? r.data : null; };
 
   /* ---------- the ceremonies; options fetched ahead and used once ---------- */
-  const ahead = { login: null, reg: null };
+  const ahead = { login: null, reg: null }, going = { login: null, reg: null };
   const fresh = x => x && Date.now() - x.at < 3.5 * 60e3;
-  async function prefetch(kind) {
-    if (!twoStep()) return null;
-    try {
-      const d = fail(await (kind === 'login' ? api().passkey.startAuthentication() : api().passkey.startRegistration()));
-      ahead[kind] = { at: Date.now(), id: d.challenge_id || d.challengeId, options: d.options };
-    } catch (e) { ahead[kind] = null; }
-    return ahead[kind];
+  function prefetch(kind) {
+    if (!twoStep()) return Promise.resolve(null);
+    return going[kind] || (going[kind] = (async () => {
+      try {
+        const d = fail(await (kind === 'login' ? api().passkey.startAuthentication() : api().passkey.startRegistration()));
+        ahead[kind] = { at: Date.now(), id: d.challenge_id || d.challengeId, options: d.options };
+      } catch (e) { ahead[kind] = null; }
+      going[kind] = null;
+      return ahead[kind];
+    })());
   }
   SP.passkeyPrefetch = kind => prefetch(kind || 'login');
+  /* only when the one at hand is old or used (the System's lock keeps one ready); and whether a tap can use it now */
+  SP.passkeyWarm = kind => { kind = kind || 'login'; return fresh(ahead[kind]) ? Promise.resolve(ahead[kind]) : prefetch(kind); };
+  SP.passkeyHot = kind => !twoStep() || !!fresh(ahead[kind || 'login']);
   async function take(kind) { const x = fresh(ahead[kind]) ? ahead[kind] : await prefetch(kind); ahead[kind] = null; if (!x) throw Object.assign(new Error('passkey options'), { code: 'webauthn_challenge_not_found' }); return x; }
 
   /* signs in; returns the session */
@@ -146,8 +152,10 @@
         ${on ? `<div class="bio-list">${list.map(p => `<div class="arow"><span class="ar-main"><b>${esc(p.friendly_name || t('bioThis'))}</b>
           <small>${esc([p.created_at && t('bioAdded', { ago: SP.ago(p.created_at) }), p.last_used_at && t('bioUsed', { ago: SP.ago(p.last_used_at) })].filter(Boolean).join(' · '))}</small></span>
           <button type="button" class="btn btn-ghost sm" data-del="${esc(p.id)}" data-name="${esc(p.friendly_name || t('bioThis'))}">${esc(t('bioDel'))}</button></div>`).join('')}</div>` : ''}
+        ${SP.sysEntry && SP.isStaff && SP.isStaff() ? `<label class="switch bio-sys"><input type="checkbox" id="biosys"${SP.sysEntry.on() ? ' checked' : ''}><span></span><span class="bs-t"><b>${esc(t('enSw', { b }))}</b><small>${esc(t('enSwH'))}</small></span></label>` : ''}
         <p class="form-err" id="bioerr" role="alert"></p>
         <div class="form-actions"><button type="button" class="btn ${on ? 'btn-ghost' : 'btn-signal'}" id="bioon">${I('faceid')} ${esc(t(on ? 'bioAdd' : 'bioOn', { b }))}</button></div></section>`;
+      if ($('#biosys', box)) $('#biosys', box).onchange = e => { SP.sysEntry.set(e.target.checked); SP.toast(t(e.target.checked ? 'enSwOn' : 'enSwOff', { b })); };
       prefetch('reg');
       $('#bioon').onclick = async () => {
         const btn = $('#bioon'); btn.classList.add('busy'); $('#bioerr').textContent = '';

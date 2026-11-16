@@ -1,7 +1,8 @@
 /* The System tab (المنظومة) for the owner: windows at the top to swipe between, «اليوم», «الأرباح والخسائر» (a day, a week,
    the month or the year) and «الرصيد الكلي» (the stock, what customers owe, what is owed to suppliers, the money in and out);
    and the closed eye at their corner: the numbers hide on this phone until Face ID (or the password), again after the app
-   has been away for a minute. The numbers come from pnl_report and stock_report (supabase/setup.sql). */
+   has been away for a minute. Entering the System at all asks for Face ID too (once, until the app has been away for a
+   minute). The numbers come from pnl_report and stock_report (supabase/setup.sql). */
 (function () {
   'use strict';
   const SP = window.SP;
@@ -34,7 +35,12 @@
     lkOff: ["خليها ظاهرة", "Keep them shown"], lkDone: ["تمام: تفتح الأرقام بـ {b}", "Done: you open the numbers with {b}"],
     lkOffDone: ["الأرقام ظاهرة ديما", "The numbers always show"], lkReg: ["فعّل {b} للتليفون هذا", "Set up {b} on this phone"],
     eyeHide: ["اخفي الأرقام", "Hide the numbers"], eyeShow: ["اظهر الأرقام", "Show the numbers"],
-    eyeHidden: ["تخبّت الأرقام. تفتحها بـ {b} من العين.", "Numbers hidden. Open them with {b} from the eye."], eyeTap: ["اضغط على العين باش تشوف الأرقام", "Tap the eye to see the numbers"]
+    eyeHidden: ["تخبّت الأرقام. تفتحها بـ {b} من العين.", "Numbers hidden. Open them with {b} from the eye."], eyeTap: ["اضغط على العين باش تشوف الأرقام", "Tap the eye to see the numbers"],
+    /* entering the System */
+    enT: ["افتح المنظومة", "Open the system"], enB: ["المنظومة تفتح بـ {b}، باش محد غيرك يدخلها من تليفونك.", "The system opens with {b}, so nobody else gets into it from your phone."],
+    enPwT: ["افتح المنظومة بكلمة السر", "Open the system with the password"], enDone: ["تمام: المنظومة تفتح بـ {b}", "Done: the system opens with {b}"],
+    enSw: ["اطلب {b} لما تفتح المنظومة", "Ask for {b} to open the system"], enSwH: ["مرة وحدة، وتقعد مفتوحة لين تطلع من التطبيق أكثر من دقيقة.", "Once; it stays open until you leave the app for over a minute."],
+    enSwOn: ["المنظومة تفتح بـ {b} على التليفون هذا", "The system opens with {b} on this phone"], enSwOff: ["المنظومة تفتح من غير {b} على التليفون هذا", "The system opens without {b} on this phone"]
   });
 
   const BK = () => SP.bk;
@@ -145,42 +151,119 @@
   const lockOn = () => staffer() && SP.load(LOCK, null) === S.user.id;
   let openAt = 0, hiddenAt = 0;
   SP.sysHidden = () => lockOn() && !openAt;
+
+  /* ---------- entering the System: Face ID (or the password) once, then open until the app has been away for a minute ----------
+     For the owner and the staff on a phone with Face ID, a fingerprint or Windows Hello (each can turn it off for his phone in
+     the Face ID card of «حسابي»). A tap that leads into the System asks for Face ID right then (Safari opens it only from a
+     tap, so its challenge is fetched ahead), with the lock page underneath. Signing in just now counts: no second ask. */
+  const ENTRY = /^(system|pos|receive|lookup|invoices|inv-|purchases|orders|order-|picks|pick-|reports|staff|stock|merchants|merchant-|buyers|buyer-|suppliers|supplier-|expenses|pnl|admin|new-item|edit-item|new-shop|edit-shop)/;
+  const ENTRY_OFF = 'sp_sys_entry_off';
+  const CFG = SP.CFG || window.SPARAT_CONFIG || {};
+  let bio = CFG.embedded || !window.isSecureContext || !window.PublicKeyCredential || !SP.passkeyReady ? false : null, bioAsked = false, entryAt = 0, asking = false, warmT = 0;
+  /* whether this phone has Face ID for it: asked once the backend is up (passkeyReady keeps its first answer); locked meanwhile */
+  function bioCheck() {
+    if (bio !== null || bioAsked || !SP.sb) return;
+    bioAsked = true;
+    SP.passkeyReady().then(ok => { bio = !!ok; if (!ok) { if (staffer() && ENTRY.test(SP.here())) SP.render(); } else warm(); });
+  }
+  const entryOff = () => { const l = SP.load(ENTRY_OFF, []); return !!(S.user && Array.isArray(l) && l.includes(S.user.id)); };
+  SP.sysLocked = () => staffer() && bio !== false && !entryOff() && !entryAt;
+  SP.sysEntry = {
+    on: () => !entryOff(),
+    set: on => { const l = (SP.load(ENTRY_OFF, []) || []).filter(x => x !== S.user.id); if (!on) l.push(S.user.id); SP.store(ENTRY_OFF, l.length ? l : null); }
+  };
+  /* a sign-in (password, code, Face ID on the sign-in page) is the check itself; signing out closes it */
+  ['signIn', 'signUp', 'otpCheck'].forEach(k => { const f = SP.auth && SP.auth[k]; if (typeof f === 'function') SP.auth[k] = async (...a) => { const r = await f.apply(SP.auth, a); entryAt = Date.now(); return r; }; });
+  if (SP.auth && SP.auth.signOut) { const so = SP.auth.signOut; SP.auth.signOut = async (...a) => { entryAt = 0; openAt = 0; return so.apply(SP.auth, a); }; }
+  if (SP.passkeySignIn) { const ps = SP.passkeySignIn; SP.passkeySignIn = async () => { const s = await ps(); entryAt = Date.now(); return s; }; }
+  /* the challenge ready before the tap, renewed while it may be needed */
+  function warm() {
+    clearTimeout(warmT);
+    if (bio !== true || document.hidden || !SP.sysLocked() || !SP.passkeyWarm) return;
+    SP.passkeyWarm('login');
+    warmT = setTimeout(warm, 200e3);
+  }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { hiddenAt = Date.now(); return; }
-    if (openAt && hiddenAt && Date.now() - hiddenAt > 60000) { openAt = 0; const h = SP.here(); if (lockOn() && (SYS.test(h) || /^(system|lookup)$/.test(h))) SP.render(); }
+    if (hiddenAt && Date.now() - hiddenAt > 60000 && (openAt || entryAt)) {
+      openAt = 0; entryAt = 0;
+      const h = SP.here();
+      if ((SP.sysLocked() && ENTRY.test(h)) || (lockOn() && (SYS.test(h) || /^(system|lookup)$/.test(h)))) SP.render();
+    }
+    warm();
   });
-  /* called by every page before it draws (js/views.js gate): the money pages wait for Face ID while the numbers are hidden */
+  /* a tap into the System from outside it: Face ID from this very tap */
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a || bio !== true || !SP.sysLocked() || !SP.passkeyHot || !SP.passkeyHot('login')) return;
+    if (!ENTRY.test(a.getAttribute('href').slice(1)) || ENTRY.test(SP.here())) return;
+    enter();
+  }, true);
+  const prevAfter = SP.afterShell;
+  SP.afterShell = o => { if (prevAfter) prevAfter(o); bioCheck(); warm(); };
+
+  /* called by every page before it draws (js/views.js gate): the System waits for Face ID until it is opened; then the money
+     pages wait for it too while the numbers are hidden */
   SP.sysGate = n => {
-    if (!SP.sysHidden() || !SYS.test(SP.here())) return false;
+    const h = SP.here();
+    bioCheck();
+    if (SP.sysLocked() && ENTRY.test(h)) { drawEntry(n); return true; }
+    if (!SP.sysHidden() || !SYS.test(h)) return false;
     drawLock(n);
     return true;
   };
   const opened = async sess => {
     if (sess && sess.user && sess.user.id !== (S.user && S.user.id)) await SP.refreshUser(sess);
-    openAt = Date.now(); SP.render();
+    openAt = entryAt = Date.now(); SP.render();
   };
+  const entered = async sess => {
+    if (sess && sess.user && sess.user.id !== (S.user && S.user.id)) await SP.refreshUser(sess);
+    entryAt = Date.now(); SP.render();
+  };
+  async function enter() {
+    if (asking) return;
+    asking = true;
+    try { const sess = await SP.passkeySignIn(); if (!sess || !sess.user) throw Object.assign(new Error('no session'), { code: 'webauthn_credential_not_found' }); await entered(sess); }
+    catch (e) { if (SP.passkeyPrefetch) SP.passkeyPrefetch('reg'); warm(); askSheet(SP.bioErr(e), 'entry'); }
+    finally { asking = false; }
+  }
+  function drawEntry(n) {
+    const b = SP.bioName();
+    warm();
+    shell(bar(t('tabSystem'), '', { noBack: true }) + `<main class="wrap lockv"><section class="lock-card entry">
+        <span class="lock-ic">${I('faceid')}</span><h2>${esc(t('enT'))}</h2><p>${esc(t('enB', { b }))}</p>
+        <div class="form-actions"><button type="button" class="btn btn-signal" id="lkgo">${I('faceid')} ${esc(t('lkGo', { b }))}</button>
+          <button type="button" class="btn btn-ghost" id="lkpw">${I('lock')} ${esc(t('lkPw'))}</button></div></section></main>`);
+    $('#lkgo').onclick = () => enter();
+    $('#lkpw').onclick = () => pwSheet('entry');
+    SP.done(n);
+  }
   /* Face ID first; when this phone has none for the account, a sheet: set it up here, or the password */
   async function reveal() {
     try { const sess = await SP.passkeySignIn(); if (!sess || !sess.user || sess.user.id !== S.user.id) throw Object.assign(new Error('not this account'), { code: 'webauthn_credential_not_found' }); return opened(sess); }
     catch (e) { if (SP.passkeyPrefetch) SP.passkeyPrefetch('reg'); askSheet(SP.bioErr(e)); }
   }
-  function askSheet(msg) {
-    const b = SP.bioName();
-    const s = SP.openSheet(`<h2 class="sheet-title">${esc(t('lkT'))}</h2><p class="hint">${esc(t('lkB', { b }))}</p>${msg ? `<p class="form-err">${esc(msg)}</p>` : ''}
+  function askSheet(msg, kind) {
+    const b = SP.bioName(), en = kind === 'entry';
+    const s = SP.openSheet(`<h2 class="sheet-title">${esc(t(en ? 'enT' : 'lkT'))}</h2><p class="hint">${esc(t(en ? 'enB' : 'lkB', { b }))}</p><p class="form-err">${msg ? esc(msg) : ''}</p>
       <div class="sheet-actions lk-sheet"><button type="button" class="btn btn-signal" id="lkreg">${I('faceid')} ${esc(t('lkReg', { b }))}</button>
-        <button type="button" class="btn btn-ghost" id="lkpw2">${I('lock')} ${esc(t('lkPw'))}</button></div>`, { label: t('lkT') });
-    $('#lkreg', s.el).onclick = async () => { try { await SP.passkeyRegister(); s.close(); openAt = Date.now(); SP.toast(t('lkDone', { b })); SP.render(); } catch (e) { const er = $('.form-err', s.el); if (er) er.textContent = SP.bioErr(e); } };
-    $('#lkpw2', s.el).onclick = () => { s.close(); pwSheet(); };
+        <button type="button" class="btn btn-ghost" id="lkpw2">${I('lock')} ${esc(t('lkPw'))}</button></div>`, { label: t(en ? 'enT' : 'lkT') });
+    $('#lkreg', s.el).onclick = async () => {
+      try { await SP.passkeyRegister(); s.close(); entryAt = Date.now(); if (!en) openAt = entryAt; SP.toast(t(en ? 'enDone' : 'lkDone', { b })); SP.render(); }
+      catch (e) { const er = $('.form-err', s.el); if (er) er.textContent = SP.bioErr(e); }
+    };
+    $('#lkpw2', s.el).onclick = () => { s.close(); pwSheet(kind); };
   }
-  function pwSheet() {
-    const s = SP.openSheet(`<h2 class="sheet-title">${esc(t('lkPwT'))}</h2><form class="form" id="lpf" novalidate>
+  function pwSheet(kind) {
+    const en = kind === 'entry';
+    const s = SP.openSheet(`<h2 class="sheet-title">${esc(t(en ? 'enPwT' : 'lkPwT'))}</h2><form class="form" id="lpf" novalidate>
         <div class="field"><label for="lpi">${esc(t('password'))}</label><input id="lpi" class="input" type="password" autocomplete="current-password" dir="ltr"></div>
-        <p class="form-err" id="lpe" role="alert"></p><div class="sheet-actions"><button class="btn btn-signal">${I('eye')} ${esc(t('lkPwGo'))}</button></div></form>`, { label: t('lkPwT') });
+        <p class="form-err" id="lpe" role="alert"></p><div class="sheet-actions"><button class="btn btn-signal">${I(en ? 'lock' : 'eye')} ${esc(t('lkPwGo'))}</button></div></form>`, { label: t(en ? 'enPwT' : 'lkPwT') });
     setTimeout(() => { const i = $('#lpi', s.el); if (i) i.focus(); }, 60);
     $('#lpf', s.el).onsubmit = async e => {
       e.preventDefault();
       const btn = $('#lpf button', s.el); btn.classList.add('busy');
-      try { const d = await SP.auth.signIn(S.user.email, $('#lpi', s.el).value); s.close(); await opened(d && d.session); }
+      try { const d = await SP.auth.signIn(S.user.email, $('#lpi', s.el).value); s.close(); await (en ? entered : opened)(d && d.session); }
       catch (x) { $('#lpe', s.el).textContent = /Invalid login/i.test(String((x && x.message) || '')) ? t('lkWrongPw') : SP.errText(x); btn.classList.remove('busy'); }
     };
   }
@@ -196,7 +279,7 @@
       $('#lkerr').textContent = '';
       try { await opened(await SP.passkeySignIn()); } catch (e) { if ($('#lkerr')) $('#lkerr').textContent = SP.bioErr(e); if (SP.passkeyPrefetch) SP.passkeyPrefetch('login'); }
     };
-    $('#lkpw').onclick = pwSheet;
+    $('#lkpw').onclick = () => pwSheet();
     SP.done(n);
   }
   /* the eye on the owner's windows: open, a tap hides the numbers; shut, a tap asks for Face ID */

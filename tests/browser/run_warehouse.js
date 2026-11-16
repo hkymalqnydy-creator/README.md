@@ -62,12 +62,14 @@ const log = s => console.log(`${++step}. ${s}`);
     log('a purchase: the part already in stock says where it goes; a new part entered by hand gets its place');
     // a sale at the till goes to the warehouse
     await go('pos'); await see('#pq'); await page.fill('#pq', 'KI-26300'); await page.press('#pq', 'Enter'); await see('.pline');
+    await page.waitForTimeout(700); // the search that follows typing must not put it on a second time
+    must(await db(() => JSON.parse(sessionStorage.getItem('sp_pos')).lines.map(l => l.qty).join()) === '1', 'a code and Enter (a barcode scanner) go on once');
     await page.click('.pline [data-d="1"]'); await page.waitForTimeout(150);
     await page.click('#psave'); await page.waitForURL(/#inv-/); await see('#invoice');
     const inv = await db(() => { const v = window.__mockdb.invoices[window.__mockdb.invoices.length - 1]; return { id: v.id, no: v.no, st: v.pick_state }; });
     must(inv.st === 'waiting' && /تستنى التجهيز/.test(await text('main')), 'the new invoice waits in the warehouse, and its page says so');
     await go('system'); await see('.pos-tile[href="#picks"]'); await page.waitForTimeout(600);
-    log('a sale at the till (2 × KI-26300) goes to the warehouse: its page says «تستنى التجهيز»; the owner has «تجهيز الفواتير»');
+    log('a sale at the till (a code and Enter go on once; 2 × KI-26300) goes to the warehouse: its page says «تستنى التجهيز»; the owner has «تجهيز الفواتير»');
     // يوسف, the warehouse employee
     await signIn('store@crossky.ly');
     await go('system'); await see('.sys-act[href="#picks"]');
