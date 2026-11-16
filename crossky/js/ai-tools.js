@@ -91,7 +91,7 @@
     qty: staff || !(S.settings && S.settings.hide_qty) ? p.qty : null, staff: !!staff
   });
   const partFact = (p, staff) => ({
-    id: p.id, title: p.title, code: p.sku || p.part_no || '', fits: SP.fitText ? SP.fitText(p) : '', condition: p.cond,
+    id: p.id, title: p.title, code: p.sku || p.part_no || '', maker: p.maker || '', fits: SP.fitText ? SP.fitText(p) : '', condition: p.cond,
     price: p.price_hidden ? 'hidden (' + (S.user ? 'not shown to this customer' : 'sign in to see') + ')' : p.price, currency: (p.shop && p.shop.currency) || cur(),
     stock: staff ? p.qty : p.qty == null ? 'ask' : p.qty > 0 ? 'available' : 'out of stock', branch: p.shop && p.shop.name
   });
@@ -346,7 +346,7 @@
       if (f === 'all' && !a.query) ctx.card({ type: 'stats', title: t('aiSStock'), rows, href: '#stock' });
       const items = r.items || [];
       if (items.length && (f !== 'all' || a.query)) ctx.card({ type: 'list', title: t('aiSStockT'), rows: items.map(x => ({ t: x.title, s: [x.sku || x.part_no, x.branch_name].filter(Boolean).join(' · '), v: t('aiInStock', { n: num(x.qty) }), href: '#p-' + x.id })), more: { href: '#stock', label: t('aiSStock') } });
-      return { summary: s, matching: r.total, items: items.map(x => ({ id: x.id, title: x.title, code: x.sku || x.part_no, qty: x.qty, price: x.price, cost: x.cost })) };
+      return { summary: s, matching: r.total, items: items.map(x => ({ id: x.id, title: x.title, code: x.sku || x.part_no, maker: x.maker || '', qty: x.qty, price: x.price, cost: x.cost })) };
     }
   });
   tool({

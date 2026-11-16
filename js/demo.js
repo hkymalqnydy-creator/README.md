@@ -11,6 +11,10 @@
   const KEY = 'sp_demo_db_v' + SEED + SUFFIX;
   try { for (let v = 1; v < SEED; v++) { localStorage.removeItem('sp_demo_db_v' + v + SUFFIX); localStorage.removeItem('sp_demo_db_v' + v + SUFFIX + '_session'); } } catch (e) { /* no storage */ }
   const DEMO_MERCHANT = '218925551234@' + (CONF.phoneDomain || 'phone.invalid');
+  /* the company that made each sample part (الشركة المصنّعة) */
+  const MAKER = { 'HY-58101': 'موبيس', 'HY-25310': 'دنسو', 'KI-55300': 'ماندو', 'KI-26300': 'موبيس', 'TY-04465': 'تويوتا أصلي', 'TY-81110': 'كويتو',
+    'TY-88320': 'دنسو', 'NS-40206': 'سانغ شين', 'NS-15208': 'نيسان أصلي', 'MT-MR968': 'إكسيدي', 'MZ-PE01': 'إن جي كي', 'HO-45022': 'سانغ شين',
+    'HY-ELN-LED': 'موبيس', 'KI-SPT-SH': 'موبيس', 'GEN-OIL-5W30': 'توتال', 'GEN-BAT-70': 'فارتا' };
   const CATS = ['engine', 'brakes', 'suspension', 'electrical', 'lights', 'body', 'oils', 'cooling', 'ac', 'transmission', 'tires', 'interior', 'other'];
   /* Real photos for the bundled part pictures (img/parts/NAME.jpg): free Pexels photos (pexels.com/license: free to use, no credit
      required; credited here). The app shows them where the phone can reach images.pexels.com and falls back to the bundled picture
@@ -112,13 +116,13 @@
     const imgBase = C.demoImgBase == null ? 'img/parts/' : C.demoImgBase;
     const DESCR = 'القطعة جديدة في الكرتونة، وعليها ضمان من الشركة. التوصيل متاح لكل المدن.';
     P.forEach(([s, sku, title, cat, cond, price, qty, make, model, yf, yt, pn], i) => DB.products.push({
-      id: uuid(), shop_id: s.id, owner_id: owner.id, sku, title, cat, cond, price, nego: i % 4 === 0, qty, make, model, y_from: yf, y_to: yt, part_no: pn,
+      id: uuid(), shop_id: s.id, owner_id: owner.id, sku, title, cat, cond, price, nego: i % 4 === 0, qty, make, model, y_from: yf, y_to: yt, part_no: pn, maker: MAKER[sku] || '',
       descr: DESCR, imgs: PART_IMG[sku] && imgBase ? [imgBase + PART_IMG[sku] + '.jpg'] : [art(cat, i), art(cat, i + 2)],
       status: qty === 0 ? 'sold' : 'active', hide_price: i === 6 || i === 9, search_text: '', created_at: ago(40 + i * 97), updated_at: ago(3)
     }));
     /* the edition's own parts with real photos (config demoExtra, from tools/build_company.py --demo-extra): listed first */
     (Array.isArray(C.demoExtra) ? C.demoExtra : []).forEach((x, k) => x && x.sku && x.title && DB.products.push({
-      id: uuid(), shop_id: s1.id, owner_id: owner.id, sku: String(x.sku), title: String(x.title), cat: x.cat || 'other', cond: x.cond || 'original',
+      id: uuid(), shop_id: s1.id, owner_id: owner.id, sku: String(x.sku), title: String(x.title), cat: x.cat || 'other', cond: x.cond || 'original', maker: String(x.maker || '').slice(0, 60),
       price: x.price == null ? null : +x.price, nego: false, qty: x.qty == null ? 10 : +x.qty, make: x.make || 'any', model: x.model || '', y_from: +x.y_from || null, y_to: +x.y_to || null,
       part_no: x.part_no || String(x.sku), descr: x.descr || DESCR, imgs: Array.isArray(x.imgs) ? x.imgs.slice(0, 6) : [], status: 'active', hide_price: false,
       search_text: '', created_at: ago(5 + k), updated_at: ago(1)
@@ -141,7 +145,7 @@
       [s3, owner, email, [[10, 1], [2, 1]], 'transfer', 7000],
       [s1, owner, email, [[0, 1]], 'cash', 9000, '', '', null, true]].forEach(([sh, who, name, lines, pay, m, cust, phone, paid, ret]) => {
       const id = uuid(); let sub = 0;
-      lines.forEach(([i, q]) => { const pr = DB.products[i]; sub += pr.price * q; if (pr.qty != null && !ret) pr.qty -= q; DB.invoice_items.push({ id: DB.invoice_items.length + 1, invoice_id: id, product_id: pr.id, sku: pr.sku, title: pr.title, qty: q, price: pr.price, cost: pr.cost, line_total: pr.price * q }); });
+      lines.forEach(([i, q]) => { const pr = DB.products[i]; sub += pr.price * q; if (pr.qty != null && !ret) pr.qty -= q; DB.invoice_items.push({ id: DB.invoice_items.length + 1, invoice_id: id, product_id: pr.id, sku: pr.sku, title: pr.title, maker: pr.maker || '', qty: q, price: pr.price, cost: pr.cost, line_total: pr.price * q }); });
       DB.invoices.push({ id, no: ++DB.inv_seq, branch_id: sh.id, staff_id: who.id, staff_name: name, customer_id: null, customer_name: cust || '', customer_phone: phone || '',
         subtotal: sub, discount: 0, total: sub, paid: paid != null ? paid : pay === 'credit' ? 0 : sub, payment: pay, currency: 'LYD', status: ret ? 'returned' : 'done', note: '',
         created_at: ago(m), returned_at: ret ? ago(m - 100) : null });
@@ -170,7 +174,7 @@
     cu('محمد سالم', 'محل سالم لقطع الغيار', '0947778899', 'بنغازي', false, 200);
     const sent = DB.invoices.find(v => v.customer_phone === '0925551234');
     if (sent) { sent.customer_id = nour; sent.sent_at = ago(50); }
-    DB.merchants = 1;
+    DB.merchants = 1; DB.makers = 1;
     /* the activity log of everything above, as the database writes it (supabase/setup.sql section 12) */
     const L = [], who = id => id === owner.id ? email : (DB.staff.find(x => x.user_id === id) || {}).name || '';
     const add = (at, actor, kind, ref, title, amount, detail) => L.push({ created_at: at, actor_id: actor, actor_name: who(actor), kind, ref, title: title || '', amount: amount == null ? null : amount, detail });
@@ -210,6 +214,12 @@
         hide_price: false, barcode: null, search_text: '', created_at: now(), updated_at: now() }));
     }
     let merch = false;
+    if (!DB.makers && opts.seed && CONF.mode === 'company') {
+      merch = true; DB.makers = 1;
+      const extra = {}; (Array.isArray(CONF.demoExtra) ? CONF.demoExtra : []).forEach(x => { if (x && x.sku && x.maker) extra[x.sku] = String(x.maker); });
+      DB.products.forEach(p => { if (p.maker == null || p.maker === '') { const m = MAKER[p.sku] || extra[p.sku]; p.maker = m || ''; if (m) p.search_text = ''; } });
+      DB.invoice_items.forEach(i => { if (i.maker == null) { const pr = DB.products.find(x => x.id === i.product_id); i.maker = (pr && pr.maker) || ''; } });
+    }
     if (!DB.merchants && opts.seed && CONF.mode === 'company' && DB.users.length > 0) {
       merch = true; DB.merchants = 1;
       DB.customers.forEach(c => { if (c.shop_name == null) c.shop_name = ''; });
@@ -367,7 +377,7 @@
         const s = DB.shops.find(x => x.id === v.shop_id);
         if (!s || !(s.owner_id === uid() || hasPerm('products'))) return rls();
         if (v.sku && DB.products.some(p => p.sku === v.sku)) return { error: { message: 'duplicate key value violates unique constraint "products_sku_key"', code: '23505' } };
-        const row = { id: uuid(), price: null, qty: null, nego: false, make: 'any', model: '', y_from: null, y_to: null, part_no: '', descr: '', imgs: [], status: 'active', sku: null, hide_price: false, ...v, owner_id: s.owner_id, created_at: now(), updated_at: now() };
+        const row = { id: uuid(), price: null, qty: null, nego: false, make: 'any', model: '', y_from: null, y_to: null, part_no: '', maker: '', descr: '', imgs: [], status: 'active', sku: null, hide_price: false, ...v, owner_id: s.owner_id, created_at: now(), updated_at: now() };
         if (row.y_from && row.y_to && row.y_from > row.y_to) [row.y_from, row.y_to] = [row.y_to, row.y_from];
         return { row };
       }
@@ -448,7 +458,7 @@
     const yr = (p, y) => (!p.y_from || p.y_from <= y) && (!p.y_to || p.y_to >= y);
     const norm = s => (window.SP && window.SP.norm ? window.SP.norm(s) : String(s || '').toLowerCase());
     const brandWords = id => { const b = window.SP_DATA && window.SP_DATA.BRANDS.find(x => x.id === id); return b ? b.en + ' ' + b.ar : ''; };
-    const text = p => p.search_text || (window.SP && window.SP.searchText ? window.SP.searchText(p) : norm([p.title, p.part_no, p.sku, p.make, brandWords(p.make), p.model, p.descr].join(' ')));
+    const text = p => p.search_text || (window.SP && window.SP.searchText ? window.SP.searchText(p) : norm([p.title, p.part_no, p.sku, p.maker, p.make, brandWords(p.make), p.model, p.descr].join(' ')));
     function visible(p) {
       const me = uid(), mode = DB.settings.price_mode || 'all';
       if (isStaff() || (me && me === p.owner_id)) return true;
@@ -469,14 +479,14 @@
         if (!p) {
           if (title.length < 2) { sum.skipped++; continue; }
           DB.products.push({ id: uuid(), shop_id: shop.id, owner_id: shop.owner_id, sku, barcode: bar, title, cat: cat || 'other', cond: 'original', price: price != null && price >= 0 ? price : null,
-            nego: false, qty, make: make || 'any', model: r.model || '', y_from: null, y_to: null, part_no: r.part_no || sku, descr: '', imgs: [],
+            nego: false, qty, make: make || 'any', model: r.model || '', y_from: null, y_to: null, part_no: r.part_no || sku, maker: String(r.maker || '').trim().slice(0, 60), descr: '', imgs: [],
             status: qty != null && qty <= 0 ? 'sold' : 'active', hide_price: false, search_text: '', created_at: now(), updated_at: now() });
           sum.inserted++;
         } else {
           if (title.length >= 2) p.title = title;
           if ('price' in r) p.price = price != null && price >= 0 ? price : null;
           if ('qty' in r) { p.qty = qty; if (qty != null) p.status = qty <= 0 ? 'sold' : 'active'; }
-          if (make) p.make = make; if ('model' in r) p.model = r.model || ''; if (cat) p.cat = cat; if (bar) p.barcode = bar;
+          if (make) p.make = make; if ('model' in r) p.model = r.model || ''; if ('maker' in r) p.maker = String(r.maker || '').trim().slice(0, 60); if (cat) p.cat = cat; if (bar) p.barcode = bar;
           p.search_text = ''; p.updated_at = now();
           sum.updated++;
         }
@@ -675,7 +685,7 @@
             list += (pr.price != null ? pr.price : price) * q; costSum += (pr.cost || 0) * q; units += q;
             if (pr.qty != null) { pr.qty -= q; if (pr.qty <= 0) pr.status = 'sold'; }
             sub += price * q; branch = branch || pr.shop_id;
-            lines.push({ product_id: pr.id, sku: pr.sku || pr.part_no || null, title: pr.title, qty: q, price, cost: pr.cost == null ? null : pr.cost, line_total: price * q });
+            lines.push({ product_id: pr.id, sku: pr.sku || pr.part_no || null, title: pr.title, maker: pr.maker || '', qty: q, price, cost: pr.cost == null ? null : pr.cost, line_total: price * q });
           }
           const disc = Number(p.discount) || 0;
           if (disc < 0 || disc > sub) fail('bad discount', '22023');
@@ -756,7 +766,7 @@
             if (pr.qty != null && pr.qty < q) fail(st.hide_qty && !isStaff() ? 'not enough stock: ' + pr.title : 'not enough stock: ' + pr.title + ' (available ' + pr.qty + ')');
             if (pr.qty != null) { pr.qty -= q; if (pr.qty <= 0) pr.status = 'sold'; }
             sub += pr.price * q; units += q; branch = branch || pr.shop_id;
-            lines.push({ product_id: pr.id, sku: pr.sku || pr.part_no || null, title: pr.title, qty: q, price: pr.price, cost: pr.cost == null ? null : pr.cost, line_total: pr.price * q });
+            lines.push({ product_id: pr.id, sku: pr.sku || pr.part_no || null, title: pr.title, maker: pr.maker || '', qty: q, price: pr.price, cost: pr.cost == null ? null : pr.cost, line_total: pr.price * q });
           }
         } catch (e) { snap.forEach(x => { const pr = DB.products.find(y => y.id === x.id); if (pr) { pr.qty = x.qty; pr.status = x.status; } }); throw e; }
         const shop = shopOf(branch), t = now();
@@ -905,7 +915,8 @@
         const costs = hasPerm('costs'), q = String(a.p_q || '').trim(), nq = norm(q), uq = q.toUpperCase(), f = a.p_filter || 'all', L = DB.products;
         const lv = DB.settings.low_stock == null ? 3 : DB.settings.low_stock;
         const sum = (l, fn) => l.reduce((k, x) => k + (Number(fn(x)) || 0), 0), low = p => p.qty != null && p.qty >= 1 && p.qty <= lv, full = L.filter(p => p.qty > 0);
-        const hit = L.filter(p => (!q || norm(p.title).includes(nq) || String(p.sku || '').toUpperCase().includes(uq) || String(p.part_no || '').toUpperCase().includes(uq) || (p.barcode || '') === q)
+        const hit = L.filter(p => (!q || norm(p.title).includes(nq) || String(p.sku || '').toUpperCase().includes(uq) || String(p.part_no || '').toUpperCase().includes(uq) || (p.barcode || '') === q
+            || norm(p.maker || '').includes(nq) || text(p).includes(nq))
           && (f === 'low' ? low(p) : f === 'out' ? p.qty === 0 : true)).sort((x, y) => (f === 'low' ? x.qty - y.qty : 0) || x.title.localeCompare(y.title, 'ar') || x.id.localeCompare(y.id));
         const byTitle = (x, y) => x.title.localeCompare(y.title, 'ar') || x.id.localeCompare(y.id), first = !a.p_offset, br = p => (shopOf(p.shop_id) || {}).name || null;
         return {
@@ -913,10 +924,11 @@
             value_price: sum(full.filter(p => p.price != null), p => p.qty * p.price),
             value_cost: costs ? sum(full.filter(p => p.cost != null), p => p.qty * p.cost) : null, cost_missing: costs ? full.filter(p => p.cost == null).length : null },
           /* what is running low, the fewest left first, and what has run out (on the first page) */
-          low_items: first ? L.filter(low).sort((x, y) => x.qty - y.qty || byTitle(x, y)).slice(0, 10).map(p => ({ id: p.id, title: p.title, sku: p.sku || null, part_no: p.part_no || '', qty: p.qty, price: p.price == null ? null : p.price, branch_name: br(p) })) : null,
+          low_items: first ? L.filter(low).sort((x, y) => x.qty - y.qty || byTitle(x, y)).slice(0, 10).map(p => ({ id: p.id, title: p.title, sku: p.sku || null, part_no: p.part_no || '', maker: p.maker || '', qty: p.qty, price: p.price == null ? null : p.price, branch_name: br(p) })) : null,
           out_items: first ? L.filter(p => p.qty === 0).sort(byTitle).slice(0, 10).map(p => ({ id: p.id, title: p.title, sku: p.sku || null, part_no: p.part_no || '', branch_name: br(p) })) : null,
           total: hit.length,
-          items: page(hit, a, 50).map(p => ({ id: p.id, title: p.title, sku: p.sku || null, part_no: p.part_no || '', barcode: p.barcode || null, qty: p.qty == null ? null : p.qty,
+          items: page(hit, a, 50).map(p => ({ id: p.id, title: p.title, sku: p.sku || null, part_no: p.part_no || '', barcode: p.barcode || null, maker: p.maker || '', make: p.make || 'any', model: p.model || '',
+            qty: p.qty == null ? null : p.qty,
             price: p.price == null ? null : p.price, cost: costs && p.cost != null ? p.cost : null, branch_name: (shopOf(p.shop_id) || {}).name || null })),
           moves: hasPerm('products') || hasPerm('reports') ? DB.stock_moves.slice().sort(newest).slice(0, 20).map(m => ({ id: m.id, title: m.title, qty: m.qty, reason: m.reason, note: m.note,
             staff_name: m.staff_name, created_at: m.created_at, value: costs && m.cost != null ? m.qty * m.cost : null })) : []
@@ -988,7 +1000,7 @@
         return { id: v.id, no: v.no, status: v.status, source: v.source || 'pos', created_at: v.created_at, sent_at: v.sent_at || null, customer_name: v.customer_name,
           customer_phone: v.customer_phone, subtotal: v.subtotal, discount: v.discount, total: v.total, paid: v.paid, payment: v.payment, currency: v.currency,
           note: v.note || '', staff_name: v.staff_name || '', branch: s ? { name: s.name, city: s.city, phone: s.phone } : null,
-          items: DB.invoice_items.filter(i => i.invoice_id === v.id).map(i => ({ title: i.title, sku: i.sku, qty: i.qty, price: i.price, line_total: i.line_total })) };
+          items: DB.invoice_items.filter(i => i.invoice_id === v.id).map(i => ({ title: i.title, sku: i.sku, maker: i.maker || '', qty: i.qty, price: i.price, line_total: i.line_total })) };
       },
       my_inbox() {
         if (!uid()) return [];

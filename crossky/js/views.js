@@ -492,6 +492,7 @@
           ${fit === true ? `<em class="ok">${I('check')} ${esc(t('fitsYours', { car: SP.carText(S.car) }))}</em>` : fit === false ? `<em class="no">${I('warn')} ${esc(t('notYours', { car: SP.carText(S.car) }))}</em>` : ''}</span></div>
         <dl class="specs${hideBr ? ' odd' : ''}"><div><dt>${esc(t('qty'))}</dt><dd>${p.qty == null ? esc(t('inStock')) : esc(SP.fmtNum(p.qty))}</dd></div>
           <div><dt>${esc(t('partNo'))}</dt><dd class="mono">${esc(p.part_no || '—')}</dd></div>
+          ${p.maker ? `<div><dt>${esc(t('makerL'))}</dt><dd>${esc(p.maker)}</dd></div>` : ''}
           <div><dt>${esc(t('listed'))}</dt><dd>${esc(SP.ago(p.created_at))}</dd></div>
           ${hideBr ? '' : `<div><dt>${esc(t('city'))}</dt><dd>${esc(sh.city || '—')}</dd></div>`}</dl>
         ${p.descr ? `<section class="pd-desc"><h2>${esc(t('fromShop'))}</h2><p>${esc(p.descr)}</p></section>` : ''}

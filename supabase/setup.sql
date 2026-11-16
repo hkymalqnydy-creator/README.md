@@ -58,6 +58,8 @@ create table if not exists public.products (
   updated_at  timestamptz not null default now()
 );
 
+-- the company that made the part (الشركة المصنّعة): Mobis, Denso, Bosch… sold and searched by it in the sales system
+alter table public.products add column if not exists maker text not null default '' check (char_length(maker) <= 60);
 create index if not exists products_shop_idx    on public.products (shop_id);
 create index if not exists products_created_idx on public.products (created_at desc);
 create index if not exists products_cat_idx     on public.products (cat);
@@ -172,7 +174,7 @@ begin
     v_tmp := new.y_from; new.y_from := new.y_to; new.y_to := v_tmp;
   end if;
   if coalesce(new.search_text, '') = '' then
-    new.search_text := left(public.norm_ar(concat_ws(' ', new.title, new.part_no, new.sku, new.barcode, new.make, new.model, new.descr)), 3000);
+    new.search_text := left(public.norm_ar(concat_ws(' ', new.title, new.part_no, new.sku, new.barcode, new.maker, new.make, new.model, new.descr)), 3000);
   end if;
   new.updated_at := now();
   return new;
@@ -572,9 +574,9 @@ begin
       select id into v_id from public.products where sku = v_sku;
       if v_id is null then
         if char_length(v_title) < 2 then n_skip := n_skip + 1; continue; end if;
-        insert into public.products (shop_id, owner_id, sku, barcode, title, cat, cond, price, qty, make, model, part_no, status)
+        insert into public.products (shop_id, owner_id, sku, barcode, title, cat, cond, price, qty, make, model, part_no, maker, status)
         values (v_shop, v_owner, v_sku, v_bar, v_title, coalesce(v_cat, 'other'), coalesce(v_cond, 'original'), v_price, v_qty,
-                coalesce(v_make, 'any'), left(coalesce(r->>'model', ''), 60), left(coalesce(nullif(r->>'part_no', ''), v_sku), 60),
+                coalesce(v_make, 'any'), left(coalesce(r->>'model', ''), 60), left(coalesce(nullif(r->>'part_no', ''), v_sku), 60), left(btrim(coalesce(r->>'maker', '')), 60),
                 case when v_qty is not null and v_qty <= 0 then 'sold' else 'active' end);
         n_ins := n_ins + 1;
       else
@@ -585,11 +587,13 @@ begin
           status = case when r ? 'qty' and v_qty is not null then (case when v_qty <= 0 then 'sold' else 'active' end) else status end,
           make   = coalesce(v_make, make),
           model  = case when r ? 'model' then left(coalesce(r->>'model', ''), 60) else model end,
+          maker  = case when r ? 'maker' then left(btrim(coalesce(r->>'maker', '')), 60) else maker end,
           cat    = coalesce(v_cat, cat),
           cond   = coalesce(v_cond, cond),
           barcode = coalesce(v_bar, barcode),
           search_text = case when (char_length(v_title) >= 2 and v_title <> title) or (v_make is not null and v_make <> make)
-                               or (v_bar is not null and v_bar is distinct from barcode) then '' else search_text end
+                               or (v_bar is not null and v_bar is distinct from barcode)
+                               or (r ? 'maker' and left(btrim(coalesce(r->>'maker', '')), 60) <> maker) then '' else search_text end
         where id = v_id;
         n_upd := n_upd + 1;
       end if;
@@ -757,6 +761,7 @@ create table if not exists public.invoice_items (
   line_total numeric(12,2) not null
 );
 create index if not exists invoice_items_inv_idx on public.invoice_items (invoice_id);
+alter table public.invoice_items add column if not exists maker text not null default '' check (char_length(maker) <= 60);
 -- customer orders from the app (section 15): an invoice «قيد التجهيز» → «قيد الاستلام» → «تم الاستلام», or «ملغي»
 alter table public.invoices drop constraint if exists invoices_status_check;
 alter table public.invoices add constraint invoices_status_check check (status in ('done', 'returned', 'preparing', 'ready', 'cancelled'));
@@ -830,7 +835,7 @@ begin
       status = case when qty is not null and qty - v_qty <= 0 then 'sold' else status end
     where id = v_p.id;
     v_sub := v_sub + v_price * v_qty;
-    v_lines := v_lines || jsonb_build_object('product_id', v_p.id, 'sku', coalesce(v_p.sku, nullif(v_p.part_no, '')), 'title', v_p.title,
+    v_lines := v_lines || jsonb_build_object('product_id', v_p.id, 'sku', coalesce(v_p.sku, nullif(v_p.part_no, '')), 'title', v_p.title, 'maker', v_p.maker,
                                              'qty', v_qty, 'price', v_price, 'cost', v_p.cost, 'line_total', v_price * v_qty);
     v_branch := coalesce(v_branch, v_p.shop_id);
   end loop;
@@ -848,8 +853,8 @@ begin
   values (v_branch, v_me, v_name, nullif(p->>'customer_id', '')::uuid, left(coalesce(p->>'customer_name', ''), 80), left(coalesce(p->>'customer_phone', ''), 30),
           v_sub, v_disc, v_sub - v_disc, greatest(v_paid, 0), v_pay, coalesce(v_cur, 'LYD'), left(coalesce(p->>'note', ''), 500))
   returning id into v_id;
-  insert into public.invoice_items (invoice_id, product_id, sku, title, qty, price, cost, line_total)
-  select v_id, (x->>'product_id')::uuid, x->>'sku', x->>'title', (x->>'qty')::integer, (x->>'price')::numeric, (x->>'cost')::numeric, (x->>'line_total')::numeric
+  insert into public.invoice_items (invoice_id, product_id, sku, title, maker, qty, price, cost, line_total)
+  select v_id, (x->>'product_id')::uuid, x->>'sku', x->>'title', coalesce(x->>'maker', ''), (x->>'qty')::integer, (x->>'price')::numeric, (x->>'cost')::numeric, (x->>'line_total')::numeric
   from jsonb_array_elements(v_lines) x;
   perform public.log_act('sale', v_id::text, nullif(btrim(coalesce(p->>'customer_name', '')), ''), v_sub - v_disc,
     jsonb_build_object('no', (select no from public.invoices where id = v_id), 'units', v_units, 'lines', jsonb_array_length(v_lines), 'discount', v_disc,
@@ -1152,7 +1157,9 @@ begin
   with base as (select p.*, s.name as branch_name from public.products p left join public.shops s on s.id = p.shop_id),
        hit as (select * from base b
                where (v_q is null or public.norm_ar(b.title) like '%' || public.norm_ar(v_q) || '%' or upper(coalesce(b.sku, '')) like '%' || upper(v_q) || '%'
-                      or upper(b.part_no) like '%' || upper(v_q) || '%' or coalesce(b.barcode, '') = v_q)
+                      or upper(b.part_no) like '%' || upper(v_q) || '%' or coalesce(b.barcode, '') = v_q
+                      -- the company that made it, the car it fits (in Arabic and Latin) and the other search words of the part
+                      or public.norm_ar(b.maker) like '%' || public.norm_ar(v_q) || '%' or b.search_text like '%' || public.norm_ar(v_q) || '%')
                  and (coalesce(p_filter, 'all') not in ('low', 'out') or (p_filter = 'low' and b.qty between 1 and v_low) or (p_filter = 'out' and b.qty = 0)))
   select jsonb_build_object(
     'summary', (select jsonb_build_object('parts', count(*), 'units', coalesce(sum(qty), 0),
@@ -1162,7 +1169,7 @@ begin
                   'cost_missing', case when v_costs then count(*) filter (where qty > 0 and cost is null) end) from base),
     -- what is running low, the fewest left first, and what has run out (on the first page)
     'low_items', case when coalesce(p_offset, 0) = 0 then coalesce((select jsonb_agg(l.x order by l.qty, l.title, l.id) from (
-               select jsonb_build_object('id', id, 'title', title, 'sku', sku, 'part_no', part_no, 'qty', qty, 'price', price, 'branch_name', branch_name) x, qty, title, id
+               select jsonb_build_object('id', id, 'title', title, 'sku', sku, 'part_no', part_no, 'maker', maker, 'qty', qty, 'price', price, 'branch_name', branch_name) x, qty, title, id
                from base where qty between 1 and v_low order by qty, title, id limit 10) l), '[]'::jsonb) end,
     'out_items', case when coalesce(p_offset, 0) = 0 then coalesce((select jsonb_agg(o.x order by o.title, o.id) from (
                select jsonb_build_object('id', id, 'title', title, 'sku', sku, 'part_no', part_no, 'branch_name', branch_name) x, title, id
@@ -1170,7 +1177,7 @@ begin
     'total', (select count(*) from hit),
     'items', coalesce((select jsonb_agg(t.x order by t.rn) from (
                select row_number() over (order by case when p_filter = 'low' then qty end nulls first, title, id) rn, jsonb_build_object('id', id, 'title', title, 'sku', sku, 'part_no', part_no, 'barcode', barcode,
-                        'qty', qty, 'price', price, 'cost', case when v_costs then cost end, 'branch_name', branch_name) x
+                        'maker', maker, 'make', make, 'model', model, 'qty', qty, 'price', price, 'cost', case when v_costs then cost end, 'branch_name', branch_name) x
                from hit order by case when p_filter = 'low' then qty end nulls first, title, id limit least(greatest(coalesce(p_limit, 50), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) t), '[]'::jsonb),
     'moves', case when public.has_perm('products') or public.has_perm('reports') then coalesce((select jsonb_agg(jsonb_build_object('id', m.id, 'title', m.title, 'qty', m.qty,
                'reason', m.reason, 'note', m.note, 'staff_name', m.staff_name, 'created_at', m.created_at, 'value', case when v_costs then m.qty * m.cost end) order by m.created_at desc, m.id desc)
@@ -1897,7 +1904,7 @@ begin
       status = case when qty is not null and qty - v_qty <= 0 then 'sold' else status end
     where id = v_p.id;
     v_sub := v_sub + v_p.price * v_qty; v_units := v_units + v_qty;
-    v_lines := v_lines || jsonb_build_object('product_id', v_p.id, 'sku', coalesce(v_p.sku, nullif(v_p.part_no, '')), 'title', v_p.title,
+    v_lines := v_lines || jsonb_build_object('product_id', v_p.id, 'sku', coalesce(v_p.sku, nullif(v_p.part_no, '')), 'title', v_p.title, 'maker', v_p.maker,
                                              'qty', v_qty, 'price', v_p.price, 'cost', v_p.cost, 'line_total', v_p.price * v_qty);
     v_branch := coalesce(v_branch, v_p.shop_id);
   end loop;
@@ -1907,8 +1914,8 @@ begin
   values (v_branch, null, '', v_me, v_name, v_phone, v_sub, 0, v_sub, 0, 'cash', coalesce(v_cur, 'LYD'), left(btrim(coalesce(p->>'note', '')), 500),
           'preparing', 'app', now(), v_del, case when v_del = 'delivery' then left(v_addr, 300) else '' end)
   returning id, no into v_id, v_no;
-  insert into public.invoice_items (invoice_id, product_id, sku, title, qty, price, cost, line_total)
-  select v_id, (x->>'product_id')::uuid, x->>'sku', x->>'title', (x->>'qty')::integer, (x->>'price')::numeric, (x->>'cost')::numeric, (x->>'line_total')::numeric
+  insert into public.invoice_items (invoice_id, product_id, sku, title, maker, qty, price, cost, line_total)
+  select v_id, (x->>'product_id')::uuid, x->>'sku', x->>'title', coalesce(x->>'maker', ''), (x->>'qty')::integer, (x->>'price')::numeric, (x->>'cost')::numeric, (x->>'line_total')::numeric
   from jsonb_array_elements(v_lines) x;
   perform public.log_act('order', v_id::text, v_name, v_sub, jsonb_build_object('no', v_no, 'units', v_units, 'lines', jsonb_array_length(v_lines), 'delivery', v_del));
   return public.my_order(v_id);
@@ -2079,7 +2086,7 @@ language sql stable security definer set search_path = public as $$
            'customer_name', i.customer_name, 'customer_phone', i.customer_phone, 'subtotal', i.subtotal, 'discount', i.discount, 'total', i.total,
            'paid', i.paid, 'payment', i.payment, 'currency', i.currency, 'note', i.note, 'staff_name', i.staff_name,
            'branch', (select jsonb_build_object('name', s.name, 'city', s.city, 'phone', s.phone) from public.shops s where s.id = i.branch_id),
-           'items', coalesce((select jsonb_agg(jsonb_build_object('title', it.title, 'sku', it.sku, 'qty', it.qty, 'price', it.price, 'line_total', it.line_total) order by it.id)
+           'items', coalesce((select jsonb_agg(jsonb_build_object('title', it.title, 'sku', it.sku, 'maker', it.maker, 'qty', it.qty, 'price', it.price, 'line_total', it.line_total) order by it.id)
                               from public.invoice_items it where it.invoice_id = i.id), '[]'::jsonb))
   from public.merchant_invoices(auth.uid()) i where i.id = p_id and auth.uid() is not null;
 $$;

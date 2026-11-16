@@ -603,7 +603,9 @@
     title: ['name', 'item name', 'item', 'title', 'description', 'اسم الصنف', 'الصنف', 'اسم الماده', 'الاسم', 'البيان', 'الوصف', 'الماده', 'اسم القطعه', 'القطعه'],
     price: ['price', 'sale price', 'selling price', 'retail price', 'سعر', 'السعر', 'سعر البيع', 'سعر المستهلك', 'سعر القطاعي'],
     qty: ['qty', 'quantity', 'stock', 'balance', 'on hand', 'الكميه', 'الرصيد', 'المخزون', 'الكميه المتوفره', 'الموجود', 'العدد'],
-    make: ['brand', 'make', 'manufacturer', 'الماركه', 'نوع السياره', 'الشركه المصنعه', 'المصنع', 'السياره'],
+    make: ['brand', 'make', 'car', 'الماركه', 'نوع السياره', 'السياره'],
+    /* the company that made the part (Mobis, Denso…), not the car */
+    maker: ['maker', 'manufacturer', 'mfr', 'الشركه', 'الشركه المصنعه', 'الشركه الصانعه', 'المصنع'],
     model: ['model', 'الموديل', 'الطراز'],
     part_no: ['oem', 'part number', 'part no', 'partno', 'oem no', 'oem number', 'رقم القطعه', 'رقم المصنع', 'الرقم الاصلي', 'رقم الوكاله'],
     cat: ['category', 'group', 'القسم', 'المجموعه', 'الفئه', 'التصنيف']
@@ -630,11 +632,12 @@
     return rows.slice(det.row + 1).map(r => {
       const bc = g(r, 'barcode'), o = { sku: det.map.sku != null ? g(r, 'sku') : bc, title: g(r, 'title') };
       if (bc) o.barcode = bc.replace(/\s/g, '');
-      const pr = g(r, 'price'), qt = g(r, 'qty'), mk = g(r, 'make'), md = g(r, 'model'), pn = g(r, 'part_no'), ct = g(r, 'cat');
+      const pr = g(r, 'price'), qt = g(r, 'qty'), mk = g(r, 'make'), md = g(r, 'model'), pn = g(r, 'part_no'), ct = g(r, 'cat'), mf = g(r, 'maker');
       if (pr !== undefined && pr !== '') o.price = SP.digits(pr).replace(/[^\d.,-]/g, '');
       if (qt !== undefined && qt !== '') o.qty = SP.digits(qt).replace(/[^\d.,-]/g, '');
       if (mk) o.make = SP.VIN.matchBrand(mk) || BRAND_AR.get(SP.norm(mk)) || '';
       if (md !== undefined) o.model = md;
+      if (mf !== undefined) o.maker = mf.slice(0, 60);
       if (pn) o.part_no = pn.toUpperCase();
       if (ct) o.cat = catOf(ct);
       return o;
@@ -675,7 +678,7 @@ Content-Type: application/json
       try {
         const rows = await readSheet(f), det = detectColumns(rows);
         if (!det || (det.map.sku == null && det.map.barcode == null)) { stat.textContent = t('importNoSku'); return; }
-        const names = Object.keys(det.map).map(k => ({ sku: 'SKU', title: t('partName'), price: t('priceCur', { cur: '' }).replace(/[()（）\s]+$/, ''), qty: t('qty'), make: t('brand'), model: t('model'), part_no: t('partNo'), cat: t('category'), barcode: t('barcodeL') }[k]));
+        const names = Object.keys(det.map).map(k => ({ sku: 'SKU', title: t('partName'), price: t('priceCur', { cur: '' }).replace(/[()（）\s]+$/, ''), qty: t('qty'), make: t('brand'), model: t('model'), part_no: t('partNo'), cat: t('category'), barcode: t('barcodeL'), maker: t('makerL') }[k]));
         const data = toRows(rows, det), sum = { inserted: 0, updated: 0, skipped: 0, errors: 0 };
         for (let i = 0; i < data.length; i += 500) {
           stat.textContent = t('importing', { n: SP.fmtNum(Math.min(i + 500, data.length)) + ' / ' + SP.fmtNum(data.length) });
@@ -695,8 +698,8 @@ Content-Type: application/json
           all.push(...r.items);
           if (r.items.length < 60) break;
         }
-        const head = ['sku', 'barcode', 'title', 'price', 'qty', 'status', 'make', 'model', 'y_from', 'y_to', 'part_no', 'cat', 'cond', 'hide_price', 'branch', 'city'];
-        const lines = [head.join(',')].concat(all.map(p => [p.sku, p.barcode, p.title, p.price, p.qty, p.status, p.make, p.model, p.y_from, p.y_to, p.part_no, p.cat, p.cond, p.hide_price ? 1 : 0, p.shop && p.shop.name, p.shop && p.shop.city].map(csvCell).join(',')));
+        const head = ['sku', 'barcode', 'title', 'price', 'qty', 'status', 'maker', 'make', 'model', 'y_from', 'y_to', 'part_no', 'cat', 'cond', 'hide_price', 'branch', 'city'];
+        const lines = [head.join(',')].concat(all.map(p => [p.sku, p.barcode, p.title, p.price, p.qty, p.status, p.maker, p.make, p.model, p.y_from, p.y_to, p.part_no, p.cat, p.cond, p.hide_price ? 1 : 0, p.shop && p.shop.name, p.shop && p.shop.city].map(csvCell).join(',')));
         download('parts-' + new Date().toISOString().slice(0, 10) + '.csv', lines.join('\r\n'));
         SP.toast(t('exported', { n: SP.fmtNum(all.length) }));
       } catch (x) { SP.toast(SP.errText(x)); } finally { b.classList.remove('busy'); }

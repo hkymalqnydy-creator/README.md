@@ -187,7 +187,7 @@
     const row = p => {
       const q = p.qty, cls = q === 0 ? 'out' : q != null && q <= low ? 'low' : '';
       return `<button type="button" class="arow stk-row" data-id="${esc(p.id)}"${edit ? '' : ' disabled'}><span class="qty-chip ${cls} num" title="${esc(t('posQty'))}">${q == null ? '—' : esc(SP.fmtNum(q))}</span>
-        <span class="ar-main"><b>${esc(p.title)}</b><small>${[p.sku || p.part_no, p.branch_name].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small></span>
+        <span class="ar-main"><b>${esc(p.title)}</b><small>${[p.sku || p.part_no, SP.makerModel(p), p.branch_name].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small></span>
         <span class="stk-val">${p.price != null ? `<b class="num">${esc(money(p.price))}</b>` : ''}${costs && p.cost != null ? `<small class="num">${esc(t('stkCostIs', { m: money(p.cost) }))}</small>` : ''}</span></button>`;
     };
     /* first on the page: what is running low (the fewest left first, how many are left) and how many have run out */
@@ -199,7 +199,7 @@
           <button type="button" class="sa-num out${no ? '' : ' zero'}" data-goto="out"><b class="num">${esc(SP.fmtNum(no))}</b><span>${esc(t('stkOut'))}</span></button></div>
         ${L.length ? `<ul class="sa-list">${L.slice(0, 6).map(p => `<li><button type="button" class="sa-row" data-low="${esc(p.id)}"${edit ? '' : ' disabled'}>
             <span class="sa-left"><small>${esc(t('stkLeft'))}</small><b class="num">${esc(SP.fmtNum(p.qty))}</b></span>
-            <span class="ar-main"><b>${esc(p.title)}</b><small>${[p.sku || p.part_no, p.branch_name].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small>
+            <span class="ar-main"><b>${esc(p.title)}</b><small>${[p.sku || p.part_no, p.maker, p.branch_name].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small>
               <span class="sa-bar" aria-hidden="true"><i style="width:${Math.max(8, Math.round(100 * p.qty / Math.max(1, low)))}%"></i></span></span>${edit ? I('plus', 'sa-add') : ''}</button></li>`).join('')}</ul>` : ''}
         <p class="sa-foot"><span>${esc(t('stkLowWhat', { n: SP.fmtNum(low) }))}${edit && L.length ? ' · ' + esc(t('stkTapAdd')) : ''}</span>${nl > 6 ? `<button type="button" class="linkbtn" data-goto="low">${esc(t('stkLowSee', { n: SP.fmtNum(nl) }))}</button>` : ''}</p>
         ${no ? `<p class="sa-out">${I('box')}<span>${esc(t('stkOutNames', { l: O.slice(0, 4).map(p => p.title).join('، ') + (no > 4 ? ' ' + t('stkAndMore', { n: SP.fmtNum(no - Math.min(4, O.length)) }) : '') }))}</span>

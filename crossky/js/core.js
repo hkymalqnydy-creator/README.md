@@ -322,17 +322,19 @@
     const p = {
       id: r.id, shop_id: r.shop_id, owner_id: r.owner_id, title: r.title || '', cat: r.cat || 'other', cond: r.cond || 'aftermarket',
       price: r.price == null ? null : Number(r.price), price_hidden: !!r.price_hidden, hide_price: !!r.hide_price, cost: r.cost == null ? null : Number(r.cost), sku: r.sku || '', barcode: r.barcode || '', nego: !!r.nego, qty: r.qty == null ? null : +r.qty,
-      make: r.make || 'any', model: r.model || '', y_from: r.y_from || null, y_to: r.y_to || null, part_no: r.part_no || '',
+      make: r.make || 'any', model: r.model || '', y_from: r.y_from || null, y_to: r.y_to || null, part_no: r.part_no || '', maker: r.maker || '',
       descr: r.descr || '', imgs: arr(r.imgs), status: r.status || 'active', created_at: ms(r.created_at),
       shop: r.shop ? normShop(r.shop, true) : (S.scache.get(r.shop_id) || null)
     };
     S.pcache.set(p.id, p);
     return p;
   }
+  /* the company that made a part and the car it fits («موبيس · هيونداي أكسنت»), for the sales system's lists */
+  const makerModel = p => [p && p.maker, p && p.make && p.make !== 'any' && p.make !== 'other' ? carText({ make: p.make, model: p.model }) : p && p.model].filter(Boolean).join(' · ');
   /* Words for the search index: title, numbers, brand and model in Arabic and Latin, category and condition in all languages. */
   function searchText(p) {
     const b = BRAND.get(p.make), m = modelObj(p.make, p.model);
-    const parts = [p.title, p.part_no, p.part_no ? p.part_no.replace(/[\s\-./]/g, '') : '', p.sku, p.sku ? String(p.sku).replace(/[\s\-./]/g, '') : '', p.barcode, p.model, m && m.ar, b && b.en, b && b.ar, p.descr];
+    const parts = [p.title, p.part_no, p.part_no ? p.part_no.replace(/[\s\-./]/g, '') : '', p.sku, p.sku ? String(p.sku).replace(/[\s\-./]/g, '') : '', p.barcode, p.maker, p.model, m && m.ar, b && b.en, b && b.ar, p.descr];
     (L.CAT[p.cat] || []).forEach(r => parts.push(r[0]));
     (L.COND[p.cond] || []).forEach(r => parts.push(r[1]));
     return norm(parts.filter(Boolean).join(' ')).slice(0, 3000);
@@ -629,7 +631,7 @@
     COUNTRY, BRAND, flag, currencyOf, dialOf, setLang, t, fmtNum, plural, count, countryName, priceHTML, priceText, ago,
     brandName, brandMark, modelObj, modelName, carText, catName, condName, fitText, fitsCar, waNum, waLink, telHref, prettyPhone, phoneLogin, isPhoneLogin, loginShown,
     setCountry, setCity, setCar, toggleFav, toast, openSheet, confirmSheet, errText, api, auth, refreshUser, searchArgs, queryParts, searchText,
-    hiddenLabel, brandsList, popularIds, applyBranding, cart, company: CFG.mode === 'company',
+    hiddenLabel, brandsList, popularIds, applyBranding, cart, company: CFG.mode === 'company', makerModel,
     uploadPhoto, removePhotos, thumbUrl, imgTag, route, render, go, here, alive, done, install, isIOS, standalone, boot, siteUrl, loadScript, saveFile
   });
 })();

@@ -68,6 +68,10 @@
     SP.done(n);
   }, { tab: 'mine' });
 
+  /* the usual companies for Korean and Japanese parts, offered while typing the manufacturer (anything else can be typed) */
+  const MAKERS = ['موبيس', 'دنسو', 'ماندو', 'سانغ شين', 'إن جي كي', 'كيه واي بي', 'إكسيدي', 'كويتو', 'أيسين', 'بوش', 'فاليو', 'فارتا',
+    'تويوتا أصلي', 'نيسان أصلي', 'هيونداي أصلي', 'كيا أصلي', 'ميتسوبيشي أصلي', 'هوندا أصلي', 'مازدا أصلي'];
+
   /* ---------- sign in / sign up ---------- */
   SP.route(/^(login|signup)$/, (m, n) => {
     if (gate(n)) return;
@@ -251,7 +255,7 @@
     if (!SP.alive(n)) return;
     if (!s) return shell(bar(t('itemNew')) + `<main class="wrap">${empty('store', t('shopMissingT'), t('shopMissingB'))}</main>`);
     if (s.owner_id !== S.user.id && !S.admin && !(SP.can && SP.can('products'))) return noPerm(t('noPermPart'));
-    const v = p ? { ...p } : { title: '', cat: '', cond: '', price: null, nego: false, qty: null, make: 'any', model: '', y_from: null, y_to: null, part_no: '', descr: '', imgs: [], sku: '', barcode: '', hide_price: false };
+    const v = p ? { ...p } : { title: '', cat: '', cond: '', price: null, nego: false, qty: null, make: 'any', model: '', y_from: null, y_to: null, part_no: '', maker: '', descr: '', imgs: [], sku: '', barcode: '', hide_price: false };
     let imgs = v.imgs.slice(), pending = 0;
     const cur = s.currency || SP.currencyOf(s.country);
     shell(bar(t(editId ? 'itemEdit' : 'itemNew')) + `<main class="wrap form-wrap">
@@ -276,6 +280,8 @@
           <div class="row2"><div class="field"><label for="iyf">${esc(t('fromYear'))}</label><select id="iyf" class="input"></select></div><div class="field"><label for="iyt">${esc(t('toYear'))}</label><select id="iyt" class="input"></select></div></div>
           <span class="hint" id="iprod"></span></fieldset>
         <div class="field"><label for="ipn">${esc(t('partNo'))}</label><input id="ipn" class="input mono" dir="ltr" maxlength="60" value="${esc(v.part_no)}" autocapitalize="characters" spellcheck="false"><span class="hint">${esc(t('partNoHint'))}</span></div>
+        <div class="field"><label for="imk">${esc(t('makerL'))}</label><input id="imk" class="input" maxlength="60" value="${esc(v.maker || '')}" list="imkl" autocomplete="off" placeholder="${esc(t('makerPh'))}">
+          <datalist id="imkl">${MAKERS.map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist></div>
         <div class="field"><label for="id">${esc(t('moreDetails'))}</label><textarea id="id" class="input" maxlength="1200" placeholder="${esc(t('moreDetailsPh'))}">${esc(v.descr)}</textarea></div>
         <p class="form-err" id="ierr" role="alert"></p>
         <div class="form-actions"><button class="btn btn-signal" id="igo">${I('check')} ${esc(t(editId ? 'saveChanges' : 'publish'))}</button>
@@ -350,7 +356,7 @@
       const val = {
         shop_id: s.id, title, cat, cond, price, qty, nego: $('#ing').checked, make,
         model: make === 'any' ? '' : (make === 'other' ? mx.value.trim() : modelVal()).slice(0, 60),
-        y_from: yFrom, y_to: yTo, part_no: $('#ipn').value.trim().toUpperCase(), descr: $('#id').value.trim(), imgs: imgs.slice(0, 6)
+        y_from: yFrom, y_to: yTo, part_no: $('#ipn').value.trim().toUpperCase(), maker: $('#imk').value.trim().slice(0, 60), descr: $('#id').value.trim(), imgs: imgs.slice(0, 6)
       };
       if ($('#isku')) { val.sku = $('#isku').value.trim() || null; val.barcode = $('#ibar').value.trim() || null; val.hide_price = $('#ihp').checked; }
       if ($('#icost')) { const c = SP.digits($('#icost').value).replace(/[\s,]/g, '').trim(); val.cost = c === '' ? null : Number(c); if (val.cost != null && !(val.cost >= 0)) return bad(t('badPrice'), $('#icost')); }

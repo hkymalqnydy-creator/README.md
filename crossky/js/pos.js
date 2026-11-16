@@ -8,7 +8,7 @@
   const chk = r => { if (r && r.error) throw r.error; return r ? r.data : null; };
 
   Object.assign(SP.L.T, {
-    posT: ["منظومة المبيعات", "Sales system"], posSale: ["نقطة البيع", "Point of sale"], posSearchPh: ["اسم القطعة أو الكود أو الباركود…", "Part name, code or barcode…"],
+    posT: ["منظومة المبيعات", "Sales system"], posSale: ["نقطة البيع", "Point of sale"], posSearchPh: ["اسم، رقم صنف، باركود أو شركة…", "Name, item code, barcode or maker…"],
     posNoItems: ["ابحث عن قطعة وأضفها للفاتورة.", "Search for a part and add it to the invoice."], posPrice: ["السعر", "Price"], posQty: ["الكمية", "Qty"],
     posSubtotal: ["المجموع", "Subtotal"], posDiscount: ["الخصم", "Discount"], posTotal: ["الإجمالي", "Total"], posPaid: ["المدفوع", "Paid"], posRemain: ["المتبقي", "Balance due"],
     posCustomer: ["اسم الزبون (اختياري)", "Customer name (optional)"], posPhone: ["هاتف الزبون", "Customer phone"], posPay: ["طريقة الدفع", "Payment"],
@@ -128,7 +128,7 @@
     items.forEach(p => {
       const ex = st.lines.find(l => l.id === p.id);
       if (ex) ex.qty += p.qty || 1;
-      else st.lines.push({ id: p.id, title: p.title, sku: p.sku || '', price: p.price, base: p.base != null ? p.base : p.price, qty: p.qty || 1, stock: p.stock, cur: p.cur });
+      else st.lines.push({ id: p.id, title: p.title, sku: p.sku || '', mm: p.mm || SP.makerModel(p), price: p.price, base: p.base != null ? p.base : p.price, qty: p.qty || 1, stock: p.stock, cur: p.cur });
     });
     if (extra) ['cname', 'cphone', 'pay', 'discount', 'paid', 'note'].forEach(k => { if (extra[k] != null && extra[k] !== '') st[k] = extra[k]; });
     savePos(st);
@@ -154,7 +154,7 @@
     function add(p, quiet) {
       if (p.price == null && !SP.can('prices')) { SP.toast(t('posNoPrice', { t: p.title })); return false; }
       const ex = st.lines.find(l => l.id === p.id);
-      if (ex) ex.qty++; else st.lines.push({ id: p.id, title: p.title, sku: p.sku || p.part_no, price: p.price, base: p.price, qty: 1, stock: p.qty, cur: p.shop && p.shop.currency });
+      if (ex) ex.qty++; else st.lines.push({ id: p.id, title: p.title, sku: p.sku || p.part_no, mm: SP.makerModel(p), price: p.price, base: p.price, qty: 1, stock: p.qty, cur: p.shop && p.shop.currency });
       savePos(st); draw(); $('#pres').innerHTML = ''; $('#pq').value = '';
       if (!quiet) $('#pq').focus();
       return true;
@@ -169,7 +169,7 @@
         /* a barcode scanner types the full code and Enter: an exact item code, barcode or part number goes straight on the invoice */
         const k = codeKey(q), exact = r.items.filter(p => (p.sku && codeKey(p.sku) === k) || (p.barcode && codeKey(p.barcode) === k) || (p.part_no && codeKey(p.part_no) === k));
         if (exact.length === 1) return add(exact[0]);
-        $('#pres').innerHTML = r.items.length ? r.items.map(p => `<button type="button" class="pres-row" data-id="${p.id}"><span><b>${esc(p.title)}</b><small>${esc([p.sku || p.part_no, p.qty != null ? t('posInStock', { n: p.qty }) : ''].filter(Boolean).join(' · '))}</small></span>${SP.priceHTML(p.price, p.shop && p.shop.currency, p.price_hidden)}</button>`).join('')
+        $('#pres').innerHTML = r.items.length ? r.items.map(p => `<button type="button" class="pres-row" data-id="${p.id}"><span><b>${esc(p.title)}</b><small>${esc([p.sku || p.part_no, SP.makerModel(p), p.qty != null ? t('posInStock', { n: p.qty }) : ''].filter(Boolean).join(' · '))}</small></span>${SP.priceHTML(p.price, p.shop && p.shop.currency, p.price_hidden)}</button>`).join('')
           : `<p class="muted-p">${esc(t('noResT'))}</p>`;
         $('#pres').onclick = e => { const b = e.target.closest('[data-id]'); if (b) add(r.items.find(p => p.id === b.dataset.id)); };
       } catch (e) { if ($('#pres')) $('#pres').innerHTML = `<p class="form-err">${esc(SP.errText(e))}</p>`; }
@@ -194,7 +194,7 @@
     const listSum = () => st.lines.reduce((k, l) => k + (Number(l.base != null ? l.base : l.price) || 0) * l.qty, 0);
     function draw() {
       const cur = st.lines[0] ? curOf(st.lines[0]) : SP.currencyOf(S.country), tt = totals();
-      $('#plines').innerHTML = st.lines.length ? st.lines.map((l, i) => `<div class="pline" data-i="${i}"><span class="pl-main"><b>${esc(l.title)}</b><small>${esc([l.sku, l.stock != null ? t('posInStock', { n: l.stock }) : ''].filter(Boolean).join(' · '))}</small></span>
+      $('#plines').innerHTML = st.lines.length ? st.lines.map((l, i) => `<div class="pline" data-i="${i}"><span class="pl-main"><b>${esc(l.title)}</b><small>${esc([l.sku, l.mm, l.stock != null ? t('posInStock', { n: l.stock }) : ''].filter(Boolean).join(' · '))}</small></span>
           ${SP.can('prices') ? `<input class="input num pl-price" inputmode="decimal" dir="ltr" value="${l.price == null ? '' : esc(l.price)}" aria-label="${esc(t('posPrice'))}">` : `<span class="num pl-p">${esc(money(l.price, cur))}</span>`}
           <span class="stepper"><button type="button" data-d="-1" aria-label="−">−</button><b class="num">${l.qty}</b><button type="button" data-d="1" aria-label="+">+</button></span></div>`).join('')
         : `<p class="muted-p pos-empty">${esc(t('posNoItems'))}</p>`;
@@ -262,7 +262,7 @@
           <dl class="inv-meta"><div><dt>${esc(t('invDate'))}</dt><dd>${esc(when(v.created_at))}</dd></div><div><dt>${esc(t('invStaff'))}</dt><dd>${esc(v.staff_name || '—')}</dd></div>
             ${v.customer_name || v.customer_phone ? `<div><dt>${esc(t('custName'))}</dt><dd>${esc([v.customer_name, v.customer_phone].filter(Boolean).join(' · '))}</dd></div>` : ''}<div><dt>${esc(t('posPay'))}</dt><dd>${esc(t('pay_' + v.payment))}</dd></div></dl>
           <table class="inv-items"><thead><tr><th>${esc(t('invItem'))}</th><th>${esc(t('posQty'))}</th><th>${esc(t('posPrice'))}</th><th>${esc(t('posTotal'))}</th></tr></thead>
-            <tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.sku ? `<small class="mono">${esc(it.sku)}</small>` : ''}</td><td class="num">${it.qty}</td><td class="num">${esc(money(it.price, cur))}</td><td class="num">${esc(money(it.line_total, cur))}</td></tr>`).join('')}</tbody></table>
+            <tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.sku ? `<small class="mono">${esc(it.sku)}</small>` : ''}${it.maker ? `<small class="inv-mk">${esc(it.maker)}</small>` : ''}</td><td class="num">${it.qty}</td><td class="num">${esc(money(it.price, cur))}</td><td class="num">${esc(money(it.line_total, cur))}</td></tr>`).join('')}</tbody></table>
           <dl class="inv-tot">${+v.discount ? `<div><dt>${esc(t('posSubtotal'))}</dt><dd class="num">${esc(money(v.subtotal, cur))}</dd></div><div><dt>${esc(t('posDiscount'))}</dt><dd class="num">− ${esc(money(v.discount, cur))}</dd></div>` : ''}
             <div class="big"><dt>${esc(t('posTotal'))}</dt><dd class="num">${esc(money(v.total, cur))}</dd></div>
             ${v.payment === 'credit' ? `<div><dt>${esc(t('posPaid'))}</dt><dd class="num">${esc(money(v.paid, cur))}</dd></div><div><dt>${esc(t('posRemain'))}</dt><dd class="num">${esc(money(v.total - v.paid, cur))}</dd></div>` : ''}</dl>

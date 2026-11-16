@@ -28,3 +28,23 @@ select 'S6 the whole list stays by name (expect STK-3,STK-2,STK-1,STK-0,STK-50)'
 from public.stock_report('STK-') r;
 select 'S7 not repeated on the next pages (expect null, null)' t, r->'low_items' low, r->'out_items' outs from public.stock_report(null, 'all', 50, 50) r;
 reset role;
+
+-- the company that made the part (products.maker): imported, searched, on the Stock page, kept on the sold line
+set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+select 'S8 imported with its company and model (expect 1 inserted)' t, (r->>'inserted')::integer n
+from public.import_products('[{"sku":"MK-1","title":"فحمات أمامية","maker":"موبيس","make":"hyundai","model":"Tucson","qty":"7","price":"95"}]'::jsonb) r;
+reset role;
+select 'S9 saved, and in the search words (expect موبيس, Tucson, t)' t, maker, model, search_text like '%موبيس%' indexed from public.products where sku = 'MK-1';
+select 'S10 the catalog finds it by the company (expect فحمات أمامية, موبيس)' t, r->>'title' title, r->>'maker' maker
+from public.search_products(p_patterns => array['موبيس']) r where r->>'sku' = 'MK-1';
+set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+select 'S11 the Stock page finds it by the company and by the model (expect 1, 1, موبيس, Tucson)' t, (a->>'total')::integer by_maker, (b->>'total')::integer by_model,
+       a->'items'->0->>'maker' maker, a->'items'->0->>'model' model
+from public.stock_report('موبيس') a, public.stock_report('tucson') b;
+create temp table mk_sale as select (r->>'id')::uuid id from public.create_invoice(jsonb_build_object('items', jsonb_build_array(jsonb_build_object('id', (select id from public.products where sku = 'MK-1'), 'qty', 1)))) r;
+select 'S12 the sold line keeps the company (expect موبيس)' t, r->'items'->0->>'maker' maker from public.get_invoice((select id from mk_sale)) r;
+select 'S13 a sync changes the company and the search words follow (expect 1 updated)' t, (r->>'updated')::integer n
+from public.import_products('[{"sku":"MK-1","maker":"ماندو"}]'::jsonb) r;
+reset role;
+select 'S14 (expect ماندو, t, f)' t, maker, search_text like '%ماندو%' new_word, search_text like '%موبيس%' old_word from public.products where sku = 'MK-1';
+select 'S15 the old sale still says موبيس' t, maker from public.invoice_items where invoice_id = (select id from mk_sale);
