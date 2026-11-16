@@ -46,7 +46,7 @@
     staffMaxDisc: ["أقصى تخفيض ٪", "Most off, %"], staffMaxDiscHint: ["فاضي = بدون حد. يحسب التخفيض وتنزيل سعر القطعة مع بعض.", "Empty = no limit. Counts the discount and lower line prices together."],
     staffBadLimit: ["اكتب نسبة من 0 لـ 100، أو خليه فاضي", "Enter 0 to 100, or leave it empty"], staffLimitShort: ["لحد {n}٪ تخفيض", "up to {n}% off"]
   });
-  const PERMS = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings'];
+  const PERMS = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings', 'warehouse'];
   const PAYS = ['cash', 'card', 'transfer', 'credit'];
 
   /* ---------- permissions ---------- */
@@ -102,11 +102,13 @@
     pqPh: ["باركود، رقم صنف أو اسم القطعة…", "Barcode, item code or part name…"], pqScan: ["امسح الباركود", "Scan the barcode"],
     pqHint: ["اكتب أو امسح، وتطلعلك القطعة بسعرها والموجود منها.", "Type or scan to see the part with its price and what is in stock."],
     pqNone: ["ما لقيناش قطعة بـ «{q}».", "No part matches «{q}»."], pqPrice: ["سعر البيع", "Selling price"], pqNoPrice: ["بدون سعر", "No price"],
-    pqHidden: ["السعر مخفي على الزبائن", "Price hidden from customers"], pqSku: ["رقم الصنف", "Item code"], pqPart: ["رقم القطعة", "Part number"],
+    pqHidden: ["السعر مخفي على الزبائن", "Price hidden from customers"], pqSku: ["رقم الصنف", "Item code"], pqLoc: ["المكان في المخزن", "Where it is kept"], pqPart: ["رقم القطعة", "Part number"],
     pqBarcode: ["الباركود", "Barcode"], pqStock: ["الموجود", "In stock"], pqStockN: ["{n} قطعة · {b}", "{n} · {b}"], pqOut: ["خلصت", "Out of stock"],
     pqCat: ["القسم", "Section"], pqCond: ["الحالة", "Condition"], pqCost: ["سعر الشراء", "Cost"], pqGain: ["الربح في القطعة", "Profit per part"],
     pqSell: ["بيعها", "Sell it"], pqOpen: ["صفحة القطعة", "Part page"], pqEdit: ["عدّلها", "Edit"], pqAgain: ["استعلم عن قطعة ثانية", "Look up another part"]
   });
+  /* the invoices waiting in the warehouse, on their button (js/warehouse.js keeps the count) */
+  const pickBadge = h => h === 'picks' && +S.pickWaiting ? `<i class="nbadge">${esc(SP.fmtNum(+S.pickWaiting))}</i>` : '';
   SP.systemLink = () => SP.isStaff() ? `<a class="admin-entry sys-entry" href="#system">${I('sys')}<span><b>${esc(t('tabSystem'))}</b><small>${esc(t('sysB'))}</small></span>${I('chevL', 'dirx')}</a>` : '';
   SP.route(/^system$/, (m, n) => {
     if (gate(n)) return;
@@ -126,17 +128,19 @@
   /* the two things done most, first on the System tab: a sales invoice for a customer, a purchase invoice for what came in */
   SP.sysActs = () => {
     if (!SP.isStaff()) return '';
-    const a = [['pos', 'tag', 'posSale', 'sysSellSub', SP.can('sales')], ['receive', 'receipt', 'rcvT', 'sysBuySub', SP.can('purchases')]].filter(x => x[4]);
+    const a = [['pos', 'tag', 'posSale', 'sysSellSub', SP.can('sales')], ['receive', 'receipt', 'rcvT', 'sysBuySub', SP.can('purchases')],
+      ['picks', 'box', 'pkT', 'pkSub', !!SP.pickCan && SP.pickCan() && !SP.can('sales') && !SP.can('purchases')]].filter(x => x[4]);
     return (a.length ? `<nav class="sys-acts${a.length === 1 ? ' one' : ''}" aria-label="${esc(t('posT'))}">${a.map(([h, ic, k, sub], i) =>
-      `<a class="sys-act${i ? '' : ' main'}" href="#${h}"><span class="sa-ic">${I(ic)}</span><b>${esc(t(k))}</b><small>${esc(t(sub))}</small></a>`).join('')}</nav>` : '')
+      `<a class="sys-act${i ? '' : ' main'}" href="#${h}"><span class="sa-ic">${I(ic)}</span><b>${esc(t(k))}</b><small>${esc(t(sub))}</small>${pickBadge(h)}</a>`).join('')}</nav>` : '')
       + `<a class="sys-look" href="#lookup">${I('search')}<span>${esc(t('pqBar'))}</span>${I('scan')}</a>`
       + (SP.aiVoiceOk && SP.aiVoiceOk() ? `<button type="button" class="sys-look sys-voice" id="sysvoice">${I('mic')}<span>${esc(t('aiVoiceBar'))}</span>${I('spark')}</button>` : '');
   };
   SP.posEntry = () => {
     if (!SP.isStaff()) return '';
     const tiles = [['orders', 'bag', 'ordT', SP.company && !!SP.ordPill && (SP.can('sales') || SP.can('invoices'))], ['invoices', 'copy', 'invList', SP.can('sales') || SP.can('invoices')],
+      ['picks', 'box', 'pkT', !!SP.pickCan && SP.pickCan() && (SP.can('sales') || SP.can('purchases'))],
       ['purchases', 'box', 'purT', SP.can('purchases') || SP.can('reports')], ['reports', 'grid', 'repT', SP.can('reports')], ['staff', 'user', 'staffT', S.admin]]
-      .filter(x => x[3]).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('');
+      .filter(x => x[3]).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span>${pickBadge(h)}</a>`).join('');
     return tiles ? `<section class="mcard"><h2 class="lbl">${esc(t('posT'))}</h2><div class="pos-grid">${tiles}</div></section>` : '';
   };
 
@@ -153,13 +157,13 @@
     let shown = [];
     const card = p => {
       const cur = p.shop && p.shop.currency, mm = SP.makerModel(p), out = p.qty != null && p.qty <= 0, gain = p.price != null && p.cost != null ? p.price - p.cost : null;
-      const rowv = (k, v, cls) => v == null || v === '' ? '' : `<div class="pl-row${cls ? ' ' + cls : ''}"><span>${esc(t(k))}</span><b${/^lk(Sku|Part|Barcode)$/.test(k) ? ' class="mono" dir="ltr"' : ''}>${esc(v)}</b></div>`;
+      const rowv = (k, v, cls) => v == null || v === '' ? '' : `<div class="pl-row${cls ? ' ' + cls : ''}"><span>${esc(t(k))}</span><b${/^pq(Sku|Part|Barcode)$/.test(k) ? ' class="mono" dir="ltr"' : ''}>${esc(v)}</b></div>`;
       const sell = SP.can('sales') && p.price != null && !out;
       return `<section class="mcard pq-card"><div class="pq-head">${p.imgs && p.imgs[0] ? `<span class="pq-img">${SP.imgTag(p.imgs[0], '', p.title, true)}</span>` : ''}
           <span class="pq-name"><b>${esc(p.title)}</b>${mm ? `<small>${esc(mm)}</small>` : ''}</span></div>
         <div class="pq-price"><small>${esc(t('pqPrice'))}</small><b class="num">${esc(p.price == null ? t('pqNoPrice') : money(p.price, cur))}</b>${p.hide_price ? `<span class="pill demo">${esc(t('pqHidden'))}</span>` : ''}</div>
         <div class="pq-rows">${rowv('pqStock', p.qty == null ? '' : out ? t('pqOut') : t('pqStockN', { n: SP.fmtNum(p.qty), b: (p.shop && p.shop.name) || '' }), out ? 'bad' : '')}
-          ${rowv('pqSku', p.sku)}${p.part_no && codeKey(p.part_no) !== codeKey(p.sku) ? rowv('pqPart', p.part_no) : ''}${rowv('pqBarcode', p.barcode)}
+          ${rowv('pqLoc', p.location)}${rowv('pqSku', p.sku)}${p.part_no && codeKey(p.part_no) !== codeKey(p.sku) ? rowv('pqPart', p.part_no) : ''}${rowv('pqBarcode', p.barcode)}
           ${rowv('pqCat', p.cat ? SP.catName(p.cat) : '')}${rowv('pqCond', p.cond ? SP.condName(p.cond) : '')}
           ${costs && p.cost != null && !(SP.sysHidden && SP.sysHidden()) ? rowv('pqCost', money(p.cost, cur)) + (gain != null ? rowv('pqGain', (gain < 0 ? '− ' : '') + money(Math.abs(gain), cur) + (p.price ? ' (' + Math.round(100 * gain / p.price) + '٪)' : ''), gain < 0 ? 'bad' : 'good') : '') : ''}</div>
         <div class="form-actions pq-acts">${sell ? `<button type="button" class="btn btn-signal" id="pqsell">${I('tag')} ${esc(t('pqSell'))}</button>` : ''}
@@ -388,6 +392,7 @@
     const draw = v => {
       shell(bar(t('invT', { n: v.no }), canPrint ? `<button type="button" class="iconbtn" onclick="window.print()" aria-label="${esc(t('invPrint'))}">${I('copy')}</button>` : '') + `<main class="wrap invoice-wrap">
         ${SP.invoiceDoc(v)}
+        ${v.pick_state && v.status !== 'returned' && v.status !== 'cancelled' ? `<div class="banner ${v.pick_state === 'done' ? 'note' : 'warn'} noprint">${I('box')}<span>${esc(t(v.pick_state === 'done' ? 'pkInv_done' : 'pkInv_waiting', { p: v.picked_name || '' }))}</span></div>` : ''}
         ${v.source === 'app' && SP.ordPill ? `<div class="banner note noprint">${I('bag')}<span>${esc(t('ordFromApp'))} ${SP.ordPill(v.status)}${v.status !== 'done' && v.status !== 'returned' ? `<small>${esc(t('ordInvBanner', { s: t('ordFromApp') }).split(': ').slice(1).join(': '))}</small>` : ''}</span><a class="btn btn-ghost sm" href="#order-${esc(v.id)}">${esc(t('ordOpenOrder'))}</a></div>` : ''}
         ${SP.sendPanel ? SP.sendPanel(v) : ''}
         <div class="form-actions noprint">${canPrint ? `<button type="button" class="btn btn-ink" onclick="window.print()">${I('copy')} ${esc(t('invPrint'))}</button>` : ''}

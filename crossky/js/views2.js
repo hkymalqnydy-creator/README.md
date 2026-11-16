@@ -274,7 +274,8 @@
         ${S.admin || (SP.can && SP.can('costs')) ? `<div class="field"><label for="icost">${esc(t('costL'))}</label><input id="icost" class="input num" inputmode="decimal" dir="ltr" maxlength="12" value="${v.cost == null ? '' : esc(v.cost)}"><span class="hint">${esc(t('costHint'))}</span></div>` : ''}
         <div class="field"><label for="isku">${esc(t('skuL'))}</label><input id="isku" class="input mono" dir="ltr" maxlength="60" value="${esc(v.sku || '')}" spellcheck="false"><span class="hint">${esc(t('skuHint'))}</span></div>
         <div class="field"><label for="ibar">${esc(t('barcodeL'))}</label><div class="inrow"><input id="ibar" class="input mono" dir="ltr" maxlength="60" value="${esc(v.barcode || '')}" spellcheck="false" autocomplete="off">
-          <button type="button" class="btn btn-ink sq" id="ibarscan" aria-label="${esc(t('scanBtn'))}" title="${esc(t('scanBtn'))}">${I('scan')}</button></div><span class="hint">${esc(t('barcodeHint'))}</span></div>` : ''}
+          <button type="button" class="btn btn-ink sq" id="ibarscan" aria-label="${esc(t('scanBtn'))}" title="${esc(t('scanBtn'))}">${I('scan')}</button></div><span class="hint">${esc(t('barcodeHint'))}</span></div>
+        <div class="field"><label for="iloc">${esc(t('locL'))}</label><input id="iloc" class="input" maxlength="60" value="${esc(v.location || '')}" placeholder="${esc(t('locPh'))}"><span class="hint">${esc(t('locHint'))}</span></div>` : ''}
         <fieldset class="field fitset"><legend>${esc(t('fitsQ'))}</legend>
           <select id="imake" class="input" aria-label="${esc(t('brand'))}">${SP.brandOptions(v.make, null, opt('any', t('anyCar'), v.make) + opt('other', t('otherBrand'), v.make))}</select>
           <select id="imodel" class="input" aria-label="${esc(t('model'))}"></select>
@@ -361,6 +362,7 @@
         y_from: yFrom, y_to: yTo, part_no: $('#ipn').value.trim().toUpperCase(), maker: $('#imk').value.trim().slice(0, 60), descr: $('#id').value.trim(), imgs: imgs.slice(0, 6)
       };
       if ($('#isku')) { val.sku = $('#isku').value.trim() || null; val.barcode = $('#ibar').value.trim() || null; val.hide_price = $('#ihp').checked; }
+      if ($('#iloc')) val.location = $('#iloc').value.trim().slice(0, 60);
       if ($('#icost')) { const c = SP.digits($('#icost').value).replace(/[\s,]/g, '').trim(); val.cost = c === '' ? null : Number(c); if (val.cost != null && !(val.cost >= 0)) return bad(t('badPrice'), $('#icost')); }
       const b = addAnother ? $('#iadd') : $('#igo');
       b.classList.add('busy');

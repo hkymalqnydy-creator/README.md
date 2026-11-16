@@ -351,7 +351,7 @@
   const saveR = v => { try { sessionStorage.setItem(RCV, JSON.stringify(v)); } catch (e) { /* private mode */ } };
   const lid = () => Math.random().toString(36).slice(2, 10);
   const money = (v, cur) => SP.priceText(Number(v || 0), cur || SP.currencyOf(S.country));
-  const matchOf = p => ({ id: p.id, title: p.title, qty: p.qty, sku: p.sku || '', part_no: p.part_no || '', barcode: p.barcode || '', price: p.price, cost: p.cost, cur: p.shop && p.shop.currency, mm: SP.makerModel(p) });
+  const matchOf = p => ({ id: p.id, title: p.title, qty: p.qty, sku: p.sku || '', part_no: p.part_no || '', barcode: p.barcode || '', price: p.price, cost: p.cost, cur: p.shop && p.shop.currency, mm: SP.makerModel(p), loc: p.location || '' });
   /* the assistant's «edit in Receive»: an invoice it read, opened in this page to change before entering (lines: {code, barcode, title, qty, cost, p}) */
   SP.rcvLoad = (lines, o) => {
     const st = loadR();
@@ -554,7 +554,7 @@
       $('#rhead').textContent = st.lines.length ? t('rcvLines', { n: st.lines.length }) : '';
       $('#rlines').innerHTML = st.lines.length ? st.lines.map(l => {
         const state = l.state === 'checking' ? `<span class="rl-state">${esc(t('rcvChecking'))}</span>`
-          : l.match ? `<span class="rl-state ok">${I('check')}<span><b>${esc(l.match.title)}</b><small>${esc([l.match.sku || l.match.part_no, l.match.mm, t('rcvMatched', { n: l.match.qty == null ? '—' : l.match.qty })].filter(Boolean).join(' · '))}</small></span></span>`
+          : l.match ? `<span class="rl-state ok">${I('check')}<span><b>${esc(l.match.title)}</b><small>${esc([l.match.sku || l.match.part_no, l.match.mm, t('rcvMatched', { n: l.match.qty == null ? '—' : l.match.qty })].filter(Boolean).join(' · '))}</small>${l.match.loc ? `<small class="rl-loc">${I('pin')} ${esc(l.match.loc)}</small>` : ''}</span></span>`
           : `<span class="rl-state new">${I('plus')}<span><b>${esc(t('rcvNew'))}</b>${l.src === 'photo' && l.title ? `<small>${esc(l.title)}</small>` : ''}</span></span>`;
         return `<div class="rline ${l.match ? 'ok' : l.state === 'checking' ? '' : 'new'}" data-k="${l.k}">
           <div class="rl-head">${state}<button type="button" class="iconbtn sm" data-a="pick" aria-label="${esc(t('rcvChange'))}">${I('edit')}</button><button type="button" class="iconbtn sm" data-a="del" aria-label="${esc(t('rcvDel'))}">${I('trash')}</button></div>
@@ -564,6 +564,7 @@
           ${!l.match && l.state !== 'checking' ? `<div class="rl-new"><label class="wide"><span>${esc(t('rcvName'))} <span class="req">*</span></span><input class="input" data-f="title" maxlength="120" value="${esc(l.title)}"></label>
             <label>${esc(t('category'))}<select class="input" data-f="cat">${D.CATS.map(c => opt(c.id, SP.catName(c.id), l.cat || 'other')).join('')}</select></label>
             <label>${esc(t('makerL'))}<input class="input" data-f="maker" maxlength="60" list="rmkl" autocomplete="off" placeholder="${esc(t('makerPh'))}" value="${esc(l.maker || '')}"></label>
+            <label>${esc(t('locL'))}<input class="input" data-f="location" maxlength="60" autocomplete="off" placeholder="${esc(t('locPh'))}" value="${esc(l.location || '')}"></label>
             ${canPrice ? `<label>${esc(t('rcvSell'))}<input class="input num" dir="ltr" inputmode="decimal" data-f="price" maxlength="12" value="${l.price == null ? '' : esc(l.price)}"></label>` : ''}</div>` : ''}
         </div>`;
       }).join('') + (st.lines.some(l => !l.match) ? `<datalist id="rmkl">${(SP.MAKERS || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist>` : '') : `<p class="muted-p pos-empty">${esc(t('rcvEmpty'))}</p>`;
@@ -651,7 +652,7 @@
         const r = await chk(await sb().rpc('receive_stock', { p: {
           branch: st.branch || null, supplier: (st.supplier || '').trim(), note: (st.note || '').trim(), ...(paid != null ? { paid } : {}), source, auto: !!o.auto,
           items: st.lines.map(l => l.match ? { product_id: l.match.id, qty: Number(l.qty), cost: l.cost }
-            : { part_no: l.code || '', barcode: l.barcode || '', title: l.title.trim(), qty: Number(l.qty), cost: l.cost, price: canPrice ? l.price : null, cat: l.cat || 'other', maker: String(l.maker || '').trim() })
+            : { part_no: l.code || '', barcode: l.barcode || '', title: l.title.trim(), qty: Number(l.qty), cost: l.cost, price: canPrice ? l.price : null, cat: l.cat || 'other', maker: String(l.maker || '').trim(), location: String(l.location || '').trim().slice(0, 60) })
         } }));
         sessionStorage.removeItem(RCV);
         if (o.auto) return entered(r, o.url);

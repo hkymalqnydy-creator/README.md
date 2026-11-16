@@ -312,7 +312,7 @@
   function badges() {
     const put = (el, v) => { if (!el) return; let b = el.querySelector('.nbadge'); if (!v) { if (b) b.remove(); return; } if (!b) { b = document.createElement('i'); b.className = 'nbadge'; el.appendChild(b); } b.textContent = SP.fmtNum(v); };
     const c = S.ordCounts || {};
-    put($('#tabs a[href="#system"]'), handles() ? +c.preparing || 0 : 0);
+    put($('#tabs a[href="#system"]'), (handles() ? +c.preparing || 0 : 0) + (SP.pickMine && SP.pickMine() ? +S.pickWaiting || 0 : 0)); // and, for the warehouse employee, the invoices waiting for him (js/warehouse.js)
     put($('.pos-tile[href="#orders"]'), handles() ? (+c.preparing || 0) + (+c.ready || 0) : 0);
     /* a customer's account tab: his orders ready to collect, and the invoices the company sent him that he has not opened (js/merchants.js) */
     put($('#tabs a[href="#mine"]'), !handles() ? (+S.ordMineReady || 0) + (+S.inboxNew || 0) : 0);

@@ -151,6 +151,7 @@
       case 'order_cancelled': return t(d.by === 'customer' ? 'lk_order_cancelled_c' : 'lk_order_cancelled', { no: d.no }) + (tt && d.by !== 'customer' ? ' · ' + tt : '');
       case 'invoice_sent': return t(d.again ? 'lk_invoice_sent_again' : 'lk_invoice_sent', { no: d.no, t: tt });
       case 'invoice_unsent': return t('lk_invoice_unsent', { no: d.no, t: tt || '—' });
+      case 'picked': return t('lk_picked', { no: d.no }) + (tt ? ' · ' + tt : '');
       default: return SP.L.T['lk_' + x.kind] ? t('lk_' + x.kind, { t: tt }) : x.kind;
     }
   }

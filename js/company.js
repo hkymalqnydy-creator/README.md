@@ -704,6 +704,7 @@
     make: ['brand', 'make', 'car', 'الماركه', 'نوع السياره', 'السياره'],
     /* the company that made the part (Mobis, Denso…), not the car */
     maker: ['maker', 'manufacturer', 'mfr', 'الشركه', 'الشركه المصنعه', 'الشركه الصانعه', 'المصنع'],
+    location: ['location', 'bin', 'shelf', 'place', 'المكان', 'مكان القطعه', 'مكانها', 'الموقع', 'الرف', 'مكان التخزين'],
     model: ['model', 'الموديل', 'الطراز'],
     part_no: ['oem', 'part number', 'part no', 'partno', 'oem no', 'oem number', 'رقم القطعه', 'رقم المصنع', 'الرقم الاصلي', 'رقم الوكاله'],
     cat: ['category', 'group', 'القسم', 'المجموعه', 'الفئه', 'التصنيف']
@@ -736,6 +737,7 @@
       if (mk) o.make = SP.VIN.matchBrand(mk) || BRAND_AR.get(SP.norm(mk)) || '';
       if (md !== undefined) o.model = md;
       if (mf !== undefined) o.maker = mf.slice(0, 60);
+      const lc = g(r, 'location'); if (lc !== undefined) o.location = lc.slice(0, 60);
       if (pn) o.part_no = pn.toUpperCase();
       if (ct) o.cat = catOf(ct);
       return o;
@@ -776,7 +778,7 @@ Content-Type: application/json
       try {
         const rows = await readSheet(f), det = detectColumns(rows);
         if (!det || (det.map.sku == null && det.map.barcode == null)) { stat.textContent = t('importNoSku'); return; }
-        const names = Object.keys(det.map).map(k => ({ sku: 'SKU', title: t('partName'), price: t('priceCur', { cur: '' }).replace(/[()（）\s]+$/, ''), qty: t('qty'), make: t('brand'), model: t('model'), part_no: t('partNo'), cat: t('category'), barcode: t('barcodeL'), maker: t('makerL') }[k]));
+        const names = Object.keys(det.map).map(k => ({ sku: 'SKU', title: t('partName'), price: t('priceCur', { cur: '' }).replace(/[()（）\s]+$/, ''), qty: t('qty'), make: t('brand'), model: t('model'), part_no: t('partNo'), cat: t('category'), barcode: t('barcodeL'), maker: t('makerL'), location: t('locL') }[k]));
         const data = toRows(rows, det), sum = { inserted: 0, updated: 0, skipped: 0, errors: 0 };
         for (let i = 0; i < data.length; i += 500) {
           stat.textContent = t('importing', { n: SP.fmtNum(Math.min(i + 500, data.length)) + ' / ' + SP.fmtNum(data.length) });

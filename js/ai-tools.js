@@ -65,7 +65,7 @@
   const period = v => PERIODS.includes(v) ? v : 'today';
 
   /* ---------- permissions: what the assistant may do for this person ---------- */
-  const ALL = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings'];
+  const ALL = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings', 'warehouse'];
   SP.aiPerms = () => S.admin ? ALL.slice() : (S.perms && S.perms.ai && Array.isArray(S.perms.ai_perms) ? S.perms.ai_perms.filter(p => (S.perms.perms || []).includes(p)) : []);
   SP.aiStaff = () => !!(S.admin || (S.perms && S.perms.staff && S.perms.ai));
   SP.aiAllowed = perm => {
@@ -206,7 +206,8 @@
     expenses: ['expenses', ['expenses', 'reports']], profit: ['pnl', { all: ['reports', 'costs'] }], staff: ['staff', 'admin'], admin: ['admin', 'admin'],
     controls: ['admin-control', 'admin'], activity: ['admin-log', 'admin'], bulk_prices: ['admin-prices', 'admin'], ads: ['admin-ads', 'admin'], company_settings: ['admin-company', 'admin'],
     customer_approvals: ['admin-customers', 'admin'], auto_reply: ['admin-bot', 'admin'], sync: ['admin-sync', 'admin'], assistant_settings: ['admin-ai', 'admin'],
-    orders: ['orders', ['sales', 'invoices'], true], my_orders: ['my-orders', null, true], lookup: ['lookup', 'staff'], shops: ['mshops', null, true]
+    orders: ['orders', ['sales', 'invoices'], true], my_orders: ['my-orders', null, true], lookup: ['lookup', 'staff'], shops: ['mshops', null, true],
+    picks: ['picks', 'warehouse']
   };
   tool({
     name: 'open_page', perm: null,
@@ -755,6 +756,7 @@
     ['order', null, 'طلب اطلب سلة توصيل استلام طلبي طلباتي', 'الطلب من التطبيق: زيد القطع لطلبك، وافتح السلة (#cart) واختار استلام من الفرع أو توصيل، واضغط «أكّد الطلب». يوصل للشركة «قيد التجهيز»، وبعدها «قيد الاستلام» لما يكون جاهز، وتتابعه في «طلباتي» (#my-orders). الدفع عند الاستلام، وتقدر تلغيه وهو قيد التجهيز.', 'Ordering in the app: add parts, open the basket (#cart), choose pickup or delivery and tap Place order. The company gets it “being prepared”, then “ready”; follow it in My orders (#my-orders). Pay when you receive it; you can cancel while it is being prepared.'],
     ['orders', ['sales', 'invoices'], 'طلبات الزبائن التطبيق جاهز تجهيز استلام سلم', 'طلبات الزبائن (#orders): الطلب يوصل «قيد التجهيز» ويطلع رقم على تبويب المنظومة. جهّز القطع واضغط «جاهز للاستلام»، ولما الزبون يستلم اضغط «تم الاستلام» واختار كيف دفع: تولي فاتورة بيع في المبيعات. «إلغاء الطلب» يرجّع القطع للمخزن.', 'Customer orders (#orders): an order arrives “being prepared” with a count on the System tab. Prepare it and tap Ready; when the customer receives it tap Received and choose how they paid: it becomes a sale. Cancel puts the parts back in stock.'],
     ['lookup', 'staff', 'استعلام سعر قطعه كم سعر معلومات باركود رقم صنف', 'استعلام سعر قطعة (#lookup، تحت زرّي «فاتورة بيع» و«فاتورة شراء» في المنظومة): امسح الباركود أو اكتب رقم الصنف أو اسم القطعة، وتطلعلك بسعرها والموجود منها وفرعها وشركتها، وسعر الشراء والربح لصاحب الصلاحية، و«بيعها» يفتح فاتورة بيع.', 'Look up a part (#lookup, under the sales and purchase invoice buttons on the System tab): scan the barcode or type the item code or name to see its price, stock, branch and maker, the cost and profit for those allowed, and «Sell it» starts a sales invoice.'],
+    ['picks', 'staff', 'تجهيز الفواتير المخزن موظف المخزن مكان القطعه رف خانه جهز', 'تجهيز الفواتير (#picks): كل فاتورة بيع أو طلب من التطبيق يوصل لموظف المخزن في «تستنى»، وفيه كل قطعة بمكانها في المخزن (الرف والخانة) وكميتها وأرقامها، مرتبة بالمكان. يعلّم على كل قطعة لما ياخذها (أو يمسح باركودها) ويضغط «تم التجهيز»، وتطلع في الفاتورة «تجهزت في المخزن» باسمه. مكان القطعة يتحط من صفحة القطعة («مكان القطعة في المخزن»)، أو في فاتورة الشراء للقطعة الجديدة، أو عمود «المكان» في ملف الإكسل. الصلاحية «تجهيز الفواتير في المخزن» يعطيها المدير من صفحة الموظفين.', 'Preparing invoices (#picks): every sale or app order waits for the warehouse employee with the shelf and bin of each part, its quantity and codes, sorted by place. He ticks each part as he takes it (or scans its barcode) and taps «Prepared»; the invoice then says who prepared it. A part\'s place is set on the part page, on a purchase invoice for a new part, or in a «location» column of the Excel import. The manager gives the permission «Prepare invoices in the warehouse» on the staff page.'],
     ['shops', null, 'محلات التجار محل تاجر المحلات', 'المحلات (#mshops، في الشاشة الرئيسية تحت «وصل حديثاً»): محلات التجار اللي تظهرهم الشركة، كل محل بمدينته وصفحته، والرقم لو التاجر اختار يظهره.', 'Shops (#mshops, on the home screen under New arrivals): the merchants’ shops the company shows, each with its city and page, and the number when the merchant shows it.'],
     ['barcode', 'staff', 'باركود كاميرا', 'الباركود: في فاتورة البيع وفاتورة الشراء زر الكاميرا يقرا الباركود، أو استعمل جهاز باركود (يكتب الرقم ويضغط Enter).', 'Barcodes: the camera button in the sales and purchase invoices reads them, or use a scanner.'],
     ['settings', 'admin', 'اعدادات الشركة الشعار الالوان', 'إعدادات الشركة (#admin-company): الاسم والشعار والألوان والنصوص وأرقام التواصل والتنبيه.', 'Company settings (#admin-company): name, logo, colours, texts, contacts and notice.'],

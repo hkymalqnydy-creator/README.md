@@ -80,6 +80,20 @@
     DB.customers.forEach(c => { c.shop_on = !!String(c.shop_name || '').trim(); c.phone_public = ['0925551234', '0913334455'].includes(c.phone); });
     demoCards(DB); DB.mshops = 1;
   }
+  /* the warehouse: a shelf and a bin for every part, يوسف who prepares the invoices, and the newest ones waiting for him */
+  function demoPicks(DB) {
+    const shelf = ['A', 'B', 'C', 'D'];
+    DB.products.forEach((p, i) => { if (!p.location) p.location = 'رف ' + shelf[i % 4] + (1 + (i % 5)) + ' · خانة ' + (2 + (i * 7) % 18); });
+    DB.invoices.filter(v => ['done', 'preparing', 'ready'].includes(v.status)).sort((x, y) => y.created_at.localeCompare(x.created_at)).slice(0, 3)
+      .forEach(v => { if (!v.pick_state) { v.pick_state = 'waiting'; v.picked_at = null; v.picked_name = ''; } });
+    const owner = DB.users.find(u => DB.admins.includes(u.id)), domain = ((owner && owner.email) || '@demo.app').split('@')[1], s1 = DB.shops[0];
+    if (!DB.staff.some(x => (x.perms || []).includes('warehouse')) && !DB.users.some(u => u.email === 'store@' + domain)) {
+      const u = { id: uuid(), email: 'store@' + domain, password: '123456' }; DB.users.push(u);
+      DB.staff.push({ id: uuid(), email: u.email, user_id: u.id, name: 'يوسف (المخزن)', perms: ['warehouse'], branch_id: s1 ? s1.id : null, active: true, max_discount: null,
+        created_at: new Date(Date.now() - 4000 * 60000).toISOString(), ai_on: false, ai_perms: [] });
+    }
+    DB.picks = 1;
+  }
   /* the shops' cards: two with a photo, the rest on one of the six backgrounds */
   function demoCards(DB) {
     const look = { '0925551234': ['img/parts/engine-oil.jpg', 'b1'], '0913334455': ['', 'b3'], '0926667788': ['img/parts/radiator.jpg', 'b5'], '0945556677': ['', 'b4'], '0947778899': ['', 'b6'] };
@@ -192,7 +206,7 @@
     cu('محمد سالم', 'محل سالم لقطع الغيار', '0947778899', 'بنغازي', false, 200);
     const sent = DB.invoices.find(v => v.customer_phone === '0925551234');
     if (sent) { sent.customer_id = nour; sent.sent_at = ago(50); }
-    demoShops(DB);
+    demoShops(DB); demoPicks(DB);
     DB.merchants = 1; DB.makers = 1;
     /* the activity log of everything above, as the database writes it (supabase/setup.sql section 12) */
     const L = [], who = id => id === owner.id ? email : (DB.staff.find(x => x.user_id === id) || {}).name || '';
@@ -255,6 +269,8 @@
     else if (!DB.mshops) DB.mshops = 1;
     if (!DB.mcards && opts.seed && CONF.mode === 'company' && DB.users.length > 0) demoCards(DB);
     else if (!DB.mcards) DB.mcards = 1;
+    if (!DB.picks && opts.seed && CONF.mode === 'company' && DB.users.length > 0) demoPicks(DB);
+    else if (!DB.picks) DB.picks = 1;
     /* every car brand in the world now: a demo saved with only the Korean and Japanese ones shows them all */
     if (!DB.allBrands) {
       DB.allBrands = 1;
@@ -273,7 +289,7 @@
     const uid = () => session && session.user.id;
     const isAdmin = () => !!uid() && DB.admins.includes(uid());
     const staffRow = () => DB.staff.find(x => x.user_id && x.user_id === uid() && x.active);
-    const PERMS_ALL = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings'];
+    const PERMS_ALL = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings', 'warehouse'];
     const aiAccess = () => {
       if (!uid()) return { ok: false, role: 'visitor' };
       if (isAdmin()) return { ok: true, role: 'admin', perms: PERMS_ALL.slice() };
@@ -535,11 +551,12 @@
         if (!p) {
           if (title.length < 2) { sum.skipped++; continue; }
           DB.products.push({ id: uuid(), shop_id: shop.id, owner_id: shop.owner_id, sku, barcode: bar, title, cat: cat || 'other', cond: 'original', price: price != null && price >= 0 ? price : null,
-            nego: false, qty, make: make || 'any', model: r.model || '', y_from: null, y_to: null, part_no: r.part_no || sku, maker: String(r.maker || '').trim().slice(0, 60), descr: '', imgs: [],
+            nego: false, qty, make: make || 'any', model: r.model || '', y_from: null, y_to: null, part_no: r.part_no || sku, maker: String(r.maker || '').trim().slice(0, 60), location: String(r.location || '').trim().slice(0, 60), descr: '', imgs: [],
             status: qty != null && qty <= 0 ? 'sold' : 'active', hide_price: false, search_text: '', created_at: now(), updated_at: now() });
           sum.inserted++;
         } else {
           if (title.length >= 2) p.title = title;
+          if ('location' in r) p.location = String(r.location || '').trim().slice(0, 60);
           if ('price' in r) p.price = price != null && price >= 0 ? price : null;
           if ('qty' in r) { p.qty = qty; if (qty != null) p.status = qty <= 0 ? 'sold' : 'active'; }
           if (make) p.make = make; if ('model' in r) p.model = r.model || ''; if ('maker' in r) p.maker = String(r.maker || '').trim().slice(0, 60); if (cat) p.cat = cat; if (bar) p.barcode = bar;
@@ -617,6 +634,9 @@
     };
     const canOpen = v => hasPerm('invoices') || v.staff_id === uid() || (v.source === 'app' && hasPerm('sales'));
     const shopOrName = c => String(c.shop_name || '').trim() || c.name;
+    /* a new invoice waits in the warehouse when someone prepares them there (an active employee with the permission, for its branch or all) */
+    const pickWaits = b => DB.staff.some(x => x.active && (x.perms || []).includes('warehouse') && (!x.branch_id || x.branch_id === b)) ? 'waiting' : null;
+    const pickOk = () => !!uid() && (isAdmin() || hasPerm('warehouse')), pickBranch = () => isAdmin() ? null : ((staffRow() || {}).branch_id || null);
     const shopShown = c => !!String(c.shop_name || '').trim() && (!!c.shop_on || !!DB.settings.open_shops) && !DB.admins.includes(c.user_id) && !DB.staff.some(x => x.user_id === c.user_id);
     const shopOut = c => ({ id: c.user_id, name: String(c.shop_name).trim(), city: c.city || '', phone: c.phone_public && c.phone ? c.phone : null, cover: c.shop_cover || '', bg: c.shop_bg || '' });
     function buyers() {
@@ -663,6 +683,7 @@
           const r = { ...p }; delete r.search_text;
           r.price = ok ? p.price : null; r.price_hidden = p.price != null && !ok; r.cost = hasPerm('costs') ? (p.cost == null ? null : p.cost) : null;
           if (DB.settings.hide_qty && !(isStaff() || (uid() && uid() === p.owner_id))) r.qty = null;
+          if (!(isStaff() || (uid() && uid() === p.owner_id))) r.location = '';
           return { ...r, shop: { id: s.id, name: s.name, city: s.city, area: s.area, hours: s.hours, whatsapp: s.whatsapp, phone: s.phone, logo: s.logo, verified: s.verified, owner_id: s.owner_id, country: s.country, currency: s.currency }, total_count: total };
         });
       },
@@ -755,9 +776,9 @@
           const v = { id: uuid(), no: ++DB.inv_seq, branch_id: branch, staff_id: uid(), staff_name: (st && st.name) || (me && me.email) || '', customer_id: p.customer_id || null,
             customer_name: String(p.customer_name || '').slice(0, 80), customer_phone: String(p.customer_phone || '').slice(0, 30), subtotal: sub, discount: disc, total: sub - disc,
             paid: Math.max(0, p.paid != null ? Number(p.paid) || 0 : (pay === 'credit' ? 0 : sub - disc)), payment: pay, currency: (shop && shop.currency) || 'LYD', status: 'done',
-            note: String(p.note || '').slice(0, 500), created_at: now(), returned_at: null };
+            note: String(p.note || '').slice(0, 500), created_at: now(), returned_at: null, pick_state: pickWaits(branch), picked_at: null, picked_name: '' };
           DB.invoices.push(v);
-          lines.forEach((l, i) => DB.invoice_items.push({ id: DB.invoice_items.length + i + 1, invoice_id: v.id, ...l }));
+          lines.forEach((l, i) => DB.invoice_items.push({ id: DB.invoice_items.length + i + 1, invoice_id: v.id, ...l, picked: false }));
           logAct('sale', v.id, v.customer_name.trim() || null, v.total, { no: v.no, units, lines: lines.length, discount: disc, off_list: Math.max(money2(list - sub), 0), payment: pay, paid: v.paid });
           save();
           return RPC.get_invoice({ p_id: v.id });
@@ -830,9 +851,10 @@
         const shop = shopOf(branch), t = now();
         const v = { id: uuid(), no: ++DB.inv_seq, branch_id: branch, staff_id: null, staff_name: '', customer_id: me, customer_name: name, customer_phone: phone,
           subtotal: money2(sub), discount: 0, total: money2(sub), paid: 0, payment: 'cash', currency: (shop && shop.currency) || 'LYD', status: 'preparing', note: String(p.note || '').trim().slice(0, 500),
-          created_at: t, returned_at: null, source: 'app', ordered_at: t, ready_at: null, cancelled_at: null, cancel_reason: '', delivery: del, address: del === 'delivery' ? addr.slice(0, 300) : '' };
+          created_at: t, returned_at: null, source: 'app', ordered_at: t, ready_at: null, cancelled_at: null, cancel_reason: '', delivery: del, address: del === 'delivery' ? addr.slice(0, 300) : '',
+          pick_state: pickWaits(branch), picked_at: null, picked_name: '' };
         DB.invoices.push(v);
-        lines.forEach(l => DB.invoice_items.push({ id: DB.invoice_items.length + 1, invoice_id: v.id, ...l }));
+        lines.forEach(l => DB.invoice_items.push({ id: DB.invoice_items.length + 1, invoice_id: v.id, ...l, picked: false }));
         logAct('order', v.id, name, v.total, { no: v.no, units, lines: lines.length, delivery: del });
         save();
         return RPC.my_order({ p_id: v.id });
@@ -940,7 +962,7 @@
               if (title.length < 2) fail('new item needs a name', '22023');
               pr = { id: uuid(), shop_id: branch.id, owner_id: branch.owner_id, sku: sku || null, barcode: bar || null,
                 title, cat: CATS.includes(it.cat) ? it.cat : 'other', cond: 'original', price, cost, nego: false, qty: q, make: String(it.make || '').trim().toLowerCase().slice(0, 20) || 'any',
-                model: String(it.model || '').slice(0, 60), y_from: null, y_to: null, part_no: pn || sku || '', maker: mk, descr: '', imgs: [], status: 'active',
+                model: String(it.model || '').slice(0, 60), y_from: null, y_to: null, part_no: pn || sku || '', maker: mk, location: String(it.location || '').trim().slice(0, 60), descr: '', imgs: [], status: 'active',
                 hide_price: false, search_text: '', created_at: now(), updated_at: now() };
               DB.products.push(pr); nNew++;
             }
@@ -1135,6 +1157,43 @@
         return L.slice(off, off + lim).map(c => ({ ...shopOut(c), total_count: L.length }));
       },
       merchant_shop(a) { const c = DB.customers.find(x => x.user_id === a.p_id); return c && shopShown(c) ? shopOut(c) : null; },
+      /* the warehouse (supabase/setup.sql section 18): new invoices wait there, each line with where the part is kept */
+      pick_list(a) {
+        if (!pickOk()) fail('not authorized', '42501');
+        const done = a.p_state === 'done', b = pickBranch(), off = Math.max(a.p_offset || 0, 0), lim = Math.min(Math.max(a.p_limit || 30, 1), 100);
+        const L = DB.invoices.filter(v => v.pick_state === (done ? 'done' : 'waiting') && ['done', 'preparing', 'ready'].includes(v.status) && (!b || v.branch_id === b))
+          .sort((x, y) => done ? String(y.picked_at || '').localeCompare(String(x.picked_at || '')) : x.created_at.localeCompare(y.created_at) || x.no - y.no);
+        return L.slice(off, off + lim).map(v => {
+          const its = DB.invoice_items.filter(i => i.invoice_id === v.id);
+          const lines = its.map(i => { const p = DB.products.find(x => x.id === i.product_id) || {};
+            return { id: i.id, title: i.title, sku: i.sku || null, maker: i.maker || '', qty: i.qty, picked: !!i.picked, part_no: p.part_no || null, barcode: p.barcode || null,
+              make: p.make || null, model: p.model || null, location: p.location || '', img: (p.imgs || [])[0] || null, stock: p.qty == null ? null : p.qty }; })
+            .sort((x, y) => (x.location || 'ي').localeCompare(y.location || 'ي', 'ar') || x.id - y.id);
+          return { id: v.id, no: v.no, created_at: v.created_at, customer_name: v.customer_name, staff_name: v.staff_name, source: v.source || 'pos', status: v.status, note: v.note || '',
+            picked_at: v.picked_at || null, picked_name: v.picked_name || '', branch_name: (shopOf(v.branch_id) || {}).name || null, total_count: L.length,
+            units: its.reduce((k, i) => k + i.qty, 0), picked_n: its.filter(i => i.picked).length, lines };
+        });
+      },
+      pick_line(a) {
+        if (!pickOk()) fail('not authorized', '42501');
+        const it = DB.invoice_items.find(i => i.id === a.p_item), v = it && DB.invoices.find(x => x.id === it.invoice_id), b = pickBranch();
+        if (!v || v.pick_state !== 'waiting' || (b && v.branch_id !== b)) fail('invoice not waiting', 'P0001');
+        it.picked = a.p_on !== false; save();
+        return { picked: it.picked, left: DB.invoice_items.filter(i => i.invoice_id === v.id && !i.picked).length };
+      },
+      pick_done(a) {
+        if (!pickOk()) fail('not authorized', '42501');
+        const b = pickBranch(), v = DB.invoices.find(x => x.id === a.p_invoice && (!b || x.branch_id === b));
+        if (!v) fail('invoice not found', 'P0001');
+        if (v.pick_state !== 'waiting') fail('invoice not waiting', 'P0001');
+        const st = staffRow(), me = DB.users.find(u => u.id === uid());
+        DB.invoice_items.forEach(i => { if (i.invoice_id === v.id) i.picked = true; });
+        Object.assign(v, { pick_state: 'done', picked_at: now(), picked_name: String((st && st.name) || (me && me.email) || '').slice(0, 80) });
+        logAct('picked', v.id, v.customer_name || null, v.total, { no: v.no });
+        save();
+        return { no: v.no };
+      },
+      pick_waiting() { if (!pickOk()) return 0; const b = pickBranch(); return DB.invoices.filter(v => v.pick_state === 'waiting' && ['done', 'preparing', 'ready'].includes(v.status) && (!b || v.branch_id === b)).length; },
       set_customer_password(a) {
         if (!isAdmin()) fail('not authorized', '42501');
         const pw = String(a.p_pw || '');

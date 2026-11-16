@@ -4,7 +4,7 @@
 
 -- the manager always has it, with everything
 set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
-select 'I1 the manager has the assistant with every permission (expect t, 12, admin)' t, (p->>'ai')::boolean ai, jsonb_array_length(p->'ai_perms') n, public.ai_access()->>'role' role
+select 'I1 the manager has the assistant with every permission (expect t, 13, admin)' t, (p->>'ai')::boolean ai, jsonb_array_length(p->'ai_perms') n, public.ai_access()->>'role' role
 from public.my_perms() p;
 select 'I2 a seller saved without it (expect false, [])' t, r->'ai_on' ai_on, r->'ai_perms' ai_perms
 from public.save_staff('seller@test.local', 'بائع', array['sales', 'invoices', 'products'], null, true) r;

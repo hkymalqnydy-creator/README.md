@@ -322,7 +322,7 @@
     const p = {
       id: r.id, shop_id: r.shop_id, owner_id: r.owner_id, title: r.title || '', cat: r.cat || 'other', cond: r.cond || 'aftermarket',
       price: r.price == null ? null : Number(r.price), price_hidden: !!r.price_hidden, hide_price: !!r.hide_price, cost: r.cost == null ? null : Number(r.cost), sku: r.sku || '', barcode: r.barcode || '', nego: !!r.nego, qty: r.qty == null ? null : +r.qty,
-      make: r.make || 'any', model: r.model || '', y_from: r.y_from || null, y_to: r.y_to || null, part_no: r.part_no || '', maker: r.maker || '',
+      make: r.make || 'any', model: r.model || '', y_from: r.y_from || null, y_to: r.y_to || null, part_no: r.part_no || '', maker: r.maker || '', location: r.location || '',
       descr: r.descr || '', imgs: arr(r.imgs), status: r.status || 'active', created_at: ms(r.created_at),
       shop: r.shop ? normShop(r.shop, true) : (S.scache.get(r.shop_id) || null)
     };

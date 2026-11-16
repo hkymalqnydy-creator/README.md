@@ -104,6 +104,7 @@
     qty: ["الكمية", "Quantity", "Quantité", "Cantidad", "Menge", "Adet", "Количество", "数量"],
     inStock: ["متوفرة", "In stock", "En stock", "Disponible", "Verfügbar", "Stokta", "В наличии", "有货"],
     partNo: ["رقم القطعة", "Part number", "Référence", "Nº de pieza", "Teilenummer", "Parça no", "Номер детали", "零件号"],
+    locL: ["مكان القطعة في المخزن", "Where it is kept"], locPh: ["مثلاً: رف A3 · خانة 12", "e.g. Shelf A3 · bin 12"], locHint: ["يطلع لموظف المخزن في كل فاتورة فيها القطعة.", "Shown to the warehouse in every invoice with this part."],
     makerL: ["الشركة المصنّعة", "Manufacturer", "Fabricant", "Fabricante", "Hersteller", "Üretici", "Производитель", "制造商"],
     makerPh: ["مثلاً: موبيس، دنسو، سانغ شين", "e.g. Mobis, Denso, Sangsin", "ex. Mobis, Denso, Sangsin", "p. ej. Mobis, Denso, Sangsin", "z. B. Mobis, Denso, Sangsin", "örn. Mobis, Denso, Sangsin", "напр. Mobis, Denso, Sangsin", "例如 Mobis、Denso、Sangsin"],
     listed: ["أُضيفت", "Listed", "Publiée", "Publicada", "Eingestellt", "Eklendi", "Добавлено", "上架"],

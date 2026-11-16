@@ -320,8 +320,10 @@ language sql stable security definer set search_path = public as $$
            coalesce((select price_mode from public.settings where id = 1), 'all') as mode,
            coalesce((select hide_qty from public.settings where id = 1), false) as hideq
   )
-  select (to_jsonb(p) - 'search_text' - 'price' - 'cost' - 'qty') || jsonb_build_object(
+  select (to_jsonb(p) - 'search_text' - 'price' - 'cost' - 'qty' - 'location') || jsonb_build_object(
            'price', case when v.ok then p.price end,
+           -- where a part is kept in the warehouse (section 18): for the company's people only
+           'location', case when ctx.adm or ctx.stf or (ctx.me is not null and ctx.me = p.owner_id) then coalesce(to_jsonb(p)->>'location', '') else '' end,
            'qty', case when ctx.hideq and not (ctx.adm or ctx.stf or (ctx.me is not null and ctx.me = p.owner_id)) then null else p.qty end,
            'cost', case when ctx.costs then p.cost end,
            'price_hidden', (p.price is not null and not v.ok),
@@ -574,10 +576,10 @@ begin
       select id into v_id from public.products where sku = v_sku;
       if v_id is null then
         if char_length(v_title) < 2 then n_skip := n_skip + 1; continue; end if;
-        insert into public.products (shop_id, owner_id, sku, barcode, title, cat, cond, price, qty, make, model, part_no, maker, status)
+        insert into public.products (shop_id, owner_id, sku, barcode, title, cat, cond, price, qty, make, model, part_no, maker, location, status)
         values (v_shop, v_owner, v_sku, v_bar, v_title, coalesce(v_cat, 'other'), coalesce(v_cond, 'original'), v_price, v_qty,
                 coalesce(v_make, 'any'), left(coalesce(r->>'model', ''), 60), left(coalesce(nullif(r->>'part_no', ''), v_sku), 60), left(btrim(coalesce(r->>'maker', '')), 60),
-                case when v_qty is not null and v_qty <= 0 then 'sold' else 'active' end);
+                left(btrim(coalesce(r->>'location', '')), 60), case when v_qty is not null and v_qty <= 0 then 'sold' else 'active' end);
         n_ins := n_ins + 1;
       else
         update public.products set
@@ -588,6 +590,7 @@ begin
           make   = coalesce(v_make, make),
           model  = case when r ? 'model' then left(coalesce(r->>'model', ''), 60) else model end,
           maker  = case when r ? 'maker' then left(btrim(coalesce(r->>'maker', '')), 60) else maker end,
+          location = case when r ? 'location' then left(btrim(coalesce(r->>'location', '')), 60) else location end,
           cat    = coalesce(v_cat, cat),
           cond   = coalesce(v_cond, cond),
           barcode = coalesce(v_bar, barcode),
@@ -661,7 +664,7 @@ create or replace function public.my_perms() returns jsonb language sql stable s
     'name', (select name from public.staff where user_id = auth.uid()),
     -- the AI assistant: the manager always; an employee when the manager gave it, doing only what he chose of their permissions
     'ai', public.is_admin() or exists (select 1 from public.staff where user_id = auth.uid() and active and ai_on),
-    'ai_perms', case when public.is_admin() then to_jsonb(array['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings'])
+    'ai_perms', case when public.is_admin() then to_jsonb(array['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings', 'warehouse'])
       else coalesce((select to_jsonb(array(select x from unnest(ai_perms) x where x = any (perms))) from public.staff where user_id = auth.uid() and active and ai_on), '[]'::jsonb) end);
 $$;
 
@@ -676,7 +679,7 @@ begin
   if not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
   if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid email' using errcode = '22023'; end if;
   v_perms := array(select distinct x from unnest(coalesce(p_perms, '{}')) x
-                   where x in ('sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'customers', 'reports', 'costs', 'settings', 'purchases', 'expenses'));
+                   where x in ('sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'customers', 'reports', 'costs', 'settings', 'purchases', 'expenses', 'warehouse'));
   if p_max_discount is not null and (p_max_discount < 0 or p_max_discount > 100) then raise exception 'bad discount limit' using errcode = '22023'; end if;
   insert into public.staff as st (email, name, perms, branch_id, active, user_id, max_discount, ai_on, ai_perms)
   values (v_email, left(coalesce(p_name, ''), 80), v_perms, p_branch, coalesce(p_active, true), (select id from auth.users where lower(email) = v_email limit 1), p_max_discount,
@@ -1033,11 +1036,11 @@ begin
     else
       v_title := left(btrim(coalesce(v_it->>'title', '')), 120);
       if char_length(v_title) < 2 then raise exception 'new item needs a name' using errcode = '22023'; end if;
-      insert into public.products (shop_id, owner_id, sku, barcode, title, cat, cond, price, cost, qty, make, model, part_no, maker, status)
+      insert into public.products (shop_id, owner_id, sku, barcode, title, cat, cond, price, cost, qty, make, model, part_no, maker, location, status)
       values (v_branch, v_owner, v_sku, v_bar, v_title,
               case when v_it->>'cat' in ('engine','brakes','suspension','electrical','lights','body','oils','cooling','ac','transmission','tires','interior','other') then v_it->>'cat' else 'other' end,
               'original', v_price, v_cost, v_qty, coalesce(nullif(left(lower(btrim(coalesce(v_it->>'make', ''))), 20), ''), 'any'),
-              left(coalesce(v_it->>'model', ''), 60), coalesce(v_pn, v_sku, ''), coalesce(v_mk, ''), 'active')
+              left(coalesce(v_it->>'model', ''), 60), coalesce(v_pn, v_sku, ''), coalesce(v_mk, ''), left(btrim(coalesce(v_it->>'location', '')), 60), 'active')
       returning id, maker into v_id, v_maker;
       n_new := n_new + 1; v_made := true;
     end if;
@@ -1791,7 +1794,7 @@ create or replace function public.ai_access() returns jsonb language sql stable 
   select case
     when auth.uid() is null then jsonb_build_object('ok', false, 'role', 'visitor')
     when public.is_admin() then jsonb_build_object('ok', true, 'role', 'admin',
-      'perms', to_jsonb(array['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings']))
+      'perms', to_jsonb(array['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'purchases', 'customers', 'reports', 'costs', 'expenses', 'settings', 'warehouse']))
     when exists (select 1 from public.staff where user_id = auth.uid() and active) then
       coalesce((select jsonb_build_object('ok', true, 'role', 'staff', 'perms', to_jsonb(array(select x from unnest(ai_perms) x where x = any (perms))))
                 from public.staff where user_id = auth.uid() and active and ai_on), jsonb_build_object('ok', false, 'role', 'staff'))
@@ -2325,3 +2328,87 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function public.merchant_shops(text, integer, integer) to anon, authenticated;
 grant execute on function public.merchant_shop(uuid) to anon, authenticated;
+
+-- ---------- 18) المخزن: كل فاتورة تمشي لموظف المخزن، بمكان كل قطعة ----------
+-- Where a part is kept (a shelf, a bin), every new invoice (a sale at the till, an order from the app) waiting in the warehouse,
+-- and the employee with the warehouse permission ticks each line as he takes it, then «تم التجهيز».
+alter table public.products      add column if not exists location    text not null default '' check (char_length(location) <= 60);
+alter table public.invoices      add column if not exists pick_state  text check (pick_state is null or pick_state in ('waiting', 'done'));
+alter table public.invoices      add column if not exists picked_at   timestamptz;
+alter table public.invoices      add column if not exists picked_name text not null default '';
+alter table public.invoice_items add column if not exists picked      boolean not null default false;
+create index if not exists invoices_pick_idx on public.invoices (created_at) where pick_state = 'waiting';
+create or replace function public.invoices_pick() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  -- it waits when someone prepares the invoices: an active employee with the warehouse permission, for its branch or for all.
+  -- With nobody in the warehouse nothing piles up; invoices from before this stay out of the list.
+  if new.pick_state is null and exists (select 1 from public.staff s where s.active and 'warehouse' = any (s.perms)
+                                         and (s.branch_id is null or s.branch_id = new.branch_id)) then
+    new.pick_state := 'waiting';
+  end if;
+  return new;
+end $$;
+drop trigger if exists invoices_pick on public.invoices;
+create trigger invoices_pick before insert on public.invoices for each row execute function public.invoices_pick();
+-- a warehouse employee kept to one branch sees that branch's invoices; the owner sees them all
+create or replace function public.pick_branch() returns uuid language sql stable security definer set search_path = public as $$
+  select case when public.is_admin() then null else (select branch_id from public.staff where user_id = auth.uid() and active) end;
+$$;
+create or replace function public.pick_ok() returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null and (public.is_admin() or public.has_perm('warehouse'));
+$$;
+create or replace function public.pick_list(p_state text default 'waiting', p_limit integer default 30, p_offset integer default 0)
+returns setof jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_b uuid := public.pick_branch(); v_done boolean := p_state = 'done';
+begin
+  if not public.pick_ok() then raise exception 'not authorized' using errcode = '42501'; end if;
+  return query
+  select to_jsonb(x) from (
+    select i.id, i.no, i.created_at, i.customer_name, i.staff_name, i.source, i.status, i.note, i.picked_at, i.picked_name, sh.name as branch_name,
+           count(*) over () as total_count,
+           (select coalesce(sum(it.qty), 0) from public.invoice_items it where it.invoice_id = i.id) as units,
+           (select count(*) from public.invoice_items it where it.invoice_id = i.id and it.picked) as picked_n,
+           (select jsonb_agg(jsonb_build_object('id', it.id, 'title', it.title, 'sku', it.sku, 'maker', it.maker, 'qty', it.qty, 'picked', it.picked,
+                   'part_no', p.part_no, 'barcode', p.barcode, 'make', p.make, 'model', p.model, 'location', coalesce(p.location, ''),
+                   'img', p.imgs[1], 'stock', p.qty) order by coalesce(nullif(p.location, ''), 'ي'), it.id)
+              from public.invoice_items it left join public.products p on p.id = it.product_id where it.invoice_id = i.id) as lines
+    from public.invoices i left join public.shops sh on sh.id = i.branch_id
+    where i.pick_state = case when v_done then 'done' else 'waiting' end and i.status in ('done', 'preparing', 'ready')
+      and (v_b is null or i.branch_id = v_b)
+    order by case when v_done then -extract(epoch from i.picked_at) else extract(epoch from i.created_at) end, i.no
+    limit least(greatest(coalesce(p_limit, 30), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) x;
+end $$;
+create or replace function public.pick_line(p_item bigint, p_on boolean default true) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_inv uuid; v_b uuid := public.pick_branch();
+begin
+  if not public.pick_ok() then raise exception 'not authorized' using errcode = '42501'; end if;
+  select it.invoice_id into v_inv from public.invoice_items it join public.invoices i on i.id = it.invoice_id
+   where it.id = p_item and i.pick_state = 'waiting' and (v_b is null or i.branch_id = v_b);
+  if v_inv is null then raise exception 'invoice not waiting' using errcode = 'P0001'; end if;
+  update public.invoice_items set picked = coalesce(p_on, true) where id = p_item;
+  return jsonb_build_object('picked', coalesce(p_on, true), 'left', (select count(*) from public.invoice_items where invoice_id = v_inv and not picked));
+end $$;
+create or replace function public.pick_done(p_invoice uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v public.invoices; v_b uuid := public.pick_branch(); v_name text;
+begin
+  if not public.pick_ok() then raise exception 'not authorized' using errcode = '42501'; end if;
+  select * into v from public.invoices where id = p_invoice and (v_b is null or branch_id = v_b) for update;
+  if v.id is null then raise exception 'invoice not found' using errcode = 'P0001'; end if;
+  if v.pick_state is distinct from 'waiting' then raise exception 'invoice not waiting' using errcode = 'P0001'; end if;
+  v_name := coalesce(nullif((select name from public.staff where user_id = auth.uid()), ''), (select email from auth.users where id = auth.uid()), '');
+  update public.invoice_items set picked = true where invoice_id = v.id;
+  update public.invoices set pick_state = 'done', picked_at = now(), picked_name = left(v_name, 80) where id = v.id;
+  perform public.log_act('picked', v.id::text, nullif(v.customer_name, ''), v.total, jsonb_build_object('no', v.no));
+  return jsonb_build_object('no', v.no);
+end $$;
+create or replace function public.pick_waiting() returns integer language sql stable security definer set search_path = public as $$
+  select case when public.pick_ok() then (select count(*)::integer from public.invoices i where i.pick_state = 'waiting'
+    and i.status in ('done', 'preparing', 'ready') and (public.pick_branch() is null or i.branch_id = public.pick_branch())) else 0 end;
+$$;
+revoke execute on function public.pick_branch() from public, anon;
+revoke execute on function public.pick_ok() from public, anon;
+grant execute on function public.pick_branch(), public.pick_ok() to authenticated;
+revoke execute on function public.pick_list(text, integer, integer), public.pick_line(bigint, boolean), public.pick_done(uuid), public.pick_waiting() from public, anon;
+grant execute on function public.pick_list(text, integer, integer), public.pick_line(bigint, boolean), public.pick_done(uuid), public.pick_waiting() to authenticated;
