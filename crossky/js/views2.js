@@ -56,7 +56,7 @@
     shell(bar(t('mine'), '', { noBack: true }) + `<main class="wrap mine">
       <section class="mcard acct"><div class="mc-head">${I('user')}<span><b>${esc(t('signedInT'))}</b><small class="ltr">${esc(SP.loginShown(S.user.email))}</small></span>
         <button type="button" class="btn btn-ghost sm" id="lo">${I('logout', 'dirx')} ${esc(t('logout'))}</button></div></section>
-      ${SP.bioCard ? SP.bioCard() : ''}
+      ${SP.bioCard ? SP.bioCard() : ''}${SP.eyeRow ? SP.eyeRow() : ''}
       ${SP.systemLink ? SP.systemLink() : ''}
       ${S.admin ? `<a class="admin-entry" href="#admin">${I('shield')}<span><b>${esc(t('admin'))}</b><small>${esc(t('adminB'))}</small></span>${I('chevL', 'dirx')}</a>` : ''}
       ${shops.length ? `<div class="sec-h"><h2>${esc(t(shops.length > 1 ? 'yourShops' : 'yourShop'))}</h2></div>${shops.map(mcard).join('')}<a class="btn btn-ghost" href="#new-shop">${I('plus')} ${esc(t('anotherShop'))}</a>`
@@ -64,6 +64,7 @@
       ${prefs()}</main>`);
     wirePrefs();
     if (SP.wireBio) SP.wireBio(n);
+    if (SP.wireEyeRow) SP.wireEyeRow(n);
     $('#lo').onclick = async () => { await SP.auth.signOut(); await SP.refreshUser(null); SP.toast(t('loggedOut')); SP.render(); };
     SP.done(n);
   }, { tab: 'mine' });

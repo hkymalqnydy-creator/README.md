@@ -78,7 +78,13 @@
       DB.customers.push({ user_id: id, name, shop_name: shop, phone, city, approved, created_at: ago(m) });
     });
     DB.customers.forEach(c => { c.shop_on = !!String(c.shop_name || '').trim(); c.phone_public = ['0925551234', '0913334455'].includes(c.phone); });
-    DB.mshops = 1;
+    demoCards(DB); DB.mshops = 1;
+  }
+  /* the shops' cards: two with a photo, the rest on one of the six backgrounds */
+  function demoCards(DB) {
+    const look = { '0925551234': ['img/parts/engine-oil.jpg', 'b1'], '0913334455': ['', 'b3'], '0926667788': ['img/parts/radiator.jpg', 'b5'], '0945556677': ['', 'b4'], '0947778899': ['', 'b6'] };
+    DB.customers.forEach(c => { const l = look[c.phone]; if (l && c.shop_cover == null && c.shop_bg == null) { c.shop_cover = l[0]; c.shop_bg = l[1]; } });
+    DB.mcards = 1;
   }
   function seedCompany(DB) {
     const C = window.SPARAT_CONFIG || {}, app = C.appName || 'CROSSKY', email = C.demoEmail || 'owner@demo.app';
@@ -247,6 +253,8 @@
     } else if (!DB.merchants) DB.merchants = 1;
     if (!DB.mshops && opts.seed && CONF.mode === 'company' && DB.users.length > 0) demoShops(DB);
     else if (!DB.mshops) DB.mshops = 1;
+    if (!DB.mcards && opts.seed && CONF.mode === 'company' && DB.users.length > 0) demoCards(DB);
+    else if (!DB.mcards) DB.mcards = 1;
     /* every car brand in the world now: a demo saved with only the Korean and Japanese ones shows them all */
     if (!DB.allBrands) {
       DB.allBrands = 1;
@@ -442,6 +450,9 @@
         v.owner_id = (DB.shops.find(s => s.id === (v.shop_id || r.shop_id)) || {}).owner_id || r.owner_id;
       }
       if (name === 'customers' && 'shop_name' in v && String(v.shop_name || '').length > 80) return { error: { message: 'new row for relation "customers" violates check constraint "customers_shop_name_check"', code: '23514' } };
+      /* the shop's card: his own uploaded photo, or one of six backgrounds (customers_shop_cover_chk, customers_shop_bg_chk) */
+      if (name === 'customers' && 'shop_bg' in v && !['', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6'].includes(v.shop_bg)) return { error: { message: 'new row for relation "customers" violates check constraint "customers_shop_bg_chk"', code: '23514' } };
+      if (name === 'customers' && v.shop_cover && !/^(data:image\/(jpeg|png|webp);base64,|https:\/\/)/.test(String(v.shop_cover))) return { error: { message: 'new row for relation "customers" violates check constraint "customers_shop_cover_chk"', code: '23514' } };
       if (name === 'customers' && !hasPerm('customers')) {
         delete v.approved; delete v.user_id; delete v.shop_on; // only the company shows a merchant's shop
         /* an approved merchant sees every sale under his number: a new number needs the company's approval again */
@@ -607,7 +618,7 @@
     const canOpen = v => hasPerm('invoices') || v.staff_id === uid() || (v.source === 'app' && hasPerm('sales'));
     const shopOrName = c => String(c.shop_name || '').trim() || c.name;
     const shopShown = c => !!String(c.shop_name || '').trim() && (!!c.shop_on || !!DB.settings.open_shops) && !DB.admins.includes(c.user_id) && !DB.staff.some(x => x.user_id === c.user_id);
-    const shopOut = c => ({ id: c.user_id, name: String(c.shop_name).trim(), city: c.city || '', phone: c.phone_public && c.phone ? c.phone : null });
+    const shopOut = c => ({ id: c.user_id, name: String(c.shop_name).trim(), city: c.city || '', phone: c.phone_public && c.phone ? c.phone : null, cover: c.shop_cover || '', bg: c.shop_bg || '' });
     function buyers() {
       const m = {};
       DB.invoices.filter(v => v.status === 'done').sort((x, y) => x.created_at.localeCompare(y.created_at)).forEach(v => {
@@ -1113,7 +1124,8 @@
       merchant_detail(a) {
         if (!uid() || !(hasPerm('customers') || hasPerm('invoices') || hasPerm('reports'))) fail('not authorized', '42501');
         const b = merchantBook(a.p_user), c = DB.customers.find(x => x.user_id === a.p_user);
-        return b ? { ...b, key: custKey('', b.phone), shop_on: !!(c && c.shop_on), phone_public: !!(c && c.phone_public), shop_shown: !!(c && shopShown(c)) } : null;
+        return b ? { ...b, key: custKey('', b.phone), shop_on: !!(c && c.shop_on), phone_public: !!(c && c.phone_public), shop_shown: !!(c && shopShown(c)),
+          shop_cover: (c && c.shop_cover) || '', shop_bg: (c && c.shop_bg) || '' } : null;
       },
       /* the merchants' shops for everyone (supabase/setup.sql section 17): the name, the city, the phone only if the merchant shows it */
       merchant_shops(a) {

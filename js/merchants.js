@@ -63,7 +63,11 @@ mrOweHim: ["الباقي عليه", "Owes"], mrCreditHim: ["ليه عندنا", 
     mrShopNoName: ["ما عندوش اسم محل، فما يظهرش.", "He has no shop name, so it can’t show."],
     mrPhonePub: ["رقمه ظاهر في صفحة محله (هو اختار).", "His number shows on his shop’s page (his choice)."],
     mrPhoneHid: ["رقمه مخفي في صفحة محله (هو يقرر).", "His number is hidden on his shop’s page (his choice)."],
-    mrShopSee: ["شوف صفحة محله", "See his shop’s page"]
+    mrShopSee: ["شوف صفحة محله", "See his shop’s page"], mrCoverRm: ["شيل صورته", "Remove his photo"],
+    myCardT: ["بطاقة محلك", "Your shop’s card"], myCardB: ["هكي يبان محلك في «المحلات». اختار لون، أو حط صورة لمحلك.", "This is how your shop shows in «Shops». Pick a colour, or add a photo of your shop."],
+    myCardBg: ["لون البطاقة", "Card colour"], myCardPhoto: ["حط صورة", "Add a photo"], myCardChange: ["بدّل الصورة", "Change the photo"], myCardRm: ["شيل الصورة", "Remove the photo"],
+    myCardShown: ["محلك ظاهر في «المحلات».", "Your shop shows in «Shops»."], myCardHidden: ["محلك مش ظاهر توا: الشركة هي اللي تظهره.", "Your shop isn’t shown yet: the company shows it."],
+    myCardSaved: ["تمام، تبدلت بطاقة محلك", "Your shop’s card is updated"], myCardBusy: ["نرفعو في الصورة…", "Uploading the photo…"]
   });
 
   const money = (v, c) => SP.priceText(+v || 0, c || SP.currencyOf(S.country));
@@ -237,30 +241,72 @@ mrOweHim: ["الباقي عليه", "Owes"], mrCreditHim: ["ليه عندنا", 
     return `<section class="mcard mr-shop"><h2 class="lbl">${esc(t('mrShopT'))}</h2>
       ${!named ? `<p class="hint">${esc(t('mrShopNoName'))}</p>` : all ? `<p class="hint">${esc(t('mrShopAll'))}</p>`
         : `<label class="switch"><input type="checkbox" id="mshow"${b.shop_on ? ' checked' : ''}><span></span>${esc(t('mrShopOn'))}</label>`}
+      ${named ? `<div class="mr-card">${scard({ id: b.user_id, name: b.shop_name, city: b.city, cover: b.shop_cover, bg: b.shop_bg }, { link: false })}</div>` : ''}
       ${named ? `<p class="hint">${esc(t(b.phone_public ? 'mrPhonePub' : 'mrPhoneHid'))}</p>` : ''}
+      ${b.shop_cover ? `<div class="form-actions"><button type="button" class="btn btn-ghost sm" id="mcvr">${I('trash')} ${esc(t('mrCoverRm'))}</button></div>` : ''}
       ${b.shop_shown ? `<div class="form-actions"><a class="btn btn-ghost sm" href="#mshop-${esc(b.user_id)}">${I('store')} ${esc(t('mrShopSee'))}</a></div>` : ''}</section>`;
   };
 
   /* ---------- «المحلات»: the merchants' shops, for everyone ---------- */
-  const msRow = x => `<a class="mshop" href="#mshop-${esc(x.id)}"><span class="ms-ic">${I('store')}</span><span class="ms-main"><b>${esc(x.name)}</b>${x.city ? `<small>${I('pin')} ${esc(x.city)}</small>` : ''}</span>${I('chevL', 'dirx')}</a>`;
-  SP.homeShops = () => `<section class="sec" id="secms" hidden><div class="sec-h"><h2>${esc(t('msT'))}</h2><a class="more" href="#mshops">${esc(t('msAll'))} ${I('chevL', 'dirx')}</a></div><div class="mshops" id="hms"></div></section>`;
+  const BGS = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'];
+  const coverOk = u => /^(https:\/\/|data:image\/(jpeg|png|webp);base64,|img\/)/.test(String(u || ''));
+  const scard = (x, o) => {
+    o = o || {};
+    const tag = o.link === false ? 'div' : 'a', bg = BGS.includes(x.bg) ? x.bg : 'b1';
+    return `<${tag} class="scard${o.big ? ' big' : ''}"${tag === 'a' ? ` href="#mshop-${esc(x.id)}"` : ''} data-bg="${bg}">${coverOk(x.cover) ? `<img class="sc-cover" src="${esc(x.cover)}" alt="" loading="lazy" decoding="async">` : ''}
+      <span class="sc-shade"></span><span class="sc-badge">${I('store')}</span>
+      <span class="sc-text"><b>${esc(x.name)}</b>${x.city ? `<small>${I('pin')} ${esc(x.city)}</small>` : ''}</span></${tag}>`;
+  };
+  SP.shopCardHTML = scard;
+  SP.homeShops = () => `<section class="sec" id="secms" hidden><div class="sec-h"><h2>${esc(t('msT'))}</h2><a class="more" href="#mshops">${esc(t('msAll'))} ${I('chevL', 'dirx')}</a></div><div class="scards" id="hms"></div></section>`;
   SP.homeShopsFill = async n => {
     try {
-      const L = chk(await sb().rpc('merchant_shops', { p_limit: 4 })) || [];
+      const L = chk(await sb().rpc('merchant_shops', { p_limit: 8 })) || [];
       if (!SP.alive(n) || !$('#hms') || !L.length) return;
-      $('#hms').innerHTML = L.map(msRow).join(''); $('#secms').hidden = false;
+      $('#hms').innerHTML = L.map(x => scard(x)).join(''); $('#secms').hidden = false;
     } catch (e) { /* the shops are extra: the home screen works without them */ }
+  };
+  /* the merchant's own card, in «حسابي»: a colour or a photo of his shop */
+  SP.myShopCard = () => {
+    const c = S.customer;
+    if (!c || !String(c.shop_name || '').trim() || (SP.isStaff && SP.isStaff())) return '';
+    const shown = !!c.shop_on || !!(S.settings && S.settings.open_shops), bg = BGS.includes(c.shop_bg) ? c.shop_bg : 'b1';
+    return `<section class="mcard my-card" id="myc"><h2 class="lbl">${esc(t('myCardT'))}</h2><p class="hint">${esc(t('myCardB'))}</p>
+      <div id="mycv">${scard({ id: c.user_id, name: c.shop_name, city: c.city, cover: c.shop_cover, bg }, { link: false })}</div>
+      <p class="lbl optg">${esc(t('myCardBg'))}</p><div class="bg-sw" role="group" aria-label="${esc(t('myCardBg'))}">${BGS.map(b => `<button type="button" class="swatch" data-bg="${b}" aria-pressed="${!c.shop_cover && b === bg}" aria-label="${esc(t('myCardBg'))} ${b.slice(1)}"></button>`).join('')}</div>
+      <div class="form-actions"><label class="btn btn-ghost sm" id="mycp">${I('camera')} ${esc(t(c.shop_cover ? 'myCardChange' : 'myCardPhoto'))}<input type="file" accept="image/*" class="sr" id="mycf"></label>
+        ${c.shop_cover ? `<button type="button" class="btn btn-ghost sm" id="mycr">${I('trash')} ${esc(t('myCardRm'))}</button>` : ''}</div>
+      <p class="hint">${shown ? `${esc(t('myCardShown'))} <a href="#mshop-${esc(c.user_id)}">${esc(t('mrShopSee'))}</a>` : esc(t('myCardHidden'))}</p></section>`;
+  };
+  SP.wireMyShopCard = n => {
+    if (!$('#myc')) return;
+    const save = async (v, old) => {
+      const r = chk(await sb().from('customers').update(v).eq('user_id', S.user.id).select().single());
+      if (r) S.customer = r;
+      if (old && old !== S.customer.shop_cover && SP.removePhotos) SP.removePhotos([old]);
+      SP.toast(t('myCardSaved'));
+      if (SP.alive(n)) SP.render();
+    };
+    $$('#myc .swatch').forEach(b => b.onclick = async () => { try { await save({ shop_bg: b.dataset.bg, shop_cover: '' }, S.customer.shop_cover); } catch (e) { SP.toast(SP.errText(e)); } });
+    $('#mycf').onchange = async e => {
+      const f = e.target.files && e.target.files[0]; e.target.value = '';
+      if (!f) return;
+      const lb = $('#mycp'); lb.classList.add('busy'); SP.toast(t('myCardBusy'));
+      try { const url = await SP.uploadPhoto(f, 'cover'); await save({ shop_cover: url }, S.customer.shop_cover); }
+      catch (x) { SP.toast(SP.errText(x)); } finally { if ($('#mycp')) $('#mycp').classList.remove('busy'); }
+    };
+    if ($('#mycr')) $('#mycr').onclick = async () => { try { await save({ shop_cover: '' }, S.customer.shop_cover); } catch (e) { SP.toast(SP.errText(e)); } };
   };
   SP.route(/^mshops$/, async (m, n) => {
     if (gate(n)) return;
     const q = S.msQ || '';
     shell(bar(t('msT')) + `<main class="wrap"><form class="searchbox flat ms-search" id="msf" role="search">${I('search')}<input type="search" value="${esc(q)}" placeholder="${esc(t('msSearch'))}" aria-label="${esc(t('search'))}" enterkeyhint="search"></form>
-      <div class="mshops" id="msl"><div class="sk sk-row"></div></div><div class="center"><button type="button" class="btn btn-ghost more-btn" id="more" hidden></button></div></main>`);
+      <div class="scards stack" id="msl"><div class="sk sk-block"></div></div><div class="center"><button type="button" class="btn btn-ghost more-btn" id="more" hidden></button></div></main>`);
     const sf = $('#msf'), go = () => { const v = $('input', sf).value.trim(); if (v === (S.msQ || '')) return; S.msQ = v; SP.render(); };
     sf.onsubmit = e => { e.preventDefault(); go(); };
     $('input', sf).addEventListener('search', go);
     await SP.pager(n, $('#msl'), $('#more'), async off => { const rows = chk(await sb().rpc('merchant_shops', { p_limit: 30, p_offset: off, ...(q ? { p_q: q } : {}) })) || []; return { items: rows, total: rows.length ? +rows[0].total_count : 0 }; },
-      items => items.map(msRow).join(''), (r, first) => { if (first && !r.total) $('#msl').innerHTML = q ? `<p class="muted-p">${esc(t('msNoHit', { q }))}</p>` : empty('store', t('msNone')); });
+      items => items.map(x => scard(x)).join(''), (r, first) => { if (first && !r.total) $('#msl').innerHTML = q ? `<p class="muted-p">${esc(t('msNoHit', { q }))}</p>` : empty('store', t('msNone')); });
     SP.done(n);
   });
   SP.route(/^mshop-([0-9a-f-]{36})$/, async (m, n) => {
@@ -271,8 +317,8 @@ mrOweHim: ["الباقي عليه", "Owes"], mrCreditHim: ["ليه عندنا", 
     if (!SP.alive(n)) return;
     if (!x) { shell(bar(t('msT')) + `<main class="wrap">${empty('store', t('msGone'), '', `<a class="btn btn-ink" href="#mshops">${esc(t('msAll'))}</a>`)}</main>`); return SP.done(n); }
     const app = (S.settings && S.settings.brand_name) || SP.CFG.appName || '', wa = x.phone ? SP.waLink(x.phone, t('msHi', { a: app }), S.country) : '';
-    shell(bar(x.name) + `<main class="wrap mine"><section class="mcard ms-head"><span class="ms-ic big">${I('store')}</span>
-        <h1>${esc(x.name)}</h1>${x.city ? `<p class="ms-city">${I('pin')} ${esc(x.city)}</p>` : ''}<p class="hint">${esc(t('msOf', { a: app }))}</p>
+    shell(bar(x.name) + `<main class="wrap mine"><h1 class="sr">${esc(x.name)}</h1>${scard(x, { link: false, big: true })}<section class="mcard ms-head">
+        <p class="hint">${esc(t('msOf', { a: app }))}</p>
         ${x.phone ? `<div class="form-actions ms-acts">${wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('msWa'))}</a>` : ''}<a class="btn btn-ghost" href="tel:${esc(String(x.phone).replace(/[^0-9+]/g, ''))}">${I('phone')} ${esc(t('msCall'))}</a></div>`
           : `<p class="muted-p">${esc(t('msNoPhone'))}</p>`}</section>
       <div class="center"><a class="btn btn-ghost" href="#mshops">${I('store')} ${esc(t('msAll'))}</a></div></main>`);
@@ -296,6 +342,11 @@ mrOweHim: ["الباقي عليه", "Owes"], mrCreditHim: ["ليه عندنا", 
           ${S.admin ? `<button type="button" class="btn btn-ghost" id="mpw">${I('key')} ${esc(t('mrPw'))}</button>` : ''}</div>
         ${SP.can('customers') ? shopCard(b) : ''}${bookTabs(b, tab, true)}</main>`);
       $$('[data-lt]').forEach(c => c.onclick = () => { S.mrTab = { u: b.user_id, t: c.dataset.lt }; draw(); });
+      if ($('#mcvr')) $('#mcvr').onclick = async () => {
+        const btn = $('#mcvr'); btn.classList.add('busy');
+        try { chk(await sb().from('customers').update({ shop_cover: '' }).eq('user_id', b.user_id).select().single()); SP.toast(t('custSaved')); await reload(); }
+        catch (x) { btn.classList.remove('busy'); SP.toast(SP.errText(x)); }
+      };
       if ($('#mshow')) $('#mshow').onchange = async e => {
         const on = e.target.checked; e.target.disabled = true;
         try { chk(await sb().from('customers').update({ shop_on: on }).eq('user_id', b.user_id).select().single()); SP.toast(t('custSaved')); await reload(); }

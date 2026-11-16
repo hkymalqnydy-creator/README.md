@@ -221,3 +221,20 @@ set role authenticated; select set_config('request.jwt.claim.sub', '11111111-111
 update public.customers set shop_on = false where user_id = '88888888-8888-8888-8888-888888888888';
 reset role;
 select 'MC59 hidden again: no page for it either (expect t)' t, public.merchant_shop('88888888-8888-8888-8888-888888888888') is null gone;
+-- the shop's card: his own photo or one of six backgrounds
+set role authenticated; select set_config('request.jwt.claim.sub', '88888888-8888-8888-8888-888888888888', false);
+update public.customers set shop_bg = 'b3', shop_cover = 'https://x.supabase.co/storage/v1/object/public/photos/88888888-8888-8888-8888-888888888888/a.jpg' where user_id = '88888888-8888-8888-8888-888888888888';
+select 'MC60 his card: a background and his own photo (expect b3, t)' t, shop_bg, shop_cover like '%/photos/8888%' own from public.customers where user_id = '88888888-8888-8888-8888-888888888888';
+\echo MC61 expect a check violation (a photo that is not his own upload):
+update public.customers set shop_cover = 'https://evil.example/x.jpg' where user_id = '88888888-8888-8888-8888-888888888888';
+\echo MC62 expect a check violation (a background that does not exist):
+update public.customers set shop_bg = 'b9' where user_id = '88888888-8888-8888-8888-888888888888';
+reset role;
+set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+update public.customers set shop_on = true where user_id = '88888888-8888-8888-8888-888888888888';
+reset role;
+select 'MC63 the card for everyone (expect b3, t)' t, r->>'bg' bg, r->>'cover' like 'https://%' cover from public.merchant_shops() r where r->>'id' = '88888888-8888-8888-8888-888888888888';
+set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+update public.customers set shop_cover = '', shop_on = false where user_id = '88888888-8888-8888-8888-888888888888';
+select 'MC64 the owner can take a photo off (expect empty)' t, shop_cover = '' empty from public.customers where user_id = '88888888-8888-8888-8888-888888888888';
+reset role;

@@ -2223,7 +2223,8 @@ language plpgsql stable security definer set search_path = public as $$
 begin
   if auth.uid() is null or not (public.has_perm('customers') or public.has_perm('invoices') or public.has_perm('reports')) then raise exception 'not authorized' using errcode = '42501'; end if;
   return public.merchant_book(p_user) || (select jsonb_build_object('key', public.cust_key('', c.phone), 'shop_on', c.shop_on, 'phone_public', c.phone_public,
-                                                                      'shop_shown', public.shop_shown(c)) from public.customers c where c.user_id = p_user);
+                                                                      'shop_shown', public.shop_shown(c), 'shop_cover', c.shop_cover, 'shop_bg', c.shop_bg)
+                                         from public.customers c where c.user_id = p_user);
 end $$;
 
 -- the owner gives a merchant a new password (a merchant who signed up with his phone number has no email to reset it with)
@@ -2277,6 +2278,14 @@ grant execute on function public.link_login_phone() to authenticated;
 alter table public.customers add column if not exists shop_on      boolean not null default false;
 alter table public.customers add column if not exists phone_public boolean not null default false;
 alter table public.settings  add column if not exists open_shops   boolean not null default false;
+-- the shop's card: a photo the merchant uploads (his own folder of the photos bucket) or one of six backgrounds
+alter table public.customers add column if not exists shop_cover   text not null default '';
+alter table public.customers add column if not exists shop_bg      text not null default '';
+alter table public.customers drop constraint if exists customers_shop_cover_chk;
+alter table public.customers add constraint customers_shop_cover_chk check (shop_cover = '' or (char_length(shop_cover) <= 600
+  and shop_cover like 'https://%' and strpos(shop_cover, '/object/public/photos/' || user_id::text || '/') > 0));
+alter table public.customers drop constraint if exists customers_shop_bg_chk;
+alter table public.customers add constraint customers_shop_bg_chk check (shop_bg in ('', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6'));
 -- only the company turns a shop on (the merchant may still show or hide his own phone)
 create or replace function public.customers_guard() returns trigger language plpgsql security definer set search_path = public as $$
 begin
@@ -2301,7 +2310,7 @@ revoke execute on function public.shop_shown(public.customers) from public, anon
 create or replace function public.merchant_shops(p_q text default null, p_limit integer default 20, p_offset integer default 0)
 returns setof jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object('id', c.user_id, 'name', btrim(c.shop_name), 'city', c.city, 'phone', case when c.phone_public then nullif(c.phone, '') end,
-                            'total_count', count(*) over ())
+                            'cover', c.shop_cover, 'bg', c.shop_bg, 'total_count', count(*) over ())
   from public.customers c
   where public.shop_shown(c)
     and (coalesce(btrim(p_q), '') = '' or public.norm_ar(concat_ws(' ', c.shop_name, c.city)) like '%' || public.norm_ar(btrim(p_q)) || '%')
@@ -2310,7 +2319,8 @@ returns setof jsonb language sql stable security definer set search_path = publi
 $$;
 create or replace function public.merchant_shop(p_id uuid) returns jsonb
 language sql stable security definer set search_path = public as $$
-  select jsonb_build_object('id', c.user_id, 'name', btrim(c.shop_name), 'city', c.city, 'phone', case when c.phone_public then nullif(c.phone, '') end)
+  select jsonb_build_object('id', c.user_id, 'name', btrim(c.shop_name), 'city', c.city, 'phone', case when c.phone_public then nullif(c.phone, '') end,
+                            'cover', c.shop_cover, 'bg', c.shop_bg)
   from public.customers c where c.user_id = p_id and public.shop_shown(c);
 $$;
 grant execute on function public.merchant_shops(text, integer, integer) to anon, authenticated;

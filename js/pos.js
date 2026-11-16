@@ -8,7 +8,9 @@
   const chk = r => { if (r && r.error) throw r.error; return r ? r.data : null; };
 
   Object.assign(SP.L.T, {
-    posT: ["منظومة المبيعات", "Sales system"], posSale: ["فاتورة بيع", "Sales invoice"], sysSellSub: ["اكتب فاتورة للزبون", "Write an invoice for a customer"], sysBuySub: ["دخّل المشتريات يدوي أو بتصوير الفاتورة", "Enter purchases by hand or from a photo"], posSearchPh: ["اسم، رقم صنف، باركود أو شركة…", "Name, item code, barcode or maker…"],
+    posT: ["منظومة المبيعات", "Sales system"], posSale: ["فاتورة بيع", "Sales invoice"], sysSellSub: ["اكتب فاتورة للزبون", "Write an invoice for a customer"], sysBuySub: ["دخّل المشتريات يدوي أو بتصوير الفاتورة", "Enter purchases by hand or from a photo"], posSearchPh: ["اسم، رقم صنف، باركود أو شركة…", "Name, item code, barcode or maker…"], posClearQ: ["امسح البحث", "Clear the search"],
+    posPickH: ["اضغط على الأصناف اللي تبيها تنضاف للفاتورة، وكمّل دوّر. اضغط مرة ثانية تشيلها.", "Tap the parts you want and they go on the invoice; keep searching. Tap again to take one off."],
+    posPicked: ["{n} صنف في الفاتورة", "{n} parts on the invoice"],
     posNoItems: ["ابحث عن قطعة وأضفها للفاتورة.", "Search for a part and add it to the invoice."], posPrice: ["السعر", "Price"], posQty: ["الكمية", "Qty"],
     posSubtotal: ["المجموع", "Subtotal"], posDiscount: ["الخصم", "Discount"], posTotal: ["الإجمالي", "Total"], posPaid: ["المدفوع", "Paid"], posRemain: ["المتبقي", "Balance due"],
     posCustomer: ["اسم الزبون (اختياري)", "Customer name (optional)"], posPhone: ["هاتف الزبون", "Customer phone"], posPay: ["طريقة الدفع", "Payment"],
@@ -114,10 +116,10 @@
     const own = S.admin ? [['admin', 'shield', 'admin'], ['admin-control', 'lock', 'ctlT'], ['admin-log', 'history', 'logT'], ['admin-prices', 'percent', 'bpT'], ['admin-ads', 'megaphone', 'adsT'], ['admin-ai', 'spark', 'aiSetT']]
       .filter(([h]) => h === 'admin' || SP.company).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('') : '';
     shell(head + `<main class="wrap mine sys">${SP.sysActs()}${S.admin && SP.company && SP.adminToday ? '<div id="atoday"></div>' : ''}${SP.posEntry()}
-      ${own ? `<section class="mcard"><h2 class="lbl">${esc(t('sysAdminT'))}</h2><div class="pos-grid">${own}</div></section>` : ''}${SP.lockCard ? SP.lockCard() : ''}</main>`);
+      ${own ? `<section class="mcard"><h2 class="lbl">${esc(t('sysAdminT'))}</h2><div class="pos-grid">${own}</div></section>` : ''}</main>`);
+    if ($('#sysvoice')) $('#sysvoice').onclick = () => SP.aiVoice();
     /* the owner's windows: today, profit and loss, the total balance (js/sysview.js) */
     if ($('#atoday')) { if (SP.adminPanels) SP.adminPanels($('#atoday'), n); else SP.adminToday($('#atoday'), n, { compact: true }); }
-    if (SP.wireLockCard) SP.wireLockCard(n);
     SP.done(n);
   }, { tab: 'system' });
 
@@ -127,7 +129,8 @@
     const a = [['pos', 'tag', 'posSale', 'sysSellSub', SP.can('sales')], ['receive', 'receipt', 'rcvT', 'sysBuySub', SP.can('purchases')]].filter(x => x[4]);
     return (a.length ? `<nav class="sys-acts${a.length === 1 ? ' one' : ''}" aria-label="${esc(t('posT'))}">${a.map(([h, ic, k, sub], i) =>
       `<a class="sys-act${i ? '' : ' main'}" href="#${h}"><span class="sa-ic">${I(ic)}</span><b>${esc(t(k))}</b><small>${esc(t(sub))}</small></a>`).join('')}</nav>` : '')
-      + `<a class="sys-look" href="#lookup">${I('search')}<span>${esc(t('pqBar'))}</span>${I('scan')}</a>`;
+      + `<a class="sys-look" href="#lookup">${I('search')}<span>${esc(t('pqBar'))}</span>${I('scan')}</a>`
+      + (SP.aiVoiceOk && SP.aiVoiceOk() ? `<button type="button" class="sys-look sys-voice" id="sysvoice">${I('mic')}<span>${esc(t('aiVoiceBar'))}</span>${I('spark')}</button>` : '');
   };
   SP.posEntry = () => {
     if (!SP.isStaff()) return '';
@@ -158,7 +161,7 @@
         <div class="pq-rows">${rowv('pqStock', p.qty == null ? '' : out ? t('pqOut') : t('pqStockN', { n: SP.fmtNum(p.qty), b: (p.shop && p.shop.name) || '' }), out ? 'bad' : '')}
           ${rowv('pqSku', p.sku)}${p.part_no && codeKey(p.part_no) !== codeKey(p.sku) ? rowv('pqPart', p.part_no) : ''}${rowv('pqBarcode', p.barcode)}
           ${rowv('pqCat', p.cat ? SP.catName(p.cat) : '')}${rowv('pqCond', p.cond ? SP.condName(p.cond) : '')}
-          ${costs && p.cost != null ? rowv('pqCost', money(p.cost, cur)) + (gain != null ? rowv('pqGain', (gain < 0 ? '− ' : '') + money(Math.abs(gain), cur) + (p.price ? ' (' + Math.round(100 * gain / p.price) + '٪)' : ''), gain < 0 ? 'bad' : 'good') : '') : ''}</div>
+          ${costs && p.cost != null && !(SP.sysHidden && SP.sysHidden()) ? rowv('pqCost', money(p.cost, cur)) + (gain != null ? rowv('pqGain', (gain < 0 ? '− ' : '') + money(Math.abs(gain), cur) + (p.price ? ' (' + Math.round(100 * gain / p.price) + '٪)' : ''), gain < 0 ? 'bad' : 'good') : '') : ''}</div>
         <div class="form-actions pq-acts">${sell ? `<button type="button" class="btn btn-signal" id="pqsell">${I('tag')} ${esc(t('pqSell'))}</button>` : ''}
           <a class="btn btn-ghost" href="#p-${esc(p.id)}">${I('eye')} ${esc(t('pqOpen'))}</a>${SP.can('products') ? `<a class="btn btn-ghost" href="#edit-item-${esc(p.id)}">${I('edit')} ${esc(t('pqEdit'))}</a>` : ''}</div>
         <button type="button" class="btn btn-ghost sm pq-again" id="pqagain">${I('search')} ${esc(t('pqAgain'))}</button></section>`;
@@ -212,7 +215,8 @@
     const st = loadPos(), fixedBranch = S.perms && S.perms.branch;
     shell(bar(t('posSale'), `<a class="iconbtn" href="#invoices" aria-label="${esc(t('invList'))}">${I('copy')}</a>`) + `<main class="wrap pos">
       <div class="pos-top"><div class="field"><label for="pbr">${esc(t('posBranch'))}</label><select id="pbr" class="input"${fixedBranch ? ' disabled' : ''}></select></div>
-        <form class="field" id="psf" role="search"><label for="pq">${esc(t('search'))}</label><div class="inrow"><input id="pq" class="input" autocomplete="off" placeholder="${esc(t('posSearchPh'))}" enterkeyhint="search">
+        <form class="field" id="psf" role="search"><label for="pq">${esc(t('search'))}</label><div class="inrow"><span class="inx"><input id="pq" class="input" autocomplete="off" placeholder="${esc(t('posSearchPh'))}" enterkeyhint="search">
+          <button type="button" class="inx-b" id="pqx" aria-label="${esc(t('posClearQ'))}" hidden>${I('close')}</button></span>
           <button type="button" class="btn btn-ink sq" id="pscan" aria-label="${esc(t('scanBtn'))}" title="${esc(t('scanBtn'))}">${I('scan')}</button></div></form></div>
       <div id="pres" class="pres"></div><div id="plines" class="plines"></div><div id="psum"></div></main>`);
     try {
@@ -224,13 +228,35 @@
     } catch (e) { /* branch list optional */ }
     $('#pbr').onchange = e => { st.branch = e.target.value; savePos(st); };
     const curOf = l => l.cur || SP.currencyOf(S.country);
+    /* a code that is typed or scanned whole goes on the invoice and clears the search, ready for the next one */
     function add(p, quiet) {
       if (p.price == null && !SP.can('prices')) { SP.toast(t('posNoPrice', { t: p.title })); return false; }
       const ex = st.lines.find(l => l.id === p.id);
       if (ex) ex.qty++; else st.lines.push({ id: p.id, title: p.title, sku: p.sku || p.part_no, mm: SP.makerModel(p), price: p.price, base: p.price, qty: 1, stock: p.qty, cur: p.shop && p.shop.currency });
-      savePos(st); draw(); $('#pres').innerHTML = ''; $('#pq').value = '';
+      savePos(st); draw(); found = []; $('#pres').innerHTML = ''; $('#pq').value = ''; $('#pqx').hidden = true;
       if (!quiet) $('#pq').focus();
       return true;
+    }
+    /* picking from the results: each tap puts the part on the invoice (or takes it off), and the results stay for the next one */
+    let found = [];
+    const resRow = p => {
+      const l = st.lines.find(x => x.id === p.id);
+      return `<button type="button" class="pres-row pick${l ? ' on' : ''}" data-id="${p.id}" aria-pressed="${!!l}"><span class="pk-box">${I('check')}</span><span><b>${esc(p.title)}</b><small>${esc([p.sku || p.part_no, SP.makerModel(p), p.qty != null ? t('posInStock', { n: p.qty }) : ''].filter(Boolean).join(' · '))}</small></span>${l ? `<span class="pk-n num">× ${l.qty}</span>` : ''}${SP.priceHTML(p.price, p.shop && p.shop.currency, p.price_hidden)}</button>`;
+    };
+    function paintRes() {
+      if (!$('#pres') || !found.length) return;
+      const n = st.lines.filter(l => found.some(p => p.id === l.id)).length;
+      $('#pres').innerHTML = `<p class="hint pk-hint">${esc(st.lines.length ? t('posPicked', { n: SP.fmtNum(st.lines.length) }) : t('posPickH'))}</p>` + found.map(resRow).join('');
+      return n;
+    }
+    function toggle(p) {
+      const i = st.lines.findIndex(l => l.id === p.id);
+      if (i >= 0) st.lines.splice(i, 1);
+      else {
+        if (p.price == null && !SP.can('prices')) { SP.toast(t('posNoPrice', { t: p.title })); return; }
+        st.lines.push({ id: p.id, title: p.title, sku: p.sku || p.part_no, mm: SP.makerModel(p), price: p.price, base: p.price, qty: 1, stock: p.qty, cur: p.shop && p.shop.currency });
+      }
+      savePos(st); draw();
     }
     async function find(q) {
       q = q.trim();
@@ -242,11 +268,12 @@
         /* a barcode scanner types the full code and Enter: an exact item code, barcode or part number goes straight on the invoice */
         const k = codeKey(q), exact = r.items.filter(p => (p.sku && codeKey(p.sku) === k) || (p.barcode && codeKey(p.barcode) === k) || (p.part_no && codeKey(p.part_no) === k));
         if (exact.length === 1) return add(exact[0]);
-        $('#pres').innerHTML = r.items.length ? r.items.map(p => `<button type="button" class="pres-row" data-id="${p.id}"><span><b>${esc(p.title)}</b><small>${esc([p.sku || p.part_no, SP.makerModel(p), p.qty != null ? t('posInStock', { n: p.qty }) : ''].filter(Boolean).join(' · '))}</small></span>${SP.priceHTML(p.price, p.shop && p.shop.currency, p.price_hidden)}</button>`).join('')
-          : `<p class="muted-p">${esc(t('noResT'))}</p>`;
-        $('#pres').onclick = e => { const b = e.target.closest('[data-id]'); if (b) add(r.items.find(p => p.id === b.dataset.id)); };
+        found = r.items;
+        if (r.items.length) paintRes(); else $('#pres').innerHTML = `<p class="muted-p">${esc(t('noResT'))}</p>`;
       } catch (e) { if ($('#pres')) $('#pres').innerHTML = `<p class="form-err">${esc(SP.errText(e))}</p>`; }
     }
+    $('#pres').onclick = e => { const b = e.target.closest('[data-id]'); const p = b && found.find(x => x.id === b.dataset.id); if (p) toggle(p); };
+    $('#pqx').onclick = () => { $('#pq').value = ''; $('#pqx').hidden = true; found = []; $('#pres').innerHTML = ''; $('#pq').focus(); };
     $('#psf').onsubmit = e => { e.preventDefault(); find($('#pq').value); };
     $('#pscan').onclick = () => SP.scanCode({
       title: t('posSale'),
@@ -257,7 +284,8 @@
         return add(p, true) ? t('scanAdded', { t: p.title }) : t('posNoPrice', { t: p.title });
       }
     });
-    $('#pq').oninput = SP.debounce(e => find(e.target.value), 350);
+    const findSoon = SP.debounce(v => find(v), 350);
+    $('#pq').oninput = e => { $('#pqx').hidden = !e.target.value; if (!e.target.value.trim()) found = []; findSoon(e.target.value); };
     function totals() {
       const sub = st.lines.reduce((k, l) => k + (Number(l.price) || 0) * l.qty, 0), disc = Math.min(Number(st.discount) || 0, sub);
       return { sub, disc, total: sub - disc };
@@ -289,6 +317,7 @@
       if ($('#psave')) $('#psave').onclick = save;
       if ($('#pnew')) $('#pnew').onclick = () => { st.lines = []; st.discount = st.paid = st.cname = st.cphone = st.note = ''; st.pay = 'cash'; savePos(st); draw(); };
       if (st.lines.length) redrawTotals();
+      paintRes();
     }
     function redrawTotals() {
       const cur = st.lines[0] ? curOf(st.lines[0]) : SP.currencyOf(S.country), tt = totals(), rows = $$('#psum .prow b');

@@ -22,7 +22,9 @@
   });
   Object.assign(SP.L.T, {
     aiT: ["المساعد الذكي", "AI assistant"], aiFab: ["المساعد", "Assistant"], aiNameDef: ["مساعد {c}", "{c} assistant"],
-    aiPh: ["اكتب أو قول شنو تبي…", "Type or say what you need…"], aiSend: ["إرسال", "Send"], aiMic: ["تكلّم", "Speak"], aiPhoto: ["صورة قطعة", "Photo of a part"],
+    aiPh: ["اكتب أو قول شنو تبي…", "Type or say what you need…"], aiSend: ["إرسال", "Send"], aiMic: ["تكلّم", "Speak"],
+    aiListening: ["سامعك… قول شن تبي", "Listening… say what you need"], aiMicNo: ["المايك مقفول: اسمح للمتصفح يستعمل المايك من الإعدادات.", "The microphone is blocked: allow it in the browser’s settings."],
+    aiSayGo: ["قول «نفّذ» أو اضغط «نفّذ».", "Say “go ahead” or tap Go."], aiVoiceBar: ["قول للمساعد: «بيع زوز فلتر زيت باترول كاش»", "Tell the assistant: “sell two Patrol oil filters, cash”"], aiPhoto: ["صورة قطعة", "Photo of a part"],
     aiClose: ["سكّر", "Close"], aiNewChat: ["محادثة جديدة", "New chat"], aiThinking: ["يفكّر…", "Thinking…"],
     aiHiAdmin: ["أهلاً{n}! أنا {a}. نقدر نبيع، نشوف الأرقام والمخزن والديون، نغيّر أسعار وكميات، نسجّل دفعات ومصروفات، ونفتحلك أي صفحة. أي تغيير ما يصيرش إلا لما تضغط «نفّذ».",
       "Hi{n}! I’m {a}. I can make sales, show numbers, stock and debts, change prices and quantities, record payments and expenses, and open any page. Nothing changes until you tap “Do it”."],
@@ -280,6 +282,9 @@
   const cut = (s, list) => s.replace(NUM, ' ').replace(rxOf(list, 'gu'), ' ').replace(/\s+/g, ' ').trim();
   const NUM = /(?<![\p{L}\p{N}.])\d+(?:\.\d+)?(?![\p{L}\p{N}])/gu;
   const nums = s => (s.match(NUM) || []).map(Number);
+  const NUMW = { واحد: 1, وحده: 1, اثنين: 2, اثنان: 2, زوز: 2, زوج: 2, ثلاثه: 3, ثلاث: 3, تلاته: 3, تلات: 3, اربعه: 4, اربع: 4, خمسه: 5, خمس: 5, سته: 6, سبعه: 7, سبع: 7,
+    ثمانيه: 8, ثمان: 8, تمنيه: 8, تسعه: 9, تسع: 9, عشره: 10, عشر: 10, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+  const wordNum = s => { for (const w of String(s).split(/\s+/)) if (NUMW[w]) return NUMW[w]; return 0; };
   const FILL = ['عندكم', 'عندك', 'هل', 'يوجد', 'فيه', 'في', 'ابي', 'نبي', 'نبو', 'ابغي', 'اريد', 'نريد', 'محتاج', 'نحتاج', 'ممكن', 'لو', 'سمحت', 'من', 'فضلك', 'السلام', 'عليكم', 'مرحبا',
     'اهلا', 'شن', 'شنو', 'ايش', 'كم', 'بكم', 'سعر', 'عن', 'على', 'الي', 'يا', 'و', 'متوفر', 'متوفره', 'موجود', 'دور', 'دورلي', 'لقيلي', 'نلقي', 'وريني', 'قطعه', 'قطع', 'غيار', 'حبه', 'حبات',
     'do', 'you', 'have', 'i', 'need', 'want', 'please', 'is', 'there', 'any', 'the', 'a', 'an', 'for', 'of', 'find', 'me', 'show', 'search', 'part', 'parts'];
@@ -350,8 +355,8 @@
       const m = /(?:^|\s)(?:للزبون|لزبون|الزبون|زبون|باسم|اسمه|for customer|for)\s+(\D+)$/u.exec(s);
       if (m) { cname = cut(m[1], PAY_WORDS); rest = s.slice(0, m.index); }
       const pay = (PAY.find(([w]) => has(s, w)) || [0, 'cash'])[1];
-      const q = words(cut(rest, ['بيع', 'بيعلي', 'بيعله', 'اعمل', 'فاتوره', 'sell', ...PAY_WORDS]));
-      const qty = nums(rest)[0] || 1;
+      const q = words(cut(rest, ['بيع', 'بيعلي', 'بيعله', 'اعمل', 'فاتوره', 'sell', ...PAY_WORDS, ...Object.keys(NUMW)]));
+      const qty = nums(rest)[0] || wordNum(rest) || 1;
       return part(q, async p => done(await ctx.run('prepare_sale', { items: [{ id: p.id, qty }], customer_name: cname, payment: pay })));
     }
     /* changing a price: «غير سعر فلتر زيت باترول 45» */
@@ -442,6 +447,16 @@
     if (BUSY) return;
     text = String(text || '').trim().slice(0, 1500);
     if (!text && !img) return;
+    const spoken = VOICE; VOICE = false;
+    if (!img && /^(نفذ|نفذها|اكد|اكدها|confirm|go ahead|do it)$/i.test(SP.norm(text).replace(/[^\p{L}\p{N} ]/gu, '').trim())) {
+      const c0 = load(), last = c0.msgs.slice().reverse().find(m => m.who === 'ai'), card = last && (last.cards || []).find(x => x.type === 'prop' && (x.state === 'wait' || x.state === 'err'));
+      if (card) {
+        c0.msgs.push({ who: 'me', text, at: Date.now() }); save(); draw();
+        await confirm(card.id);
+        if (spoken) sayOut(card.state === 'done' ? card.result && card.result.text : card.err);
+        return;
+      }
+    }
     if (file) LAST_PHOTO = file;
     const c = load();
     c.msgs.push({ who: 'me', text, img: thumb || (img ? 1 : 0), at: Date.now() });
@@ -461,6 +476,7 @@
     msg.typing = false; msg.status = ''; BUSY = false;
     if (!msg.text && !(msg.cards || []).length) msg.text = t('aiErrFail');
     save(); draw();
+    if (spoken) sayOut([msg.text, (msg.cards || []).some(x => x.type === 'prop' && x.state === 'wait') ? t('aiSayGo') : ''].filter(Boolean).join(' '));
     if (ctx.nav != null) { minimize(); SP.go(ctx.nav); }
   }
   /* a card's «نفّذ» */
@@ -587,7 +603,7 @@
         <div class="ai-pic" id="aipic" hidden></div>
         <form class="ai-bar" id="aif"><textarea id="aiin" class="input" rows="1" maxlength="1500" placeholder="${esc(t('aiPh'))}" aria-label="${esc(t('aiPh'))}" enterkeyhint="send"></textarea>
           ${(E.kind !== 'local' && E.images !== false) || SP.aiAllowed(['purchases', 'sales']) ? `<label class="iconbtn ai-cam" aria-label="${esc(t('aiPhoto'))}" title="${esc(t('aiPhoto'))}">${I('camera')}<input type="file" accept="image/*" class="sr" id="aifile"></label>` : ''}
-          ${SR ? `<button type="button" class="iconbtn ai-mic" id="aimic" aria-label="${esc(t('aiMic'))}" title="${esc(t('aiMic'))}">${I('mic')}</button>` : ''}
+          ${SR ? `<button type="button" class="iconbtn ai-mic${REC ? ' on' : ''}" id="aimic" aria-label="${esc(t('aiMic'))}" title="${esc(t('aiMic'))}">${I('mic')}</button>` : ''}
           <button class="btn btn-signal ai-send" aria-label="${esc(t('aiSend'))}">${I('send', 'dirx')}</button></form></div>`;
     const inp = $('#aiin', b);
     const grow = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 120) + 'px'; };
@@ -604,7 +620,8 @@
         $('#aipic', b).hidden = false; $('#aipic', b).innerHTML = `<img src="${esc(THUMB)}" alt=""><button type="button" class="iconbtn" data-unpic aria-label="${esc(t('aiCancel'))}">${I('close')}</button>`; inp.focus();
       } catch (x) { SP.toast(SP.errText(x)); }
     };
-    if ($('#aimic', b)) $('#aimic', b).onclick = () => listen(inp, $('#aimic', b), grow);
+    if ($('#aimic', b)) $('#aimic', b).onclick = () => listen();
+    if (REC) inp.placeholder = t('aiListening');
   }
   function draw() {
     if (!BOX || BOX.hidden) return;
@@ -661,19 +678,45 @@
   }
   /* speaking instead of typing (where the browser can): the words go in the box to check before sending */
   let REC = null;
-  function listen(inp, btn, grow) {
+  /* talking to it: the words go into the box as they are said, and the message goes by itself when the speaking stops;
+     the answer is then read out, and «نفّذ» said back confirms what it proposed */
+  let VOICE = false;
+  const inBox = () => BOX && $('#aiin', BOX);
+  function listen() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     if (REC) { REC.stop(); return; }
-    const r = new SR(), base = inp.value ? inp.value + ' ' : '';
+    primeVoice();
+    const r = new SR(), i0 = inBox(), base = i0 && i0.value.trim() ? i0.value.trim() + ' ' : '';
+    let said = '';
     r.lang = SP.LANG === 'ar' ? 'ar-SA' : SP.LANG === 'en' ? 'en-US' : SP.LANG;
     r.interimResults = true; r.continuous = false;
-    r.onresult = e => { inp.value = base + Array.from(e.results).map(x => x[0].transcript).join(' '); grow(); };
-    r.onend = () => { REC = null; btn.classList.remove('on'); inp.focus(); };
-    r.onerror = () => { REC = null; btn.classList.remove('on'); };
-    REC = r; btn.classList.add('on');
-    try { r.start(); } catch (e) { REC = null; btn.classList.remove('on'); }
+    const ui = on => { const b = BOX && $('#aimic', BOX), i = inBox(); if (b) b.classList.toggle('on', on); if (i) i.placeholder = t(on ? 'aiListening' : 'aiPh'); };
+    const put = v => { const i = inBox(); if (i) { i.value = v; i.dispatchEvent(new Event('input')); } };
+    r.onresult = e => { said = Array.from(e.results).map(x => x[0].transcript).join(' ').trim(); put(base + said); };
+    r.onend = () => {
+      REC = null; ui(false);
+      const v = (base + said).trim();
+      if (said && v) { put(''); VOICE = true; send(v); }
+    };
+    r.onerror = e => { if (e && /not-allowed|service-not-allowed/.test(e.error || '')) SP.toast(t('aiMicNo'), 5000); };
+    REC = r; ui(true);
+    try { r.start(); } catch (e) { REC = null; ui(false); }
   }
+  function primeVoice() { try { if (window.speechSynthesis && !primeVoice.done) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); primeVoice.done = true; } } catch (e) { /* no voice: the answer is still written */ } }
+  function sayOut(text) {
+    try {
+      if (!window.speechSynthesis || !text) return;
+      const plain = String(text).replace(/\*\*|__|`|#/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/https?:\/\/\S+/g, '').replace(/[•·]/g, '،').replace(/\s+/g, ' ').trim().slice(0, 400);
+      if (!plain) return;
+      const lang = SP.LANG === 'ar' ? 'ar' : 'en', u = new SpeechSynthesisUtterance(plain), v = speechSynthesis.getVoices().find(x => (x.lang || '').toLowerCase().startsWith(lang));
+      u.lang = v ? v.lang : lang === 'ar' ? 'ar-SA' : 'en-US'; if (v) u.voice = v;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    } catch (e) { /* reading out is extra */ }
+  }
+  /* the System tab's voice bar: listening starts on the tap itself, and the assistant opens around it */
+  SP.aiVoiceOk = () => !!(window.SpeechRecognition || window.webkitSpeechRecognition) && SP.aiOn() && SP.aiStaff();
+  SP.aiVoice = () => { listen(); SP.aiOpen(); };
 
   /* ---------- opening and closing ---------- */
   SP.aiOpen = async () => {

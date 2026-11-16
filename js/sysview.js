@@ -1,7 +1,7 @@
 /* The System tab (المنظومة) for the owner: windows at the top to swipe between, «اليوم», «الأرباح والخسائر» (a day, a week,
    the month or the year) and «الرصيد الكلي» (the stock, what customers owe, what is owed to suppliers, the money in and out);
-   and a Face ID lock: once turned on for this phone, the sales system opens only after Face ID (or the password), again
-   after the app has been away for a minute. The numbers come from pnl_report and stock_report (supabase/setup.sql). */
+   and the closed eye at their corner: the numbers hide on this phone until Face ID (or the password), again after the app
+   has been away for a minute. The numbers come from pnl_report and stock_report (supabase/setup.sql). */
 (function () {
   'use strict';
   const SP = window.SP;
@@ -26,14 +26,15 @@
     spIn: ["الفلوس اللي دخلت هالشهر", "Money in this month"], spOut: ["الفلوس اللي طلعت هالشهر", "Money out this month"], spCash: ["الصافي هالشهر", "Net this month"],
     spInH: ["البيع الكاش ودفعات الزبائن", "Cash sales and customers’ payments"], spOutH: ["المشتريات ودفعات الموردين والمصروفات والمرتجعات", "Purchases, payments to suppliers, expenses and refunds"],
     spErr: ["ما قدرناش نجيبو الأرقام. جرّب مرة ثانية.", "Couldn’t load the numbers. Try again."],
-    /* the lock */
-    lkT: ["المنظومة مقفولة", "The system is locked"], lkB: ["افتحها بـ {b}.", "Open it with {b}."], lkGo: ["افتح بـ {b}", "Open with {b}"],
-    lkPw: ["افتح بكلمة السر", "Use the password"], lkPwT: ["افتح المنظومة بكلمة السر", "Open the system with the password"], lkPwGo: ["افتح", "Open"],
-    lkWrongPw: ["كلمة السر غلط.", "Wrong password."],
-    lkCardT: ["قفل المنظومة", "System lock"], lkCardOn: ["المنظومة تتحل بـ {b} على التليفون هذا.", "The system opens with {b} on this phone."],
-    lkCardOff: ["خلي المنظومة تتحل بـ {b}، باش حد ما يشوف أرقامك من تليفونك.", "Make the system open with {b}, so nobody sees your numbers on your phone."],
-    lkOn: ["شغّل القفل", "Turn on"], lkOff: ["طفّي القفل", "Turn off"], lkDone: ["تمام: المنظومة تتحل بـ {b}", "Done: the system opens with {b}"],
-    lkOffDone: ["تطفّى قفل المنظومة", "System lock turned off"], lkReg: ["فعّل {b} للتليفون هذا", "Set up {b} on this phone"]
+    /* the closed eye */
+    lkT: ["الأرقام مخفية", "The numbers are hidden"], lkB: ["افتحها بـ {b}.", "Open them with {b}."], lkGo: ["افتح بـ {b}", "Open with {b}"],
+    lkPw: ["افتح بكلمة السر", "Use the password"], lkPwT: ["افتح الأرقام بكلمة السر", "Open the numbers with the password"], lkPwGo: ["افتح", "Open"],
+    lkWrongPw: ["كلمة السر غلط.", "Wrong password."], lkCardT: ["أرقام المنظومة مخفية", "The system’s numbers hide"],
+    lkCardOn: ["الأرباح والرصيد والحسابات تتخبى على التليفون هذا لين تفتحها بـ {b}.", "Profits, balances and accounts hide on this phone until you open them with {b}."],
+    lkOff: ["خليها ظاهرة", "Keep them shown"], lkDone: ["تمام: تفتح الأرقام بـ {b}", "Done: you open the numbers with {b}"],
+    lkOffDone: ["الأرقام ظاهرة ديما", "The numbers always show"], lkReg: ["فعّل {b} للتليفون هذا", "Set up {b} on this phone"],
+    eyeHide: ["اخفي الأرقام", "Hide the numbers"], eyeShow: ["اظهر الأرقام", "Show the numbers"],
+    eyeHidden: ["تخبّت الأرقام. تفتحها بـ {b} من العين.", "Numbers hidden. Open them with {b} from the eye."], eyeTap: ["اضغط على العين باش تشوف الأرقام", "Tap the eye to see the numbers"]
   });
 
   const BK = () => SP.bk;
@@ -109,9 +110,10 @@
   SP.adminPanels = (el, n) => {
     if (!el || !S.admin) return;
     const k = Math.min(PANES.length - 1, Math.max(0, +S.sysPanel || 0));
-    el.innerHTML = `<section class="sysp"><div class="chips light sysp-tabs" role="tablist">${PANES.map(([x], i) =>
-        `<button type="button" class="chip${i === k ? ' on' : ''}" role="tab" aria-selected="${i === k}" aria-controls="sp${i}" data-sp="${i}">${esc(t(x))}</button>`).join('')}</div>
-      <div class="sysp-track" id="spt">${PANES.map((x, i) => `<div class="sysp-pane" id="sp${i}" role="tabpanel"></div>`).join('')}</div></section>`;
+    el.innerHTML = `<section class="sysp"><div class="sysp-head"><div class="chips light sysp-tabs" role="tablist">${PANES.map(([x], i) =>
+        `<button type="button" class="chip${i === k ? ' on' : ''}" role="tab" aria-selected="${i === k}" aria-controls="sp${i}" data-sp="${i}">${esc(t(x))}</button>`).join('')}</div>${eyeBtn()}</div>
+      <div class="sysp-body"><div class="sysp-track" id="spt">${PANES.map((x, i) => `<div class="sysp-pane" id="sp${i}" role="tabpanel"></div>`).join('')}</div>
+        <button type="button" class="sysp-mask" id="spm" hidden>${I('eyeshut')}<span>${esc(t('eyeTap'))}</span></button></div></section>`;
     const track = $('#spt', el), tabs = $$('[data-sp]', el), calm = matchMedia('(prefers-reduced-motion: reduce)'), drawn = {};
     const draw = i => { if (i < 0 || i >= PANES.length || drawn[i]) return; drawn[i] = 1; PANES[i][1]($('#sp' + i, el), n); };
     // the track is as tall as the window being shown, so a short one leaves no empty space under it
@@ -128,22 +130,28 @@
     tabs.forEach(b => b.onclick = () => go(+b.dataset.sp));
     track.addEventListener('scroll', () => { const i = Math.round(Math.abs(track.scrollLeft) / Math.max(1, track.clientWidth)); if (i !== +S.sysPanel && i >= 0 && i < PANES.length) mark(i); }, { passive: true });
     draw(k);
+    wireEye(el);
     requestAnimationFrame(() => go(k, true));
   };
 
-  /* ---------- the Face ID lock (on this phone, for this account) ---------- */
+  /* ---------- the closed eye: the owner's numbers hidden on this phone until Face ID (or the password) ----------
+     A tap on the open eye hides them; a tap on the closed eye asks for Face ID and shows them until the app has been away
+     for a minute. While hidden, the money pages (profit and loss, reports, stock, customers, suppliers, expenses, merchants,
+     staff, the owner's controls) ask for Face ID too; selling, buying, looking up a price and the orders stay open. */
+  Object.assign(window.SP_IC, { eyeshut: '<path d="M3 9.5c2.4 3.6 5.6 5.4 9 5.4s6.6-1.8 9-5.4"/><path d="M6 13.2 4.3 15.8M9.9 14.7l-.7 3M14.1 14.7l.7 3M18 13.2l1.7 2.6"/>' });
   const LOCK = 'sp_sys_lock';
-  const SYS = /^(system|pos|lookup|orders|order-|receive|invoices|inv-|purchases|reports|staff|stock|merchants|merchant-|buyers|buyer-|suppliers|supplier-|expenses|pnl|admin)/;
+  const SYS = /^(reports|staff|stock|merchants|merchant-|buyers|buyer-|suppliers|supplier-|expenses|pnl|admin)/;
   const staffer = () => !!(S.user && SP.isStaff && SP.isStaff());
   const lockOn = () => staffer() && SP.load(LOCK, null) === S.user.id;
   let openAt = 0, hiddenAt = 0;
+  SP.sysHidden = () => lockOn() && !openAt;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { hiddenAt = Date.now(); return; }
-    if (openAt && hiddenAt && Date.now() - hiddenAt > 60000) { openAt = 0; if (lockOn() && SYS.test(SP.here())) SP.render(); }
+    if (openAt && hiddenAt && Date.now() - hiddenAt > 60000) { openAt = 0; const h = SP.here(); if (lockOn() && (SYS.test(h) || /^(system|lookup)$/.test(h))) SP.render(); }
   });
-  /* called by every page before it draws (js/views.js gate) */
+  /* called by every page before it draws (js/views.js gate): the money pages wait for Face ID while the numbers are hidden */
   SP.sysGate = n => {
-    if (openAt || !lockOn() || !SYS.test(SP.here())) return false;
+    if (!SP.sysHidden() || !SYS.test(SP.here())) return false;
     drawLock(n);
     return true;
   };
@@ -151,11 +159,36 @@
     if (sess && sess.user && sess.user.id !== (S.user && S.user.id)) await SP.refreshUser(sess);
     openAt = Date.now(); SP.render();
   };
+  /* Face ID first; when this phone has none for the account, a sheet: set it up here, or the password */
+  async function reveal() {
+    try { const sess = await SP.passkeySignIn(); if (!sess || !sess.user || sess.user.id !== S.user.id) throw Object.assign(new Error('not this account'), { code: 'webauthn_credential_not_found' }); return opened(sess); }
+    catch (e) { if (SP.passkeyPrefetch) SP.passkeyPrefetch('reg'); askSheet(SP.bioErr(e)); }
+  }
+  function askSheet(msg) {
+    const b = SP.bioName();
+    const s = SP.openSheet(`<h2 class="sheet-title">${esc(t('lkT'))}</h2><p class="hint">${esc(t('lkB', { b }))}</p>${msg ? `<p class="form-err">${esc(msg)}</p>` : ''}
+      <div class="sheet-actions lk-sheet"><button type="button" class="btn btn-signal" id="lkreg">${I('faceid')} ${esc(t('lkReg', { b }))}</button>
+        <button type="button" class="btn btn-ghost" id="lkpw2">${I('lock')} ${esc(t('lkPw'))}</button></div>`, { label: t('lkT') });
+    $('#lkreg', s.el).onclick = async () => { try { await SP.passkeyRegister(); s.close(); openAt = Date.now(); SP.toast(t('lkDone', { b })); SP.render(); } catch (e) { const er = $('.form-err', s.el); if (er) er.textContent = SP.bioErr(e); } };
+    $('#lkpw2', s.el).onclick = () => { s.close(); pwSheet(); };
+  }
+  function pwSheet() {
+    const s = SP.openSheet(`<h2 class="sheet-title">${esc(t('lkPwT'))}</h2><form class="form" id="lpf" novalidate>
+        <div class="field"><label for="lpi">${esc(t('password'))}</label><input id="lpi" class="input" type="password" autocomplete="current-password" dir="ltr"></div>
+        <p class="form-err" id="lpe" role="alert"></p><div class="sheet-actions"><button class="btn btn-signal">${I('eye')} ${esc(t('lkPwGo'))}</button></div></form>`, { label: t('lkPwT') });
+    setTimeout(() => { const i = $('#lpi', s.el); if (i) i.focus(); }, 60);
+    $('#lpf', s.el).onsubmit = async e => {
+      e.preventDefault();
+      const btn = $('#lpf button', s.el); btn.classList.add('busy');
+      try { const d = await SP.auth.signIn(S.user.email, $('#lpi', s.el).value); s.close(); await opened(d && d.session); }
+      catch (x) { $('#lpe', s.el).textContent = /Invalid login/i.test(String((x && x.message) || '')) ? t('lkWrongPw') : SP.errText(x); btn.classList.remove('busy'); }
+    };
+  }
   function drawLock(n) {
     const b = SP.bioName();
     if (SP.passkeyPrefetch) SP.passkeyPrefetch('login');
     shell(bar(t('tabSystem'), '', { noBack: true }) + `<main class="wrap lockv"><section class="lock-card">
-        <span class="lock-ic">${I('faceid')}</span><h2>${esc(t('lkT'))}</h2><p>${esc(t('lkB', { b }))}</p>
+        <span class="lock-ic">${I('eyeshut')}</span><h2>${esc(t('lkT'))}</h2><p>${esc(t('lkB', { b }))}</p>
         <div class="form-actions"><button type="button" class="btn btn-signal" id="lkgo">${I('faceid')} ${esc(t('lkGo', { b }))}</button>
           <button type="button" class="btn btn-ghost" id="lkpw">${I('lock')} ${esc(t('lkPw'))}</button></div>
         <p class="form-err" id="lkerr" role="alert"></p></section></main>`);
@@ -163,49 +196,30 @@
       $('#lkerr').textContent = '';
       try { await opened(await SP.passkeySignIn()); } catch (e) { if ($('#lkerr')) $('#lkerr').textContent = SP.bioErr(e); if (SP.passkeyPrefetch) SP.passkeyPrefetch('login'); }
     };
-    $('#lkpw').onclick = () => {
-      const s = SP.openSheet(`<h2 class="sheet-title">${esc(t('lkPwT'))}</h2><form class="form" id="lpf" novalidate>
-          <div class="field"><label for="lpi">${esc(t('password'))}</label><input id="lpi" class="input" type="password" autocomplete="current-password" dir="ltr"></div>
-          <p class="form-err" id="lpe" role="alert"></p><div class="sheet-actions"><button class="btn btn-signal">${I('lock')} ${esc(t('lkPwGo'))}</button></div></form>`, { label: t('lkPwT') });
-      setTimeout(() => { const i = $('#lpi', s.el); if (i) i.focus(); }, 60);
-      $('#lpf', s.el).onsubmit = async e => {
-        e.preventDefault();
-        const btn = $('#lpf button', s.el); btn.classList.add('busy');
-        try { const d = await SP.auth.signIn(S.user.email, $('#lpi', s.el).value); s.close(); await opened(d && d.session); }
-        catch (x) { $('#lpe', s.el).textContent = /Invalid login/i.test(String((x && x.message) || '')) ? t('lkWrongPw') : SP.errText(x); btn.classList.remove('busy'); }
-      };
-    };
+    $('#lkpw').onclick = pwSheet;
     SP.done(n);
   }
-  /* the switch on the System tab; turning it on asks for Face ID once, so the lock never shuts anyone out */
-  SP.lockCard = () => staffer() ? '<div id="lkc"></div>' : '';
-  SP.wireLockCard = async n => {
-    const box = $('#lkc');
-    if (!box) return;
-    const ok = SP.passkeyReady ? await SP.passkeyReady() : false;
-    if (!SP.alive(n) || !box.isConnected) return;
-    if (!ok) { box.remove(); return; }
-    const b = SP.bioName();
-    const draw = (reg, msg) => {
-      const on = lockOn();
-      box.innerHTML = `<section class="mcard lock-row"><span class="lock-ic sm">${I('faceid')}</span><span class="lr-main"><b>${esc(t('lkCardT'))}</b><small>${esc(t(on ? 'lkCardOn' : 'lkCardOff', { b }))}</small>
-          ${msg ? `<small class="form-err">${esc(msg)}</small>` : ''}</span>
-        <span class="lr-acts"><button type="button" class="btn ${on ? 'btn-ghost' : 'btn-ink'} sm" id="lkt">${esc(t(on ? 'lkOff' : 'lkOn'))}</button>
-          ${reg && !on ? `<button type="button" class="btn btn-signal sm" id="lkreg">${I('faceid')} ${esc(t('lkReg', { b }))}</button>` : ''}</span></section>`;
-      $('#lkt').onclick = async () => {
-        if (lockOn()) { SP.store(LOCK, null); SP.toast(t('lkOffDone')); return draw(); }
-        try {
-          const sess = await SP.passkeySignIn();
-          if (!sess || !sess.user || sess.user.id !== S.user.id) throw Object.assign(new Error('not this account'), { code: 'webauthn_credential_not_found' });
-          SP.store(LOCK, S.user.id); openAt = Date.now(); SP.toast(t('lkDone', { b })); draw();
-        } catch (e) { if (SP.passkeyPrefetch) SP.passkeyPrefetch('reg'); draw(true, SP.bioErr(e)); }
-      };
-      if ($('#lkreg')) $('#lkreg').onclick = async () => {
-        try { await SP.passkeyRegister(); SP.store(LOCK, S.user.id); openAt = Date.now(); SP.toast(t('lkDone', { b })); draw(); }
-        catch (e) { draw(true, SP.bioErr(e)); }
-      };
+  /* the eye on the owner's windows: open, a tap hides the numbers; shut, a tap asks for Face ID */
+  const eyeBtn = () => `<button type="button" class="sysp-eye${SP.sysHidden() ? ' shut' : ''}" id="spe" aria-pressed="${SP.sysHidden()}" aria-label="${esc(t(SP.sysHidden() ? 'eyeShow' : 'eyeHide'))}" title="${esc(t(SP.sysHidden() ? 'eyeShow' : 'eyeHide'))}">${I(SP.sysHidden() ? 'eyeshut' : 'eye')}</button>`;
+  function wireEye(el) {
+    const sp = $('.sysp', el);
+    if (!sp) return;
+    const hide = SP.sysHidden();
+    sp.classList.toggle('masked', hide);
+    const tr = $('#spt', el);
+    if (tr) { tr.inert = hide; if (hide) tr.setAttribute('aria-hidden', 'true'); else tr.removeAttribute('aria-hidden'); }
+    if ($('#spm', el)) $('#spm', el).hidden = !hide;
+    if (SP.passkeyPrefetch && hide) SP.passkeyPrefetch('login');
+    const go = async () => {
+      if (SP.sysHidden()) return reveal();
+      SP.store(LOCK, S.user.id); openAt = 0; SP.toast(t('eyeHidden', { b: SP.bioName() })); SP.render();
     };
-    if (SP.passkeyPrefetch) SP.passkeyPrefetch('login');
-    draw();
-  };
+    $('#spe', el).onclick = go;
+    if ($('#spm', el)) $('#spm', el).onclick = go;
+  }
+  SP.sysEye = { btn: eyeBtn, wire: wireEye };
+  /* «حسابي»: while the numbers hide, a way to stop hiding them */
+  SP.eyeRow = () => lockOn() ? `<section class="mcard lock-row" id="eyr"><span class="lock-ic sm">${I('eyeshut')}</span><span class="lr-main"><b>${esc(t('lkCardT'))}</b><small>${esc(t('lkCardOn', { b: SP.bioName() }))}</small></span>
+      <span class="lr-acts"><button type="button" class="btn btn-ghost sm" id="eyoff">${esc(t('lkOff'))}</button></span></section>` : '';
+  SP.wireEyeRow = () => { if ($('#eyoff')) $('#eyoff').onclick = () => { SP.store(LOCK, null); SP.toast(t('lkOffDone')); SP.render(); }; };
 })();

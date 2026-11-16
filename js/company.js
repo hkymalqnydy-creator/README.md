@@ -361,7 +361,7 @@
         <button type="button" class="btn btn-ghost sm" id="lo">${I('logout', 'dirx')} ${esc(t('logout'))}</button></div>
         ${mode === 'approved' ? `<div class="banner ${c.approved ? 'note' : 'warn'}">${I(c.approved ? 'verified' : 'clock')}<span>${esc(t(c.approved ? 'approvedYes' : 'approvedNo'))}</span></div>` : ''}</section>
       ${missing ? `<a class="banner warn" href="#pf">${I('info')}<span><b>${esc(t('completeT'))}</b> ${esc(t('completeB'))}</span></a>` : ''}
-      ${!staffer && SP.ledgerLink ? SP.ledgerLink() : ''}${SP.bioCard ? SP.bioCard() : ''}${SP.systemLink ? SP.systemLink() : ''}${cartLink}${ordLink}
+      ${!staffer && SP.ledgerLink ? SP.ledgerLink() : ''}${!staffer && SP.myShopCard ? SP.myShopCard() : ''}${SP.bioCard ? SP.bioCard() : ''}${SP.eyeRow ? SP.eyeRow() : ''}${SP.systemLink ? SP.systemLink() : ''}${cartLink}${ordLink}
       <form class="form mcard" id="pf" novalidate><h2 class="lbl">${esc(t('myAccount'))}</h2>
         <div class="field"><label for="psh">${esc(t('mShop'))}${staffer ? '' : req}</label><input id="psh" class="input" maxlength="80" value="${esc(c.shop_name || '')}" autocomplete="organization" placeholder="${esc(t('mShopPh'))}"></div>
         <div class="field"><label for="pn">${esc(t('yourName'))}${req}</label><input id="pn" class="input" maxlength="80" value="${esc(c.name)}" autocomplete="name"></div>
@@ -373,6 +373,8 @@
       ${SP.prefs()}</main>`);
     SP.wirePrefs();
     if (SP.wireBio) SP.wireBio(n);
+    if (SP.wireMyShopCard) SP.wireMyShopCard(n);
+    if (SP.wireEyeRow) SP.wireEyeRow(n);
     $('#lo').onclick = async () => { await SP.auth.signOut(); await SP.refreshUser(null); SP.toast(t('loggedOut')); SP.render(); };
     $('#pf').onsubmit = async e => {
       e.preventDefault();

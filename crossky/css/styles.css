@@ -1467,19 +1467,41 @@ body.ai-open{overflow:hidden}
 .bgt .bmark.xs{font-size:12px}
 .bgt .bmark.img{border-radius:14px;padding:4px}
 .bgt:active{transform:scale(.97)}
-/* «المحلات»: the merchants' shops as long cards, one under the other */
-.mshops{display:grid;gap:10px}
-.mshop{display:flex;align-items:center;gap:12px;min-height:76px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:16px;color:var(--ink);text-decoration:none;-webkit-tap-highlight-color:transparent}
-.mshop:active{transform:scale(.99)}
-.mshop>.ic{width:18px;height:18px;flex:none;color:var(--muted)}
-.ms-ic{display:grid;place-items:center;width:50px;height:50px;flex:none;border-radius:14px;background:linear-gradient(160deg,color-mix(in srgb,var(--signal) 78%,#fff),var(--signal));color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 4px 10px -6px rgba(10,20,70,.6)}
-.ms-ic .ic{width:26px;height:26px}
-.ms-ic.big{width:76px;height:76px;border-radius:22px}
-.ms-ic.big .ic{width:40px;height:40px}
-.ms-main{flex:1;min-width:0;display:grid;gap:3px}
-.ms-main b{font-size:16px;line-height:1.3;overflow-wrap:anywhere}
-.ms-main small{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:13px}
-.ms-main small .ic{width:14px;height:14px}
+/* «المحلات»: each merchant's shop as a card, on his photo or one of six backgrounds; a row to swipe on the home screen */
+.scards{display:grid;grid-auto-flow:column;grid-auto-columns:84%;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;padding:2px 0 8px}
+.scards::-webkit-scrollbar{display:none}
+.scards.stack{grid-auto-flow:row;grid-auto-columns:auto;grid-template-columns:1fr;overflow:visible;padding:0}
+.scard{position:relative;isolation:isolate;display:block;aspect-ratio:1.7;border-radius:20px;overflow:hidden;color:#fff;text-decoration:none;scroll-snap-align:start;
+  background:var(--sc,linear-gradient(135deg,#2F54E6,#16205A));box-shadow:0 12px 26px -16px rgba(8,16,48,.7);-webkit-tap-highlight-color:transparent}
+.scard:active{transform:scale(.985)}
+.scard[data-bg="b1"]{--sc:linear-gradient(135deg,color-mix(in srgb,var(--signal) 92%,#fff),color-mix(in srgb,var(--signal) 45%,#000))}
+.scard[data-bg="b2"]{--sc:linear-gradient(135deg,#12959F,#0B3550)}
+.scard[data-bg="b3"]{--sc:linear-gradient(135deg,#2A8A55,#0C3A26)}
+.scard[data-bg="b4"]{--sc:linear-gradient(135deg,#E0612B,#7A1F10)}
+.scard[data-bg="b5"]{--sc:linear-gradient(135deg,#4A5573,#11141F)}
+.scard[data-bg="b6"]{--sc:linear-gradient(135deg,#8053C0,#26164F)}
+.scard::before{content:"";position:absolute;inset:0;z-index:-3;background:radial-gradient(120% 90% at 100% 0,rgba(255,255,255,.22),transparent 55%),repeating-linear-gradient(135deg,rgba(255,255,255,.06) 0 2px,transparent 2px 16px)}
+.sc-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
+.sc-shade{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(0,0,0,.12) 0,rgba(0,0,0,0) 32%,rgba(0,0,0,.18) 55%,rgba(0,0,0,.72) 100%)}
+.sc-badge{position:absolute;top:12px;inset-inline-start:12px;display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:rgba(10,16,40,.3);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.sc-badge .ic{width:21px;height:21px}
+.sc-text{position:absolute;inset-inline:16px;bottom:14px;display:grid;gap:3px;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+.sc-text b{font-family:var(--font-display);font-size:20px;line-height:1.25;overflow-wrap:anywhere}
+.sc-text small{display:flex;align-items:center;gap:4px;font-size:13.5px;font-weight:600;opacity:.95}
+.sc-text small .ic{width:15px;height:15px}
+.scard.big{aspect-ratio:1.6;border-radius:22px;margin-bottom:12px}
+.scard.big .sc-text b{font-size:24px}
+.my-card #mycv .scard,.mr-card .scard{margin:8px 0 4px}
+.bg-sw{display:flex;flex-wrap:wrap;gap:10px;margin:4px 0 10px}
+.swatch{width:44px;height:30px;border-radius:9px;border:2px solid transparent;cursor:pointer;background:var(--sc);box-shadow:0 2px 6px -3px rgba(0,0,0,.5)}
+.swatch[data-bg="b1"]{--sc:linear-gradient(135deg,color-mix(in srgb,var(--signal) 92%,#fff),color-mix(in srgb,var(--signal) 45%,#000))}
+.swatch[data-bg="b2"]{--sc:linear-gradient(135deg,#12959F,#0B3550)}
+.swatch[data-bg="b3"]{--sc:linear-gradient(135deg,#2A8A55,#0C3A26)}
+.swatch[data-bg="b4"]{--sc:linear-gradient(135deg,#E0612B,#7A1F10)}
+.swatch[data-bg="b5"]{--sc:linear-gradient(135deg,#4A5573,#11141F)}
+.swatch[data-bg="b6"]{--sc:linear-gradient(135deg,#8053C0,#26164F)}
+.swatch[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--surface) inset}
+.swatch:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
 .ms-search{margin:12px 0}
 .ms-head{display:grid;justify-items:center;text-align:center;gap:6px;padding-top:22px}
 .ms-head h1{font-family:var(--font-display);font-size:24px;line-height:1.3;margin-top:6px}
@@ -1511,3 +1533,37 @@ body.ai-open{overflow:hidden}
 .pq-rows .pl-row.good b{color:var(--good)}
 .pq-acts{flex-wrap:wrap}
 .pq-again{margin-top:10px}
+/* the sales invoice: picking several parts from one search, and a ✕ in the search field */
+.inx{position:relative;flex:1;min-width:0;display:block}
+.inx>.input{width:100%;padding-inline-end:44px}
+.inx-b{position:absolute;top:50%;inset-inline-end:6px;transform:translateY(-50%);width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:50%;background:var(--chip);color:var(--muted);cursor:pointer}
+.inx-b .ic{width:16px;height:16px}
+.inx-b[hidden]{display:none}
+.pk-hint{margin:0 2px 2px}
+.pres-row.pick{justify-content:flex-start}
+.pres-row.pick>span:nth-child(2){flex:1;display:grid;min-width:0}
+.pres-row.pick .price,.pres-row.pick>.num:last-child{margin-inline-start:auto}
+.pk-box{width:24px;height:24px;flex:none;display:grid;place-items:center;border-radius:7px;border:2px solid var(--line);color:transparent;transition:background .12s,border-color .12s}
+.pk-box .ic{width:15px;height:15px}
+.pres-row.on{border-color:var(--signal);background:color-mix(in srgb,var(--signal) 7%,var(--surface))}
+.pres-row.on .pk-box{background:var(--signal);border-color:var(--signal);color:var(--on-signal)}
+.pk-n{flex:none;font-weight:800;font-size:13px;color:var(--signal);padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--signal) 12%,var(--surface))}
+@media (prefers-reduced-motion:reduce){.pk-box{transition:none}}
+/* the closed eye at the corner of the owner's windows: the numbers under a frost until Face ID */
+.sysp-head{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.sysp-head .sysp-tabs{flex:1;min-width:0;margin:0}
+.sysp-eye{flex:none;width:44px;height:44px;display:grid;place-items:center;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.sysp-eye .ic{width:24px;height:24px}
+.sysp-eye.shut{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.sysp-eye:focus-visible,.sysp-mask:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.sysp-body{position:relative}
+.sysp.masked .sysp-track{filter:blur(12px) saturate(.6);opacity:.65;pointer-events:none;user-select:none;-webkit-user-select:none}
+.sysp-mask{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:10px;border:0;background:transparent;color:var(--ink);font:inherit;font-weight:700;font-size:15px;cursor:pointer;text-align:center;padding:16px}
+.sysp-mask[hidden]{display:none}
+.sysp-mask .ic{width:60px;height:60px;padding:14px;border-radius:20px;background:var(--ink);color:var(--surface);box-shadow:0 12px 26px -14px rgba(8,16,48,.7)}
+.lk-sheet{flex-direction:column;align-items:stretch}
+/* talking to the assistant: the voice bar on the System tab, and the mic while it listens */
+.sys-voice{width:100%;font:inherit;font-weight:600;cursor:pointer;text-align:start;color:var(--ink);background:color-mix(in srgb,var(--signal) 7%,var(--surface))}
+.ai-bar .ai-mic.on{background:#c0392b;color:#fff;border-radius:50%;animation:micpulse 1.2s ease-in-out infinite}
+@keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(192,57,43,.45)}50%{box-shadow:0 0 0 9px rgba(192,57,43,0)}}
+@media (prefers-reduced-motion:reduce){.ai-bar .ai-mic.on{animation:none}}
