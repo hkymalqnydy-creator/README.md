@@ -252,6 +252,22 @@
 
   /* ---------- one invoice ---------- */
   const when = v => { try { return new Intl.DateTimeFormat(SP.LANG + '-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(v)); } catch (e) { return String(v).slice(0, 16).replace('T', ' '); } };
+  /* one invoice as a printed page: the staff's invoice here, and the merchant's own copy in his «صادر ووارد» (js/merchants.js) */
+  SP.invoiceDoc = v => {
+    const st = S.settings || {}, cur = v.currency, br = v.branch || {}, app = st.brand_name || SP.CFG.appName || t('app');
+    return `<article class="invoice${v.status === 'returned' || v.status === 'cancelled' ? ' returned' : ''}" id="invoice">
+          <header class="inv-head">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : SP.CFG.logoInk ? '' : `<span class="brand-mark">${I('nut')}</span>`}<div>${!st.logo && SP.CFG.logoInk ? `<img class="inv-wm" src="${esc(SP.CFG.logoInk)}" alt="${esc(app)}">` : `<b>${esc(app)}</b>`}<small>${esc([br.name, br.city, br.phone ? SP.prettyPhone(br.phone, S.country) : ''].filter(Boolean).join(' · '))}</small></div>
+            <div class="inv-no"><small>${esc(t('invT', { n: '' }).trim())}</small><b class="num">${esc(v.no)}</b></div></header>
+          ${v.status === 'returned' ? `<p class="inv-stamp">${esc(t('invReturned'))}</p>` : ''}${v.status === 'cancelled' ? `<p class="inv-stamp">${esc(t('ordCancelled'))}</p>` : ''}
+          <dl class="inv-meta"><div><dt>${esc(t('invDate'))}</dt><dd>${esc(when(v.created_at))}</dd></div><div><dt>${esc(t('invStaff'))}</dt><dd>${esc(v.staff_name || '—')}</dd></div>
+            ${v.customer_name || v.customer_phone ? `<div><dt>${esc(t('custName'))}</dt><dd>${esc([v.customer_name, v.customer_phone].filter(Boolean).join(' · '))}</dd></div>` : ''}<div><dt>${esc(t('posPay'))}</dt><dd>${esc(t('pay_' + v.payment))}</dd></div></dl>
+          <table class="inv-items"><thead><tr><th>${esc(t('invItem'))}</th><th>${esc(t('posQty'))}</th><th>${esc(t('posPrice'))}</th><th>${esc(t('posTotal'))}</th></tr></thead>
+            <tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.sku ? `<small class="mono">${esc(it.sku)}</small>` : ''}</td><td class="num">${it.qty}</td><td class="num">${esc(money(it.price, cur))}</td><td class="num">${esc(money(it.line_total, cur))}</td></tr>`).join('')}</tbody></table>
+          <dl class="inv-tot">${+v.discount ? `<div><dt>${esc(t('posSubtotal'))}</dt><dd class="num">${esc(money(v.subtotal, cur))}</dd></div><div><dt>${esc(t('posDiscount'))}</dt><dd class="num">− ${esc(money(v.discount, cur))}</dd></div>` : ''}
+            <div class="big"><dt>${esc(t('posTotal'))}</dt><dd class="num">${esc(money(v.total, cur))}</dd></div>
+            ${v.payment === 'credit' ? `<div><dt>${esc(t('posPaid'))}</dt><dd class="num">${esc(money(v.paid, cur))}</dd></div><div><dt>${esc(t('posRemain'))}</dt><dd class="num">${esc(money(v.total - v.paid, cur))}</dd></div>` : ''}</dl>
+          ${v.note ? `<p class="inv-note">${esc(v.note)}</p>` : ''}${st.invoice_footer ? `<p class="inv-foot">${esc(st.invoice_footer)}</p>` : ''}</article>`;
+  };
   SP.route(/^inv-([0-9a-f-]{36})$/, async (m, n) => {
     if (gate(n) || !guard(n)) return;
     shell(bar(t('invList')) + `<main class="wrap"><div class="sk sk-block"></div></main>`);
@@ -269,23 +285,14 @@
     };
     const draw = v => {
       shell(bar(t('invT', { n: v.no }), canPrint ? `<button type="button" class="iconbtn" onclick="window.print()" aria-label="${esc(t('invPrint'))}">${I('copy')}</button>` : '') + `<main class="wrap invoice-wrap">
-        <article class="invoice${v.status === 'returned' || v.status === 'cancelled' ? ' returned' : ''}" id="invoice">
-          <header class="inv-head">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : SP.CFG.logoInk ? '' : `<span class="brand-mark">${I('nut')}</span>`}<div>${!st.logo && SP.CFG.logoInk ? `<img class="inv-wm" src="${esc(SP.CFG.logoInk)}" alt="${esc(app)}">` : `<b>${esc(app)}</b>`}<small>${esc([br.name, br.city, br.phone ? SP.prettyPhone(br.phone, S.country) : ''].filter(Boolean).join(' · '))}</small></div>
-            <div class="inv-no"><small>${esc(t('invT', { n: '' }).trim())}</small><b class="num">${esc(v.no)}</b></div></header>
-          ${v.status === 'returned' ? `<p class="inv-stamp">${esc(t('invReturned'))}</p>` : ''}${v.status === 'cancelled' ? `<p class="inv-stamp">${esc(t('ordCancelled'))}</p>` : ''}
-          <dl class="inv-meta"><div><dt>${esc(t('invDate'))}</dt><dd>${esc(when(v.created_at))}</dd></div><div><dt>${esc(t('invStaff'))}</dt><dd>${esc(v.staff_name || '—')}</dd></div>
-            ${v.customer_name || v.customer_phone ? `<div><dt>${esc(t('custName'))}</dt><dd>${esc([v.customer_name, v.customer_phone].filter(Boolean).join(' · '))}</dd></div>` : ''}<div><dt>${esc(t('posPay'))}</dt><dd>${esc(t('pay_' + v.payment))}</dd></div></dl>
-          <table class="inv-items"><thead><tr><th>${esc(t('invItem'))}</th><th>${esc(t('posQty'))}</th><th>${esc(t('posPrice'))}</th><th>${esc(t('posTotal'))}</th></tr></thead>
-            <tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.sku ? `<small class="mono">${esc(it.sku)}</small>` : ''}</td><td class="num">${it.qty}</td><td class="num">${esc(money(it.price, cur))}</td><td class="num">${esc(money(it.line_total, cur))}</td></tr>`).join('')}</tbody></table>
-          <dl class="inv-tot">${+v.discount ? `<div><dt>${esc(t('posSubtotal'))}</dt><dd class="num">${esc(money(v.subtotal, cur))}</dd></div><div><dt>${esc(t('posDiscount'))}</dt><dd class="num">− ${esc(money(v.discount, cur))}</dd></div>` : ''}
-            <div class="big"><dt>${esc(t('posTotal'))}</dt><dd class="num">${esc(money(v.total, cur))}</dd></div>
-            ${v.payment === 'credit' ? `<div><dt>${esc(t('posPaid'))}</dt><dd class="num">${esc(money(v.paid, cur))}</dd></div><div><dt>${esc(t('posRemain'))}</dt><dd class="num">${esc(money(v.total - v.paid, cur))}</dd></div>` : ''}</dl>
-          ${v.note ? `<p class="inv-note">${esc(v.note)}</p>` : ''}${st.invoice_footer ? `<p class="inv-foot">${esc(st.invoice_footer)}</p>` : ''}</article>
+        ${SP.invoiceDoc(v)}
         ${v.source === 'app' && SP.ordPill ? `<div class="banner note noprint">${I('bag')}<span>${esc(t('ordFromApp'))} ${SP.ordPill(v.status)}${v.status !== 'done' && v.status !== 'returned' ? `<small>${esc(t('ordInvBanner', { s: t('ordFromApp') }).split(': ').slice(1).join(': '))}</small>` : ''}</span><a class="btn btn-ghost sm" href="#order-${esc(v.id)}">${esc(t('ordOpenOrder'))}</a></div>` : ''}
+        ${SP.sendPanel ? SP.sendPanel(v) : ''}
         <div class="form-actions noprint">${canPrint ? `<button type="button" class="btn btn-ink" onclick="window.print()">${I('copy')} ${esc(t('invPrint'))}</button>` : ''}
           <a class="btn btn-wa" id="ish" href="${esc(waHref(v))}" target="_blank" rel="noopener">${I('chat')} ${esc(t('invShare'))}</a>
           ${SP.can('returns') && v.status === 'done' ? `<button type="button" class="btn btn-danger" id="iret">${I('back', 'dirx')} ${esc(t('invReturn'))}</button>` : ''}
           ${SP.can('sales') ? `<a class="btn btn-ghost" href="#pos">${I('plus')} ${esc(t('posClear'))}</a>` : ''}</div></main>`);
+      if (SP.wireSend) SP.wireSend(v, draw);
       if ($('#iret')) $('#iret').onclick = async () => {
         if (!await SP.confirmSheet({ title: t('invReturn'), body: t('invReturnQ'), ok: t('invReturn'), danger: true })) return;
         try { const r = await P.ret(v.id); SP.toast(t('invReturnDone')); draw(r); } catch (e) { SP.toast(posErr(e)); }

@@ -10,6 +10,7 @@
   const CONF = window.SPARAT_CONFIG || {}, SEED = 5, SUFFIX = CONF.mode === 'company' ? '_' + String(CONF.appName || 'co').toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
   const KEY = 'sp_demo_db_v' + SEED + SUFFIX;
   try { for (let v = 1; v < SEED; v++) { localStorage.removeItem('sp_demo_db_v' + v + SUFFIX); localStorage.removeItem('sp_demo_db_v' + v + SUFFIX + '_session'); } } catch (e) { /* no storage */ }
+  const DEMO_MERCHANT = '218925551234@' + (CONF.phoneDomain || 'phone.invalid');
   const CATS = ['engine', 'brakes', 'suspension', 'electrical', 'lights', 'body', 'oils', 'cooling', 'ac', 'transmission', 'tires', 'interior', 'other'];
   /* Real photos for the bundled part pictures (img/parts/NAME.jpg): free Pexels photos (pexels.com/license: free to use, no credit
      required; credited here). The app shows them where the phone can reach images.pexels.com and falls back to the bundled picture
@@ -162,9 +163,14 @@
       const pr = DB.products[i]; pr.qty += q;
       DB.stock_moves.push({ id: ++DB.move_seq, product_id: pr.id, title: pr.title, branch_id: pr.shop_id, staff_id: owner.id, staff_name: email, qty: q, reason, cost: pr.cost, note, created_at: ago(m) });
     });
-    const cu = (name, phone, city, approved, m) => { const id = uuid(); DB.users.push({ id, email: 'c' + DB.users.length + '@demo.app', password: uuid() }); DB.customers.push({ user_id: id, name, phone, city, approved, created_at: ago(m) }); };
-    cu('ورشة النور للصيانة', '0925551234', 'طرابلس', true, 3000);
-    cu('محمد سالم', '0947778899', 'بنغازي', false, 200);
+    /* merchants: the approved one signs in with his phone number (0925551234, password 123456) and has an invoice sent to him */
+    const cu = (name, shop, phone, city, approved, m, login) => { const id = uuid(); DB.users.push({ id, email: login || 'c' + DB.users.length + '@demo.app', password: login ? '123456' : uuid() });
+      DB.customers.push({ user_id: id, name, shop_name: shop, phone, city, approved, created_at: ago(m) }); return id; };
+    const nour = cu('علي النوري', 'ورشة النور للصيانة', '0925551234', 'طرابلس', true, 3000, DEMO_MERCHANT);
+    cu('محمد سالم', 'محل سالم لقطع الغيار', '0947778899', 'بنغازي', false, 200);
+    const sent = DB.invoices.find(v => v.customer_phone === '0925551234');
+    if (sent) { sent.customer_id = nour; sent.sent_at = ago(50); }
+    DB.merchants = 1;
     /* the activity log of everything above, as the database writes it (supabase/setup.sql section 12) */
     const L = [], who = id => id === owner.id ? email : (DB.staff.find(x => x.user_id === id) || {}).name || '';
     const add = (at, actor, kind, ref, title, amount, detail) => L.push({ created_at: at, actor_id: actor, actor_name: who(actor), kind, ref, title: title || '', amount: amount == null ? null : amount, detail });
@@ -174,6 +180,7 @@
     DB.invoices.forEach(v => { const it = DB.invoice_items.filter(i => i.invoice_id === v.id);
       add(v.created_at, v.staff_id, 'sale', v.id, v.customer_name, v.total, { no: v.no, units: it.reduce((k, i) => k + i.qty, 0), lines: it.length, discount: 0, off_list: 0, payment: v.payment, paid: v.paid });
       if (v.status === 'returned') add(v.returned_at, v.staff_id, 'return', v.id, v.customer_name, v.total, { no: v.no }); });
+    if (sent) add(sent.sent_at, owner.id, 'invoice_sent', sent.id, 'ورشة النور للصيانة', sent.total, { no: sent.no, phone: '0925551234', again: false });
     DB.customer_payments.forEach(x => add(x.created_at, x.staff_id, 'pay_in', String(x.id), x.customer_name, x.amount, { note: x.note, by: x.staff_name, key: x.cust_key }));
     DB.supplier_payments.forEach(x => add(x.created_at, x.staff_id, 'pay_out', String(x.id), x.supplier, x.amount, { note: x.note, by: x.staff_name }));
     DB.expenses.forEach(x => add(x.created_at, x.staff_id, 'expense', String(x.id), x.cat, x.amount, { note: x.note, by: x.staff_name, day: x.spent_on }));
@@ -202,6 +209,19 @@
         y_from: +x.y_from || null, y_to: +x.y_to || null, part_no: x.part_no || String(x.sku), descr: x.descr || '', imgs: Array.isArray(x.imgs) ? x.imgs.slice(0, 6) : [], status: 'active',
         hide_price: false, barcode: null, search_text: '', created_at: now(), updated_at: now() }));
     }
+    let merch = false;
+    if (!DB.merchants && opts.seed && CONF.mode === 'company' && DB.users.length > 0) {
+      merch = true; DB.merchants = 1;
+      DB.customers.forEach(c => { if (c.shop_name == null) c.shop_name = ''; });
+      const nour = DB.customers.find(c => c.phone === '0925551234' && c.name === 'ورشة النور للصيانة'), salem = DB.customers.find(c => c.phone === '0947778899' && !c.shop_name);
+      if (salem) salem.shop_name = 'محل سالم لقطع الغيار';
+      const u = nour && DB.users.find(x => x.id === nour.user_id);
+      if (u && !DB.users.some(x => x.email === DEMO_MERCHANT)) {
+        Object.assign(nour, { name: 'علي النوري', shop_name: 'ورشة النور للصيانة' }); Object.assign(u, { email: DEMO_MERCHANT, password: '123456' });
+        const v = DB.invoices.find(x => x.customer_phone === '0925551234' && !x.customer_id && x.status === 'done');
+        if (v) { v.customer_id = u.id; v.sent_at = new Date(Date.now() - 50 * 60000).toISOString(); }
+      }
+    } else if (!DB.merchants) DB.merchants = 1;
     window.__mockdb = DB;
     let session = null; const listeners = [];
     try { const s = opts.persist && JSON.parse(localStorage.getItem(KEY + '_session') || 'null'); if (s && DB.users.some(u => u.id === s.user.id)) session = s; } catch (e) { /* signed out */ }
@@ -209,7 +229,7 @@
       if (!opts.persist) return;
       try { localStorage.setItem(KEY, JSON.stringify(DB)); localStorage.setItem(KEY + '_session', JSON.stringify(session)); } catch (e) { /* storage full: keep working in memory */ }
     }
-    if (migrate) save();
+    if (migrate || merch) save();
     const later = v => new Promise(r => setTimeout(() => r(v), 15));
     const uid = () => session && session.user.id;
     const isAdmin = () => !!uid() && DB.admins.includes(uid());
@@ -353,7 +373,8 @@
       }
       if (name === 'customers') {
         if (DB.customers.some(c => c.user_id === uid())) return { error: { message: 'duplicate key', code: '23505' } };
-        return { row: { phone: '', city: '', ...v, user_id: uid(), approved: false, created_at: now() } };
+        if (String(v.shop_name || '').length > 80) return { error: { message: 'new row for relation "customers" violates check constraint "customers_shop_name_check"', code: '23514' } };
+        return { row: { phone: '', city: '', shop_name: '', ...v, user_id: uid(), approved: false, created_at: now() } };
       }
       return rls();
     }
@@ -365,7 +386,12 @@
         if (v.sku && DB.products.some(p => p.sku === v.sku && p.id !== r.id)) return { error: { message: 'duplicate key value violates unique constraint "products_sku_key"', code: '23505' } };
         v.owner_id = (DB.shops.find(s => s.id === (v.shop_id || r.shop_id)) || {}).owner_id || r.owner_id;
       }
-      if (name === 'customers' && !hasPerm('customers')) { delete v.approved; delete v.user_id; }
+      if (name === 'customers' && 'shop_name' in v && String(v.shop_name || '').length > 80) return { error: { message: 'new row for relation "customers" violates check constraint "customers_shop_name_check"', code: '23514' } };
+      if (name === 'customers' && !hasPerm('customers')) {
+        delete v.approved; delete v.user_id;
+        /* an approved merchant sees every sale under his number: a new number needs the company's approval again */
+        if ('phone' in v && custKey('', v.phone) !== custKey('', r.phone)) v.approved = false;
+      }
       if (name === 'settings' && 'ads' in v && !adsOk(v.ads)) return { error: { message: 'new row for relation "settings" violates check constraint "settings_ads_chk"', code: '23514' } };
       if (name === 'settings' && (('ai_daily' in v && !(Number.isInteger(+v.ai_daily) && +v.ai_daily >= 5 && +v.ai_daily <= 1000)) || ('ai_rules' in v && String(v.ai_rules || '').length > 3000) || ('ai_name' in v && String(v.ai_name || '').length > 40)))
         return { error: { message: 'new row for relation "settings" violates check constraint "settings_ai_check"', code: '23514' } };
@@ -489,6 +515,42 @@
     const newest = (x, y) => String(y.created_at).localeCompare(String(x.created_at)) || (y.id > x.id ? 1 : y.id < x.id ? -1 : 0);
     const owingFirst = (x, y) => (y.balance > 0) - (x.balance > 0) || y.last_at.localeCompare(x.last_at) || x.key.localeCompare(y.key);
     const page = (l, a, d) => { const off = a.p_offset || 0; return l.slice(off, off + Math.min(Math.max(a.p_limit || d, 1), 100)); };
+    /* merchants (setup.sql section 16): the invoices sent to his account and his received orders, and once the company has
+       approved him every sale under his number; his payments and what he owes only once approved */
+    function merchantInvoices(user) {
+      const c = DB.customers.find(x => x.user_id === user), k = c && c.approved ? custKey('', c.phone) : null;
+      return DB.invoices.filter(v => (v.customer_id === user && (v.sent_at || v.status === 'done' || v.status === 'returned'))
+        || (!!k && k.startsWith('p:') && (v.status === 'done' || v.status === 'returned') && custKey(v.customer_name, v.customer_phone) === k));
+    }
+    function merchantSums(c) {
+      const k = custKey('', c.phone), d = merchantInvoices(c.user_id).filter(v => v.status === 'done');
+      const due = d.reduce((x, v) => x + Math.max(v.total - v.paid, 0), 0);
+      const paid = c.approved && k && k.startsWith('p:') ? DB.customer_payments.filter(p => p.cust_key === k).reduce((x, p) => x + p.amount, 0) : 0;
+      return { bought: money2(d.reduce((x, v) => x + v.total, 0)), paid: money2(paid), balance: c.approved ? money2(due - paid) : null };
+    }
+    function merchantBook(user) {
+      const c = DB.customers.find(x => x.user_id === user);
+      if (!c) return null;
+      const k = custKey('', c.phone), sums = merchantSums(c), units = id => DB.invoice_items.filter(i => i.invoice_id === id).reduce((x, i) => x + i.qty, 0);
+      const showP = RPC.prices_shown(), hidden = id => DB.invoice_items.some(i => i.invoice_id === id && (DB.products.find(p => p.id === i.product_id) || {}).hide_price);
+      const orders = DB.invoices.filter(v => v.customer_id === user && v.source === 'app')
+        .sort((x, y) => String(y.ordered_at || '').localeCompare(String(x.ordered_at || '')) || y.no - x.no).slice(0, 100);
+      return { user_id: c.user_id, shop_name: c.shop_name || '', name: c.name, phone: c.phone, city: c.city || '', approved: !!c.approved, created_at: c.created_at,
+        bought: sums.bought, paid_later: sums.paid, open_orders: orders.filter(v => v.status === 'preparing' || v.status === 'ready').length, balance: sums.balance,
+        invoices: merchantInvoices(user).sort((x, y) => String(y.sent_at || y.created_at).localeCompare(String(x.sent_at || x.created_at)) || y.no - x.no).slice(0, 100)
+          .map(v => ({ id: v.id, no: v.no, status: v.status, source: v.source || 'pos', created_at: v.created_at, sent_at: v.sent_at || null, total: v.total, paid: v.paid,
+            payment: v.payment, currency: v.currency, units: units(v.id) })),
+        orders: orders.map(v => ({ id: v.id, no: v.no, status: v.status, ordered_at: v.ordered_at, currency: v.currency, units: units(v.id),
+          total: isStaff() || (showP && !hidden(v.id)) ? v.total : null })),
+        payments: c.approved && k && k.startsWith('p:') ? DB.customer_payments.filter(p => p.cust_key === k).sort(newest).slice(0, 100)
+          .map(p => ({ id: p.id, amount: p.amount, note: p.note, created_at: p.created_at })) : [] };
+    }
+    const merchantHits = q => {
+      q = String(q || '').trim(); const nq = norm(q); let d = nq.replace(/[^0-9]/g, ''); if (d.length > 9) d = d.slice(-9);
+      return DB.customers.filter(c => !q || norm((c.shop_name || '') + ' ' + c.name).includes(nq) || (d.length >= 3 && norm(c.phone).replace(/[^0-9]/g, '').includes(d)));
+    };
+    const canOpen = v => hasPerm('invoices') || v.staff_id === uid() || (v.source === 'app' && hasPerm('sales'));
+    const shopOrName = c => String(c.shop_name || '').trim() || c.name;
     function buyers() {
       const m = {};
       DB.invoices.filter(v => v.status === 'done').sort((x, y) => x.created_at.localeCompare(y.created_at)).forEach(v => {
@@ -587,7 +649,9 @@
         const v = DB.invoices.find(x => x.id === a.p_id);
         if (!v || !uid() || !(hasPerm('invoices') || v.staff_id === uid() || (v.source === 'app' && hasPerm('sales')))) return null;
         const s = shopOf(v.branch_id);
+        const mc = v.customer_id && DB.customers.find(c => c.user_id === v.customer_id);
         return { ...v, branch: s ? { id: s.id, name: s.name, city: s.city, area: s.area, phone: s.phone, whatsapp: s.whatsapp } : null,
+          merchant: mc ? { user_id: mc.user_id, shop_name: mc.shop_name || '', name: mc.name, phone: mc.phone, approved: !!mc.approved } : null,
           items: DB.invoice_items.filter(i => i.invoice_id === v.id).map(i => { const o = { ...i }; if (!hasPerm('costs')) delete o.cost; return o; }) };
       },
       create_invoice(a) {
@@ -664,7 +728,7 @@
         return { id: o.id, no: o.no, status: o.status, source: o.source, ordered_at: o.ordered_at, ready_at: o.ready_at || null, done_at: done ? o.created_at : null,
           cancelled_at: o.cancelled_at || null, cancel_reason: o.cancel_reason || '', delivery: o.delivery || '', address: o.address || '', note: o.note || '',
           customer_name: o.customer_name, customer_phone: o.customer_phone, currency: o.currency, payment: done ? o.payment : null, total: all ? o.total : null,
-          branch: s ? { id: s.id, name: s.name, city: s.city, area: s.area, phone: s.phone, whatsapp: s.whatsapp } : null,
+          sent_at: o.sent_at || null, branch: s ? { id: s.id, name: s.name, city: s.city, area: s.area, phone: s.phone, whatsapp: s.whatsapp } : null,
           items: items.map(i => ({ product_id: i.product_id, title: i.title, sku: i.sku, qty: i.qty, price: shows(i) ? i.price : null, line_total: shows(i) ? i.line_total : null })) };
       },
       place_order(a) {
@@ -672,7 +736,7 @@
         if (!me) fail('sign in to order', '42501');
         if (!st.orders_enabled || st.shop_closed) fail('orders are closed');
         const c = DB.customers.find(x => x.user_id === me) || {};
-        const name = String(String(p.name || '').trim() || c.name || '').trim().slice(0, 80), phone = String(String(p.phone || '').trim() || c.phone || '').replace(/[^0-9+]/g, '').slice(0, 30);
+        const name = String(String(p.name || '').trim() || String(c.shop_name || '').trim() || c.name || '').trim().slice(0, 80), phone = String(String(p.phone || '').trim() || c.phone || '').replace(/[^0-9+]/g, '').slice(0, 30);
         const del = p.delivery || 'pickup', addr = String(p.address || '').trim();
         if (name.length < 2) fail('order needs a name', '22023');
         if (phone.length < 7) fail('order needs a phone', '22023');
@@ -912,6 +976,86 @@
         if (!isAdmin()) fail('not authorized', '42501');
         const x = DB.customer_payments.find(p => p.id === a.p_id);
         if (x) { DB.customer_payments = DB.customer_payments.filter(p => p !== x); logAct('pay_in_del', x.id, x.customer_name || x.cust_key, x.amount, { note: x.note || undefined, by: x.staff_name || undefined, key: x.cust_key }); }
+        save(); return null;
+      },
+      /* ---------- merchants: «صادر ووارد», sending invoices, a new password (setup.sql section 16) ---------- */
+      my_book() { return uid() ? merchantBook(uid()) : null; },
+      my_bill(a) {
+        if (!uid()) return null;
+        const v = merchantInvoices(uid()).find(x => x.id === a.p_id);
+        if (!v) return null;
+        const s = shopOf(v.branch_id);
+        return { id: v.id, no: v.no, status: v.status, source: v.source || 'pos', created_at: v.created_at, sent_at: v.sent_at || null, customer_name: v.customer_name,
+          customer_phone: v.customer_phone, subtotal: v.subtotal, discount: v.discount, total: v.total, paid: v.paid, payment: v.payment, currency: v.currency,
+          note: v.note || '', staff_name: v.staff_name || '', branch: s ? { name: s.name, city: s.city, phone: s.phone } : null,
+          items: DB.invoice_items.filter(i => i.invoice_id === v.id).map(i => ({ title: i.title, sku: i.sku, qty: i.qty, price: i.price, line_total: i.line_total })) };
+      },
+      my_inbox() {
+        if (!uid()) return [];
+        const from = Date.now() - 60 * 864e5;
+        return DB.invoices.filter(v => v.customer_id === uid() && v.sent_at && Date.parse(v.sent_at) > from && v.status !== 'cancelled')
+          .sort((x, y) => y.sent_at.localeCompare(x.sent_at)).slice(0, 20).map(v => ({ id: v.id, no: v.no, sent_at: v.sent_at }));
+      },
+      send_invoice(a) {
+        if (!uid() || !(hasPerm('sales') || hasPerm('invoices'))) fail('not authorized', '42501');
+        const v = DB.invoices.find(x => x.id === a.p_id);
+        if (!v || !canOpen(v)) fail('invoice not found');
+        if (v.status === 'cancelled') fail('invoice cancelled');
+        if (v.customer_id && a.p_user && a.p_user !== v.customer_id) fail('invoice belongs to another merchant');
+        const to = v.customer_id || a.p_user;
+        if (!to) fail('choose the merchant', '22023');
+        const c = DB.customers.find(x => x.user_id === to);
+        if (!c) fail('merchant not found');
+        const again = !!v.sent_at;
+        v.customer_id = to; v.sent_at = now();
+        logAct('invoice_sent', v.id, shopOrName(c), v.total, { no: v.no, phone: c.phone, again });
+        save();
+        return RPC.get_invoice({ p_id: v.id });
+      },
+      unsend_invoice(a) {
+        if (!uid() || !(hasPerm('sales') || hasPerm('invoices'))) fail('not authorized', '42501');
+        const v = DB.invoices.find(x => x.id === a.p_id);
+        if (!v || !canOpen(v)) fail('invoice not found');
+        if (!v.sent_at) fail('invoice not sent');
+        const c = DB.customers.find(x => x.user_id === v.customer_id);
+        v.sent_at = null; if (v.source !== 'app') v.customer_id = null;
+        logAct('invoice_unsent', v.id, c ? shopOrName(c) : '', v.total, { no: v.no });
+        save();
+        return RPC.get_invoice({ p_id: v.id });
+      },
+      find_merchants(a) {
+        if (!uid() || !(hasPerm('sales') || hasPerm('invoices') || hasPerm('customers'))) fail('not authorized', '42501');
+        return merchantHits(a.p_q).sort((x, y) => (!!y.approved - !!x.approved) || y.created_at.localeCompare(x.created_at)).slice(0, Math.min(Math.max(a.p_limit || 20, 1), 50))
+          .map(c => ({ user_id: c.user_id, shop_name: c.shop_name || '', name: c.name, phone: c.phone, city: c.city || '', approved: !!c.approved }));
+      },
+      list_merchants(a) {
+        if (!uid() || !(hasPerm('customers') || hasPerm('invoices') || hasPerm('reports'))) fail('not authorized', '42501');
+        const M = merchantHits(a.p_q).map(c => {
+          const mine = DB.invoices.filter(i => i.customer_id === c.user_id);
+          return { user_id: c.user_id, shop_name: c.shop_name || '', name: c.name, phone: c.phone, city: c.city || '', approved: !!c.approved, created_at: c.created_at,
+            open_orders: mine.filter(i => i.source === 'app' && (i.status === 'preparing' || i.status === 'ready')).length,
+            balance: c.approved ? merchantSums(c).balance : null, last_at: mine.map(i => i.sent_at || i.ordered_at || i.created_at).sort().pop() || null };
+        });
+        const f = a.p_filter || '', owes = m => (m.balance || 0) > 0;
+        const pick = M.filter(m => f === 'pending' ? !m.approved : f === 'owing' ? owes(m) : f === 'orders' ? m.open_orders > 0 : true)
+          .sort((x, y) => ((y.open_orders > 0) - (x.open_orders > 0)) || (x.approved - y.approved) || (owes(y) - owes(x))
+            || String(y.last_at || '').localeCompare(String(x.last_at || '')) || y.created_at.localeCompare(x.created_at));
+        return { counts: { all: M.length, pending: M.filter(m => !m.approved).length, owing: M.filter(owes).length, orders: M.filter(m => m.open_orders > 0).length },
+          total: pick.length, items: page(pick, a, 30) };
+      },
+      merchant_detail(a) {
+        if (!uid() || !(hasPerm('customers') || hasPerm('invoices') || hasPerm('reports'))) fail('not authorized', '42501');
+        const b = merchantBook(a.p_user);
+        return b ? { ...b, key: custKey('', b.phone) } : null;
+      },
+      set_customer_password(a) {
+        if (!isAdmin()) fail('not authorized', '42501');
+        const pw = String(a.p_pw || '');
+        if (pw.length < 6 || pw.length > 72) fail('bad password', '22023');
+        const c = DB.customers.find(x => x.user_id === a.p_user), u = DB.users.find(x => x.id === a.p_user);
+        if (!c || !u || DB.admins.includes(a.p_user) || DB.staff.some(x => x.user_id === a.p_user)) fail('merchant not found');
+        u.password = pw;
+        logAct('customer_password', a.p_user, shopOrName(c), null, { phone: c.phone });
         save(); return null;
       },
       list_suppliers(a) {

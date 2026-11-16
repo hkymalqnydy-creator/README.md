@@ -114,7 +114,7 @@
     const c = S.customer || {}, d = draft(), how = d.delivery === 'delivery' ? 'delivery' : 'pickup';
     const br = list[0] && list[0].p && list[0].p.shop && list[0].p.shop.name;
     return `<form class="form mcard ord-form" id="of" novalidate><h2 class="lbl">${esc(t('ordConfirmT'))}</h2>
-      <div class="row2"><div class="field"><label for="on">${esc(t('custName'))}</label><input id="on" class="input" maxlength="80" autocomplete="name" value="${esc(d.name || c.name || '')}"></div>
+      <div class="row2"><div class="field"><label for="on">${esc(t('mShop'))}</label><input id="on" class="input" maxlength="80" autocomplete="organization" value="${esc(d.name || c.shop_name || c.name || '')}"></div>
         <div class="field"><label for="op">${esc(t('phoneNum'))}</label><input id="op" class="input" type="tel" dir="ltr" maxlength="30" autocomplete="tel" value="${esc(d.phone || c.phone || '')}"></div></div>
       <fieldset class="field ord-how"><legend>${esc(t('ordHow'))}</legend>
         <label class="howopt"><input type="radio" name="ohow" value="pickup"${how === 'pickup' ? ' checked' : ''}><span>${I('pickup')}<b>${esc(t('ordPickup'))}</b><small>${esc(br ? t('ordPickupB', { b: br }) : t('ordPickupB0'))}</small></span></label>
@@ -148,7 +148,7 @@
       try {
         const o = await O.place({ ...v, items: list.map(i => ({ id: i.id, qty: i.qty })) });
         SP.cart.clear(); keepDraft({});
-        if (!S.customer && SP.api.saveMe) SP.api.saveMe({ name: v.name, phone: v.phone, city: '' }).catch(() => {});
+        if (!S.customer && SP.api.saveMe) SP.api.saveMe({ name: v.name, shop_name: v.name, phone: v.phone, city: '' }).catch(() => {});
         SP.toast(t('ordPlaced', { n: o.no }));
         watchSoon();
         SP.go('order-' + o.id);
@@ -198,6 +198,8 @@
             <button type="button" class="btn ${o.status === 'ready' ? 'btn-signal' : 'btn-ghost'}" data-to="done">${I('check')} ${esc(t('ordToDone'))}</button>
             <button type="button" class="btn btn-ghost danger-txt" data-to="cancelled">${esc(t('ordCancel'))}</button></div>` : ''}
         ${staff && (o.status === 'done' || o.status === 'returned') ? `<div class="ord-acts"><a class="btn btn-ink" href="#inv-${esc(o.id)}">${I('copy')} ${esc(t('ordOpenInv'))}</a></div>` : ''}
+        ${staff && SP.sendPanel && o.status !== 'cancelled' ? SP.sendPanel({ ...o, source: 'app' }) : ''}
+        ${!staff && (o.sent_at || o.status === 'done' || o.status === 'returned') ? `<div class="ord-acts"><a class="btn btn-ink" href="#bill-${esc(o.id)}">${I('copy')} ${esc(t('ordOpenInv'))}</a></div>` : ''}
         <section class="mcard"><h2 class="lbl">${esc(t('ordItems'))}</h2><ul class="olines">${(o.items || []).map(it => `<li><span class="ol-q num">${esc(SP.fmtNum(it.qty))}×</span>
             <span class="ol-t">${it.product_id ? `<a href="#p-${esc(it.product_id)}">${esc(it.title)}</a>` : esc(it.title)}${it.sku ? `<small dir="ltr">${esc(it.sku)}</small>` : ''}</span>
             <span class="num">${it.line_total != null ? esc(money(it.line_total, cur)) : ''}</span></li>`).join('')}</ul>
@@ -215,6 +217,7 @@
         try { draw(await O.cancelMine(o.id)); SP.toast(t('ordCancelledToast')); watchSoon(); } catch (e) { SP.toast(SP.ordErr(e)); reload(); }
       };
       $$('[data-to]').forEach(b => b.onclick = () => step(o, b.dataset.to));
+      if (staff && SP.wireSend) SP.wireSend({ ...o, source: 'app' }, () => reload());
     };
     const reload = async () => { try { const x = await O.one(o.id); if (x && SP.alive(n)) { o = x; draw(o); } } catch (e) { /* stays */ } };
     async function step(o, to) {
@@ -311,11 +314,13 @@
     const c = S.ordCounts || {};
     put($('#tabs a[href="#system"]'), handles() ? +c.preparing || 0 : 0);
     put($('.pos-tile[href="#orders"]'), handles() ? (+c.preparing || 0) + (+c.ready || 0) : 0);
-    put($('#tabs a[href="#mine"]'), !handles() ? +S.ordMineReady || 0 : 0);
+    /* a customer's account tab: his orders ready to collect, and the invoices the company sent him that he has not opened (js/merchants.js) */
+    put($('#tabs a[href="#mine"]'), !handles() ? (+S.ordMineReady || 0) + (+S.inboxNew || 0) : 0);
     put($('a.admin-entry[href="#my-orders"]'), !handles() ? +S.ordMineReady || 0 : 0);
     const ml = $('[data-ordmine]');
     if (ml) ml.textContent = mineLine();
   }
+  SP.ordBadges = () => badges();
   function mineState(L) {
     S.ordMineOpen = L.filter(o => OPEN(o.status)).length;
     const ready = L.filter(o => o.status === 'ready');
@@ -343,6 +348,7 @@
         LASTP = p; S.ordCounts = c; badges();
       } else if (SP.company) {
         mineState(await O.mine());
+        if (SP.inboxWatch) await SP.inboxWatch();
       }
     } catch (e) { /* offline: next time */ }
   }

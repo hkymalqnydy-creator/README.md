@@ -257,6 +257,8 @@ create table if not exists public.customers (
   approved   boolean not null default false,
   created_at timestamptz not null default now()
 );
+-- a merchant signs up with the name of his shop (section 16)
+alter table public.customers add column if not exists shop_name text not null default '' check (char_length(shop_name) <= 80);
 alter table public.products add column if not exists barcode text check (barcode is null or char_length(barcode) <= 60);
 alter table public.products add column if not exists cost numeric(12,2) check (cost is null or (cost >= 0 and cost <= 99999999));
 create table if not exists public.staff (
@@ -703,7 +705,11 @@ create or replace function public.customers_guard() returns trigger language plp
 begin
   if not (public.is_admin() or public.has_perm('customers')) then
     if tg_op = 'INSERT' then new.user_id := auth.uid(); new.approved := false; new.created_at := now();
-    else new.user_id := old.user_id; new.approved := old.approved; new.created_at := old.created_at; end if;
+    else
+      new.user_id := old.user_id; new.created_at := old.created_at;
+      -- an approved merchant sees every sale under his phone number (section 16): a new number needs the company's approval again
+      new.approved := old.approved and public.cust_key('', new.phone) is not distinct from public.cust_key('', old.phone);
+    end if;
   end if;
   return new;
 end $$;
@@ -764,7 +770,10 @@ alter table public.invoices add column if not exists cancelled_at  timestamptz;
 alter table public.invoices add column if not exists cancel_reason text not null default '' check (char_length(cancel_reason) <= 200);
 alter table public.invoices add column if not exists delivery      text not null default '' check (delivery in ('', 'pickup', 'delivery'));
 alter table public.invoices add column if not exists address       text not null default '' check (char_length(address) <= 300);
+-- the invoice sent to the merchant's account in the app (section 16)
+alter table public.invoices add column if not exists sent_at timestamptz;
 create index if not exists invoices_orders_idx on public.invoices (status, ordered_at) where source = 'app';
+create index if not exists invoices_sent_idx on public.invoices (customer_id, sent_at desc) where sent_at is not null;
 create index if not exists invoices_customer_idx on public.invoices (customer_id, created_at desc) where customer_id is not null;
 alter table public.invoices enable row level security;
 alter table public.invoice_items enable row level security;
@@ -778,6 +787,9 @@ create or replace function public.get_invoice(p_id uuid) returns jsonb
 language sql stable security definer set search_path = public as $$
   select to_jsonb(i) || jsonb_build_object(
     'branch', (select jsonb_build_object('id', s.id, 'name', s.name, 'city', s.city, 'area', s.area, 'phone', s.phone, 'whatsapp', s.whatsapp) from public.shops s where s.id = i.branch_id),
+    -- the merchant's account the invoice belongs to (an app order, or an invoice sent to it)
+    'merchant', (select jsonb_build_object('user_id', c.user_id, 'shop_name', c.shop_name, 'name', c.name, 'phone', c.phone, 'approved', c.approved)
+                 from public.customers c where c.user_id = i.customer_id),
     'items', coalesce((select jsonb_agg((to_jsonb(it) - 'cost') || case when public.has_perm('costs') then jsonb_build_object('cost', it.cost) else '{}'::jsonb end order by it.id)
                        from public.invoice_items it where it.invoice_id = i.id), '[]'::jsonb))
   from public.invoices i
@@ -1830,7 +1842,7 @@ language sql stable security definer set search_path = public as $$
   select jsonb_build_object('id', o.id, 'no', o.no, 'status', o.status, 'source', o.source, 'ordered_at', o.ordered_at, 'ready_at', o.ready_at,
            'done_at', case when o.status in ('done', 'returned') then o.created_at end, 'cancelled_at', o.cancelled_at, 'cancel_reason', o.cancel_reason,
            'delivery', o.delivery, 'address', o.address, 'note', o.note, 'customer_name', o.customer_name, 'customer_phone', o.customer_phone,
-           'currency', o.currency, 'payment', case when o.status in ('done', 'returned') then o.payment end,
+           'currency', o.currency, 'payment', case when o.status in ('done', 'returned') then o.payment end, 'sent_at', o.sent_at,
            'total', case when v.ok and not exists (select 1 from public.invoice_items it join public.products p on p.id = it.product_id where it.invoice_id = o.id and p.hide_price)
                          or public.is_staff() then o.total end,
            'branch', (select jsonb_build_object('id', s.id, 'name', s.name, 'city', s.city, 'area', s.area, 'phone', s.phone, 'whatsapp', s.whatsapp) from public.shops s where s.id = o.branch_id),
@@ -1855,7 +1867,7 @@ begin
   select * into st from public.settings where id = 1;
   if not coalesce(st.orders_enabled, false) or coalesce(st.shop_closed, false) then raise exception 'orders are closed' using errcode = 'P0001'; end if;
   select * into v_c from public.customers where user_id = v_me;
-  v_name := left(btrim(coalesce(nullif(btrim(p->>'name'), ''), v_c.name, '')), 80);
+  v_name := left(btrim(coalesce(nullif(btrim(p->>'name'), ''), nullif(btrim(v_c.shop_name), ''), v_c.name, '')), 80);
   v_phone := left(regexp_replace(coalesce(nullif(btrim(p->>'phone'), ''), v_c.phone, ''), '[^0-9+]', '', 'g'), 30);
   if char_length(v_name) < 2 then raise exception 'order needs a name' using errcode = '22023'; end if;
   if char_length(v_phone) < 7 then raise exception 'order needs a phone' using errcode = '22023'; end if;
@@ -2000,3 +2012,208 @@ grant execute on function public.my_orders(integer) to authenticated;
 grant execute on function public.cancel_my_order(uuid) to authenticated;
 grant execute on function public.list_orders(text, integer, integer) to authenticated;
 grant execute on function public.order_set(uuid, text, text, text) to authenticated;
+
+-- ---------- 16) التجار: صادر ووارد، وإرسال الفاتورة للتاجر ----------
+-- A merchant (تاجر) signs up in the app with the name of his shop and his phone number, and signs in with the phone number or
+-- his email. Each merchant has «صادر ووارد», in the app and in the sales system: what came to him (الوارد: the invoices the
+-- company sent him and the orders he received) and what he sent (الصادر: his orders and his payments), with what he still
+-- owes. Until the company approves his account he sees his own orders and the invoices sent to it; once approved, every sale
+-- under his phone number too (the same customer as in «الزبائن») and his payments, so nobody reads a merchant's account by
+-- signing up with his number.
+-- (customers.shop_name and invoices.sent_at are with their tables above)
+
+-- a merchant's invoices: the ones sent to his account and his received orders, and once approved, every sale under his number
+create or replace function public.merchant_invoices(p_user uuid) returns setof public.invoices
+language sql stable security definer set search_path = public as $$
+  select i.* from public.invoices i
+  where i.customer_id = p_user and (i.sent_at is not null or i.status in ('done', 'returned'))
+  union
+  select i.* from public.invoices i
+  join public.customers c on c.user_id = p_user and c.approved and public.cust_key('', c.phone) like 'p:%'
+  where i.status in ('done', 'returned') and public.cust_key(i.customer_name, i.customer_phone) = public.cust_key('', c.phone);
+$$;
+revoke execute on function public.merchant_invoices(uuid) from public, anon, authenticated;
+
+-- one merchant's «صادر ووارد»: his invoices (الوارد), his orders and payments (الصادر), and what he still owes
+create or replace function public.merchant_book(p_user uuid) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare c public.customers; v_k text; v_bought numeric; v_due numeric; v_paid numeric := 0; v_open integer; v_staff boolean := public.is_staff(); v_prices boolean := public.prices_shown();
+begin
+  select * into c from public.customers where user_id = p_user;
+  if c.user_id is null then return null; end if;
+  v_k := public.cust_key('', c.phone);
+  select coalesce(sum(total), 0), coalesce(sum(greatest(total - paid, 0)), 0) into v_bought, v_due from public.merchant_invoices(p_user) where status = 'done';
+  if c.approved and v_k like 'p:%' then v_paid := coalesce((select sum(amount) from public.customer_payments where cust_key = v_k), 0); end if;
+  select count(*) into v_open from public.invoices where customer_id = p_user and source = 'app' and status in ('preparing', 'ready');
+  return jsonb_build_object(
+    'user_id', c.user_id, 'shop_name', c.shop_name, 'name', c.name, 'phone', c.phone, 'city', c.city, 'approved', c.approved, 'created_at', c.created_at,
+    'bought', v_bought, 'paid_later', v_paid, 'open_orders', v_open,
+    -- what he still owes, once the account is approved (before that his payments are not shown, so neither is a total)
+    'balance', case when c.approved then v_due - v_paid end,
+    'invoices', coalesce((select jsonb_agg(jsonb_build_object('id', i.id, 'no', i.no, 'status', i.status, 'source', i.source, 'created_at', i.created_at,
+                     'sent_at', i.sent_at, 'total', i.total, 'paid', i.paid, 'payment', i.payment, 'currency', i.currency,
+                     'units', (select coalesce(sum(qty), 0) from public.invoice_items where invoice_id = i.id)) order by coalesce(i.sent_at, i.created_at) desc, i.no desc)
+                   from (select * from public.merchant_invoices(p_user) order by coalesce(sent_at, created_at) desc, no desc limit 100) i), '[]'::jsonb),
+    -- an order's total follows the price rules of the parts list, as on the order's own page
+    'orders', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'no', o.no, 'status', o.status, 'ordered_at', o.ordered_at, 'currency', o.currency,
+                     'total', case when v_staff or (v_prices and not exists (select 1 from public.invoice_items it join public.products p on p.id = it.product_id
+                                                                          where it.invoice_id = o.id and p.hide_price)) then o.total end,
+                     'units', (select coalesce(sum(qty), 0) from public.invoice_items where invoice_id = o.id)) order by o.ordered_at desc, o.no desc)
+                   from (select * from public.invoices where customer_id = p_user and source = 'app' order by ordered_at desc nulls last, no desc limit 100) o), '[]'::jsonb),
+    'payments', case when c.approved and v_k like 'p:%' then coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'amount', x.amount, 'note', x.note, 'created_at', x.created_at)
+                     order by x.created_at desc, x.id desc)
+                   from (select * from public.customer_payments where cust_key = v_k order by created_at desc, id desc limit 100) x), '[]'::jsonb) else '[]'::jsonb end);
+end $$;
+revoke execute on function public.merchant_book(uuid) from public, anon, authenticated;
+
+-- the merchant's own «صادر ووارد» (null until his account has its shop name and phone)
+create or replace function public.my_book() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when auth.uid() is not null then public.merchant_book(auth.uid()) end;
+$$;
+
+-- one of his invoices, as he sees it
+create or replace function public.my_bill(p_id uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', i.id, 'no', i.no, 'status', i.status, 'source', i.source, 'created_at', i.created_at, 'sent_at', i.sent_at,
+           'customer_name', i.customer_name, 'customer_phone', i.customer_phone, 'subtotal', i.subtotal, 'discount', i.discount, 'total', i.total,
+           'paid', i.paid, 'payment', i.payment, 'currency', i.currency, 'note', i.note, 'staff_name', i.staff_name,
+           'branch', (select jsonb_build_object('name', s.name, 'city', s.city, 'phone', s.phone) from public.shops s where s.id = i.branch_id),
+           'items', coalesce((select jsonb_agg(jsonb_build_object('title', it.title, 'sku', it.sku, 'qty', it.qty, 'price', it.price, 'line_total', it.line_total) order by it.id)
+                              from public.invoice_items it where it.invoice_id = i.id), '[]'::jsonb))
+  from public.merchant_invoices(auth.uid()) i where i.id = p_id and auth.uid() is not null;
+$$;
+
+-- the invoices sent to him lately, for the notice on «صادر ووارد»
+create or replace function public.my_inbox() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', x.id, 'no', x.no, 'sent_at', x.sent_at) order by x.sent_at desc), '[]'::jsonb)
+  from (select id, no, sent_at from public.invoices
+        where customer_id = auth.uid() and sent_at > now() - interval '60 days' and status <> 'cancelled' order by sent_at desc limit 20) x;
+$$;
+
+-- «ابعث الفاتورة للتاجر»: the invoice lands in the merchant's account in the app, and he gets a notice. An app order goes to
+-- whoever ordered it; an invoice from the till goes to the merchant chosen. Sending again sends the notice again.
+create or replace function public.send_invoice(p_id uuid, p_user uuid default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v public.invoices; c public.customers; v_to uuid;
+begin
+  if auth.uid() is null or not (public.has_perm('sales') or public.has_perm('invoices')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  select * into v from public.invoices where id = p_id for update;
+  -- the invoices this person may open (get_invoice)
+  if v.id is null or not (public.has_perm('invoices') or v.staff_id = auth.uid() or (v.source = 'app' and public.has_perm('sales'))) then
+    raise exception 'invoice not found' using errcode = 'P0001';
+  end if;
+  if v.status = 'cancelled' then raise exception 'invoice cancelled' using errcode = 'P0001'; end if;
+  if v.customer_id is not null and p_user is not null and p_user <> v.customer_id then raise exception 'invoice belongs to another merchant' using errcode = 'P0001'; end if;
+  v_to := coalesce(v.customer_id, p_user);
+  if v_to is null then raise exception 'choose the merchant' using errcode = '22023'; end if;
+  select * into c from public.customers where user_id = v_to;
+  if c.user_id is null then raise exception 'merchant not found' using errcode = 'P0001'; end if;
+  update public.invoices set customer_id = v_to, sent_at = now() where id = p_id;
+  perform public.log_act('invoice_sent', p_id::text, coalesce(nullif(btrim(c.shop_name), ''), c.name), v.total,
+    jsonb_build_object('no', v.no, 'phone', c.phone, 'again', v.sent_at is not null));
+  return public.get_invoice(p_id);
+end $$;
+
+-- take back an invoice sent by mistake: it leaves the merchant's account (an invoice from the till is no longer his)
+create or replace function public.unsend_invoice(p_id uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v public.invoices;
+begin
+  if auth.uid() is null or not (public.has_perm('sales') or public.has_perm('invoices')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  select * into v from public.invoices where id = p_id for update;
+  if v.id is null or not (public.has_perm('invoices') or v.staff_id = auth.uid() or (v.source = 'app' and public.has_perm('sales'))) then
+    raise exception 'invoice not found' using errcode = 'P0001';
+  end if;
+  if v.sent_at is null then raise exception 'invoice not sent' using errcode = 'P0001'; end if;
+  update public.invoices set sent_at = null, customer_id = case when source = 'app' then customer_id end where id = p_id;
+  perform public.log_act('invoice_unsent', p_id::text, (select coalesce(nullif(btrim(shop_name), ''), name) from public.customers where user_id = v.customer_id), v.total,
+    jsonb_build_object('no', v.no));
+  return public.get_invoice(p_id);
+end $$;
+
+-- the merchant to send an invoice to: by his shop, his name or his phone number (any 3 digits or more of it)
+create or replace function public.find_merchants(p_q text default null, p_limit integer default 20) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_q text := nullif(btrim(coalesce(p_q, '')), ''); v_d text;
+begin
+  if auth.uid() is null or not (public.has_perm('sales') or public.has_perm('invoices') or public.has_perm('customers')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  v_d := regexp_replace(public.norm_ar(coalesce(v_q, '')), '[^0-9]', '', 'g');
+  if char_length(v_d) > 9 then v_d := right(v_d, 9); end if;
+  return coalesce((select jsonb_agg(x.j order by x.rn) from (
+    select row_number() over (order by c.approved desc, c.created_at desc) rn,
+           jsonb_build_object('user_id', c.user_id, 'shop_name', c.shop_name, 'name', c.name, 'phone', c.phone, 'city', c.city, 'approved', c.approved) j
+    from public.customers c
+    where v_q is null
+       or public.norm_ar(c.shop_name || ' ' || c.name) like '%' || public.norm_ar(v_q) || '%'
+       or (char_length(v_d) >= 3 and regexp_replace(public.norm_ar(c.phone), '[^0-9]', '', 'g') like '%' || v_d || '%')
+    order by c.approved desc, c.created_at desc
+    limit least(greatest(coalesce(p_limit, 20), 1), 50)) x), '[]'::jsonb);
+end $$;
+
+-- «التجار» in the sales system: every merchant registered in the app, open orders first, then the ones waiting for approval
+create or replace function public.list_merchants(p_q text default null, p_filter text default null, p_limit integer default 30, p_offset integer default 0) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_q text := nullif(btrim(coalesce(p_q, '')), ''); v_d text; r jsonb;
+begin
+  if auth.uid() is null or not (public.has_perm('customers') or public.has_perm('invoices') or public.has_perm('reports')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  v_d := regexp_replace(public.norm_ar(coalesce(v_q, '')), '[^0-9]', '', 'g');
+  if char_length(v_d) > 9 then v_d := right(v_d, 9); end if;
+  with c as (select c.*, public.cust_key('', c.phone) as k from public.customers c
+             where v_q is null
+                or public.norm_ar(c.shop_name || ' ' || c.name) like '%' || public.norm_ar(v_q) || '%'
+                or (char_length(v_d) >= 3 and regexp_replace(public.norm_ar(c.phone), '[^0-9]', '', 'g') like '%' || v_d || '%')),
+       m as (select c.*,
+               (select count(*) from public.invoices i where i.customer_id = c.user_id and i.source = 'app' and i.status in ('preparing', 'ready')) as open_orders,
+               (select max(coalesce(i.sent_at, i.ordered_at, i.created_at)) from public.invoices i where i.customer_id = c.user_id) as last_at,
+               case when c.approved then (select coalesce(sum(greatest(total - paid, 0)), 0) from public.merchant_invoices(c.user_id) where status = 'done')
+                      - case when c.k like 'p:%' then (select coalesce(sum(amount), 0) from public.customer_payments where cust_key = c.k) else 0 end end as balance
+             from c),
+       pick as (select * from m where case coalesce(p_filter, '') when 'pending' then not approved when 'owing' then coalesce(balance, 0) > 0
+                                                                  when 'orders' then open_orders > 0 else true end)
+  select jsonb_build_object(
+    'counts', jsonb_build_object('all', (select count(*) from m), 'pending', (select count(*) from m where not approved),
+                                 'owing', (select count(*) from m where coalesce(balance, 0) > 0), 'orders', (select count(*) from m where open_orders > 0)),
+    'total', (select count(*) from pick),
+    'items', coalesce((select jsonb_agg(x.j order by x.rn) from (
+        select row_number() over (order by open_orders > 0 desc, approved, coalesce(balance, 0) > 0 desc, last_at desc nulls last, created_at desc, user_id) rn,
+               jsonb_build_object('user_id', user_id, 'shop_name', shop_name, 'name', name, 'phone', phone, 'city', city, 'approved', approved,
+                                  'created_at', created_at, 'open_orders', open_orders, 'balance', balance, 'last_at', last_at) j
+        from pick order by 1 limit least(greatest(coalesce(p_limit, 30), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) x), '[]'::jsonb)
+  ) into r;
+  return r;
+end $$;
+
+-- one merchant's page in the sales system: the same «صادر ووارد» he sees, and his key in «الزبائن» (for his payments)
+create or replace function public.merchant_detail(p_user uuid) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if auth.uid() is null or not (public.has_perm('customers') or public.has_perm('invoices') or public.has_perm('reports')) then raise exception 'not authorized' using errcode = '42501'; end if;
+  return public.merchant_book(p_user) || jsonb_build_object('key', public.cust_key('', (select phone from public.customers where user_id = p_user)));
+end $$;
+
+-- the owner gives a merchant a new password (a merchant who signed up with his phone number has no email to reset it with)
+create or replace function public.set_customer_password(p_user uuid, p_pw text) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare c public.customers;
+begin
+  if auth.uid() is null or not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
+  if char_length(coalesce(p_pw, '')) < 6 or char_length(p_pw) > 72 then raise exception 'bad password' using errcode = '22023'; end if;
+  select * into c from public.customers where user_id = p_user;
+  if c.user_id is null or exists (select 1 from public.admins where user_id = p_user) or exists (select 1 from public.staff where user_id = p_user) then
+    raise exception 'merchant not found' using errcode = 'P0001';
+  end if;
+  update auth.users set encrypted_password = extensions.crypt(p_pw, extensions.gen_salt('bf')), updated_at = now() where id = p_user;
+  perform public.log_act('customer_password', p_user::text, coalesce(nullif(btrim(c.shop_name), ''), c.name), null, jsonb_build_object('phone', c.phone));
+end $$;
+
+grant execute on function public.my_book() to authenticated;
+grant execute on function public.my_bill(uuid) to authenticated;
+grant execute on function public.my_inbox() to authenticated;
+grant execute on function public.send_invoice(uuid, uuid) to authenticated;
+grant execute on function public.unsend_invoice(uuid) to authenticated;
+grant execute on function public.find_merchants(text, integer) to authenticated;
+grant execute on function public.list_merchants(text, text, integer, integer) to authenticated;
+grant execute on function public.merchant_detail(uuid) to authenticated;
+grant execute on function public.set_customer_password(uuid, text) to authenticated;

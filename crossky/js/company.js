@@ -33,6 +33,19 @@
     orderTotal: ["المجموع التقريبي: {t}", "Approx. total: {t}"], orderFrom: ["الاسم: {n}", "Name: {n}"], orderPhone: ["الهاتف: {p}", "Phone: {p}"], orderNote: ["ملاحظة: {x}", "Note: {x}"],
     noCompanyWa: ["رقم واتساب الشركة غير مضبوط بعد.", "The company WhatsApp number isn’t set yet."],
     custName: ["الاسم الكامل", "Full name"], needCustName: ["اكتب اسمك.", "Enter your name."],
+    /* merchants: sign up with the shop and the phone number, sign in with the number or the email (js/merchants.js has the rest) */
+    mShop: ["اسم المحل", "Shop name"], mShopPh: ["مثلاً: محل الأمل لقطع الغيار", "e.g. Al Amal Spare Parts"], needShop: ["اكتب اسم المحل.", "Enter the shop name."],
+    yourName: ["اسمك", "Your name"], loginBy: ["تدخل بـ", "Sign in with"], byPhone: ["رقم الهاتف", "Phone number"], byEmail: ["الإيميل", "Email"],
+    phoneLoginHint: ["تدخل برقم هاتفك وكلمة السر.", "You sign in with your phone number and password."],
+    emailLoginHint: ["تدخل بالإيميل وكلمة السر، ورقم هاتفك يقعد للتواصل.", "You sign in with your email and password; your phone number stays for contact."],
+    errLoginPhone: ["رقم الهاتف أو كلمة السر غلط. لو سجلت بالإيميل، ادخل بيه.", "Wrong phone number or password. If you signed up with your email, use it."],
+    errExistsPhone: ["الرقم هذا عنده حساب قبل. ادخل بيه، ولو نسيت كلمة السر كلّم الشركة.", "This number already has an account. Sign in with it; if you forgot the password, contact the company."],
+    forgotPhoneT: ["نسيت كلمة السر؟", "Forgot your password?"],
+    forgotPhoneB: ["الحساب اللي يدخل برقم الهاتف، كلمة السر الجديدة تعطيهاله الشركة. كلّمهم وقولهم رقمك.", "For an account that signs in with a phone number, the company gives the new password. Contact them with your number."],
+    forgotPhoneWa: ["السلام عليكم، نسيت كلمة السر متاع حسابي في التطبيق. رقمي: {p}", "Hello, I forgot the password of my app account. My number: {p}"],
+    completeT: ["كمّل حسابك", "Complete your account"], completeB: ["اكتب اسم المحل ورقم هاتفك، باش يطلعلك «صادر ووارد» وتوصلك الفواتير.", "Add your shop name and phone number to get your account statement and your invoices."],
+    phoneAgainH: ["لو بدلت رقمك، الشركة تعتمد حسابك من جديد.", "If you change your number, the company approves your account again."],
+    demoM: ["ودخول التاجر: 0925551234 وكلمة السر 123456.", "Merchant sign-in: 0925551234, password 123456."],
     myAccount: ["حسابي", "My account"], signInToOrder: ["سجّل دخولك باش تشوف الأسعار وتطلب بسهولة.", "Sign in to see prices and order easily."],
     approvedYes: ["حسابك معتمد: تشوف أسعار الزبائن المعتمدين.", "Your account is approved: you see approved-customer prices."],
     approvedNo: ["حسابك بانتظار موافقة الشركة. بعد الموافقة تظهرلك الأسعار.", "Your account is waiting for company approval. Prices appear once approved."],
@@ -142,9 +155,101 @@
       <div class="cta-actions">${wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('whatsapp'))}</a>` : ''}${tel ? `<a class="btn btn-ghost light" href="${esc(tel)}">${I('phone')} ${esc(t('call'))}</a>` : ''}<a class="btn btn-ghost light" href="#about">${I('info')} ${esc(t('about'))}</a></div></section>`;
   };
 
+  /* ---------- merchants sign up and sign in (company edition): the shop's name and the phone number are required; the account
+     signs in with the phone number or with an email (Gmail…), chosen at sign-up (js/core.js SP.phoneLogin) ---------- */
+  const okMail = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+  function forgotByPhone(phone) {
+    const st = S.settings || {}, num = st.contact_wa || st.contact_phone || '';
+    const wa = SP.waLink(num, t('forgotPhoneWa', { p: SP.prettyPhone(phone, CFG.defaultCountry || 'LY') || '' }), S.country), tel = SP.telHref(st.contact_phone || num, S.country);
+    SP.openSheet(`<h2 class="sheet-title">${esc(t('forgotPhoneT'))}</h2><p class="sheet-sub">${esc(t('forgotPhoneB'))}</p>
+      <div class="sheet-actions">${wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('whatsapp'))}</a>` : ''}
+        ${tel ? `<a class="btn btn-ghost" href="${esc(tel)}">${I('phone')} ${esc(t('call'))}</a>` : ''}<button type="button" class="btn btn-ghost" data-close>${esc(t('close'))}</button></div>`, { label: t('forgotPhoneT') });
+  }
+  SP.authCompany = (up, n) => {
+    let by = SP.load('sp_login_by', 'phone') === 'email' ? 'email' : 'phone';
+    const req = ' <span class="req">*</span>';
+    shell(bar(t(up ? 'signupT' : 'loginT')) + `<main class="wrap form-wrap">
+      <div class="chips light authtabs"><a class="chip${up ? '' : ' on'}" href="#login"${up ? '' : ' aria-current="page"'}>${esc(t('tabIn'))}</a><a class="chip${up ? ' on' : ''}" href="#signup"${up ? ' aria-current="page"' : ''}>${esc(t('tabUp'))}</a></div>
+      ${up ? '' : '<div id="abio" class="bio-login" hidden></div>'}
+      <form class="form" id="af" novalidate style="margin-top:18px">
+        ${up ? `<div class="field"><label for="ash">${esc(t('mShop'))}${req}</label><input id="ash" class="input" maxlength="80" autocomplete="organization" placeholder="${esc(t('mShopPh'))}"></div>
+        <div class="row2"><div class="field"><label for="anm">${esc(t('yourName'))}${req}</label><input id="anm" class="input" maxlength="80" autocomplete="name"></div>
+          <div class="field"><label for="act">${esc(t('city'))}</label><input id="act" class="input" maxlength="40" autocomplete="address-level2"></div></div>
+        <div class="field"><label for="aph">${esc(t('phoneNum'))}${req}</label><input id="aph" class="input" type="tel" inputmode="tel" dir="ltr" maxlength="30" autocomplete="tel" placeholder="09XXXXXXXX"></div>` : ''}
+        <fieldset class="field loginby"><legend class="flabel">${esc(t('loginBy'))}</legend><div class="chips light" role="radiogroup">
+          <button type="button" class="chip" role="radio" data-by="phone">${I('phone')} ${esc(t('byPhone'))}</button>
+          <button type="button" class="chip" role="radio" data-by="email">${I('mail')} ${esc(t('byEmail'))}</button></div>
+          ${up ? '<span class="hint" id="abyh"></span>' : ''}</fieldset>
+        ${up ? '' : `<div class="field" id="alpw"><label for="alp">${esc(t('phoneNum'))}</label><input id="alp" class="input" type="tel" inputmode="tel" dir="ltr" maxlength="30" autocomplete="username" placeholder="09XXXXXXXX"></div>`}
+        <div class="field" id="aew"><label for="ae">${esc(t('email'))}</label><input id="ae" class="input" type="email" autocomplete="${up ? 'email' : 'username'}" inputmode="email" autocapitalize="off" spellcheck="false" dir="ltr" placeholder="name@gmail.com"></div>
+        <div class="field"><label for="ap">${esc(t('password'))}</label><input id="ap" class="input" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" minlength="6" dir="ltr" required>${up ? `<span class="hint">${esc(t('passHint'))}</span>` : ''}</div>
+        <p class="form-err" id="aerr" role="alert"></p>
+        <div class="form-actions"><button class="btn btn-signal" id="ago">${esc(t(up ? 'createAcct' : 'signIn'))}</button>${up ? '' : `<button type="button" class="btn btn-ghost" id="afg">${esc(t('forgot'))}</button>`}</div>
+      </form></main>`);
+    const err = $('#aerr'), btn = $('#ago'), label = t(up ? 'createAcct' : 'signIn');
+    const pick = (b, focus) => {
+      by = b; SP.store('sp_login_by', b);
+      $$('[data-by]').forEach(c => { const on = c.dataset.by === b; c.classList.toggle('on', on); c.setAttribute('aria-checked', on ? 'true' : 'false'); });
+      $('#aew').hidden = b !== 'email'; if ($('#alpw')) $('#alpw').hidden = b !== 'phone';
+      if ($('#abyh')) $('#abyh').textContent = t(b === 'phone' ? 'phoneLoginHint' : 'emailLoginHint');
+      err.textContent = '';
+      if (focus) { const f = b === 'email' ? $('#ae') : $('#alp') || $('#aph'); if (f && !f.value) f.focus(); }
+    };
+    $$('[data-by]').forEach(c => c.onclick = () => pick(c.dataset.by, true));
+    pick(by);
+    const bad = (id, k) => { err.textContent = t(k); $(id).focus(); };
+    $('#af').onsubmit = async e => {
+      e.preventDefault(); err.textContent = '';
+      const pw = $('#ap').value, phone = SP.digits((up ? $('#aph') : $('#alp') || $('#aph')).value).trim();
+      let prof = null;
+      if (up) {
+        prof = { shop_name: $('#ash').value.trim(), name: $('#anm').value.trim(), phone, city: $('#act').value.trim() };
+        if (prof.shop_name.length < 2) return bad('#ash', 'needShop');
+        if (prof.name.length < 2) return bad('#anm', 'needCustName');
+        if (!SP.waNum(phone, CFG.defaultCountry || 'LY')) return bad('#aph', 'badPhone');
+      }
+      const email = by === 'email' ? $('#ae').value.trim() : SP.phoneLogin(phone);
+      if (by === 'email' && !okMail(email)) return bad('#ae', 'badEmail');
+      if (by === 'phone' && !email) return bad(up ? '#aph' : '#alp', 'badPhone');
+      if (pw.length < 6) return bad('#ap', 'shortPass');
+      if (prof) SP.store('sp_pending_profile', prof);
+      btn.classList.add('busy'); btn.textContent = t('wait');
+      try {
+        const d = up ? await SP.auth.signUp(email, pw) : await SP.auth.signIn(email, pw);
+        if (!d.session) {
+          shell(bar(t('signupT')) + `<main class="wrap">${empty('mail', t('signupT'), t('confirmSent'), `<a class="btn btn-ink" href="#login">${esc(t('signIn'))}</a>`)}</main>`);
+          return;
+        }
+        await SP.refreshUser(d.session);
+        SP.toast(t('welcome'));
+        const to = S.after || 'mine'; S.after = '';
+        SP.go(to);
+      } catch (x) {
+        const m = String((x && x.message) || '');
+        err.textContent = by === 'phone' && /Invalid login credentials/i.test(m) ? t('errLoginPhone')
+          : by === 'phone' && /already registered|already been registered|User already exists/i.test(m) ? t('errExistsPhone') : SP.errText(x);
+        btn.classList.remove('busy'); btn.textContent = label;
+      }
+    };
+    /* Face ID / fingerprint (js/passkey.js): same landing as the password */
+    if (!up && SP.wireBioLogin) SP.wireBioLogin(n, async session => {
+      await SP.refreshUser(session);
+      SP.toast(t('welcome'));
+      const to = S.after || 'mine'; S.after = '';
+      SP.go(to);
+    });
+    if ($('#afg')) $('#afg').onclick = async () => {
+      if (by === 'phone') return forgotByPhone($('#alp').value);
+      const email = $('#ae').value.trim();
+      if (!okMail(email)) { err.textContent = t('emailFirst'); $('#ae').focus(); return; }
+      try { await SP.auth.reset(email); err.textContent = ''; SP.toast(t('resetSent'), 6000); } catch (x) { err.textContent = SP.errText(x); }
+    };
+    SP.done(n);
+  };
+
   /* ---------- customer account (company edition) ---------- */
   SP.customerView = (m, n) => {
-    const demo = SP.demo ? `<div class="banner warn">${I('info')}<span>${esc(t('demoB', { e: CFG.demoEmail || 'owner@demo.app' }))}</span></div>` : '';
+    const demo = SP.demo ? `<div class="banner warn">${I('info')}<span>${esc(t('demoB', { e: CFG.demoEmail || 'owner@demo.app' }))} ${esc(t('demoM'))}</span></div>` : '';
     const cartLink = S.settings.orders_enabled ? `<a class="admin-entry" href="#cart">${I('bag')}<span><b>${esc(t('cart'))}</b><small>${esc(SP.count(SP.cart.count(), 'parts'))}</small></span>${I('chevL', 'dirx')}</a>` : '';
     const ordLink = SP.ordersLink && S.settings.orders_enabled ? SP.ordersLink() : '';
     if (!S.user) {
@@ -153,16 +258,22 @@
       SP.wirePrefs();
       return SP.done(n);
     }
-    const c = S.customer || { name: '', phone: '', city: '' }, mode = S.settings.price_mode;
+    const c = S.customer || { name: '', shop_name: '', phone: '', city: '' }, mode = S.settings.price_mode, staffer = SP.isStaff && SP.isStaff();
+    /* a merchant without his shop or his number (an account from before) is asked for them first */
+    const missing = !staffer && (!String(c.shop_name || '').trim() || !SP.waNum(c.phone, CFG.defaultCountry || 'LY'));
+    const req = ' <span class="req">*</span>';
     shell(bar(t('tabAccount'), '', { noBack: true }) + `<main class="wrap mine">${demo}
-      <section class="mcard acct"><div class="mc-head">${I('user')}<span><b>${esc(c.name || t('signedInT'))}</b><small class="ltr">${esc(S.user.email)}</small></span>
+      <section class="mcard acct"><div class="mc-head">${I(c.shop_name ? 'store' : 'user')}<span><b>${esc(c.shop_name || c.name || t('signedInT'))}</b><small class="ltr">${esc([c.shop_name ? c.name : '', SP.loginShown(S.user.email)].filter(Boolean).join(' · '))}</small></span>
         <button type="button" class="btn btn-ghost sm" id="lo">${I('logout', 'dirx')} ${esc(t('logout'))}</button></div>
         ${mode === 'approved' ? `<div class="banner ${c.approved ? 'note' : 'warn'}">${I(c.approved ? 'verified' : 'clock')}<span>${esc(t(c.approved ? 'approvedYes' : 'approvedNo'))}</span></div>` : ''}</section>
-      ${SP.bioCard ? SP.bioCard() : ''}${SP.systemLink ? SP.systemLink() : ''}${cartLink}${ordLink}
+      ${missing ? `<a class="banner warn" href="#pf">${I('info')}<span><b>${esc(t('completeT'))}</b> ${esc(t('completeB'))}</span></a>` : ''}
+      ${!staffer && SP.ledgerLink ? SP.ledgerLink() : ''}${SP.bioCard ? SP.bioCard() : ''}${SP.systemLink ? SP.systemLink() : ''}${cartLink}${ordLink}
       <form class="form mcard" id="pf" novalidate><h2 class="lbl">${esc(t('myAccount'))}</h2>
-        <div class="field"><label for="pn">${esc(t('custName'))}</label><input id="pn" class="input" maxlength="80" value="${esc(c.name)}" autocomplete="name"></div>
-        <div class="row2"><div class="field"><label for="pp">${esc(t('phoneNum'))}</label><input id="pp" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(c.phone)}"></div>
+        <div class="field"><label for="psh">${esc(t('mShop'))}${staffer ? '' : req}</label><input id="psh" class="input" maxlength="80" value="${esc(c.shop_name || '')}" autocomplete="organization" placeholder="${esc(t('mShopPh'))}"></div>
+        <div class="field"><label for="pn">${esc(t('yourName'))}${req}</label><input id="pn" class="input" maxlength="80" value="${esc(c.name)}" autocomplete="name"></div>
+        <div class="row2"><div class="field"><label for="pp">${esc(t('phoneNum'))}${staffer ? '' : req}</label><input id="pp" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(c.phone)}" autocomplete="tel"></div>
           <div class="field"><label for="pc">${esc(t('city'))}</label><input id="pc" class="input" maxlength="40" value="${esc(c.city)}"></div></div>
+        ${c.approved ? `<p class="hint">${esc(t('phoneAgainH'))}</p>` : ''}
         <p class="form-err" id="perr" role="alert"></p><button class="btn btn-ink" id="pgo">${esc(t('saveProfile'))}</button></form>
       ${SP.prefs()}</main>`);
     SP.wirePrefs();
@@ -170,8 +281,11 @@
     $('#lo').onclick = async () => { await SP.auth.signOut(); await SP.refreshUser(null); SP.toast(t('loggedOut')); SP.render(); };
     $('#pf').onsubmit = async e => {
       e.preventDefault();
-      const v = { name: $('#pn').value.trim(), phone: SP.digits($('#pp').value).trim(), city: $('#pc').value.trim() };
-      if (v.name.length < 2) { $('#perr').textContent = t('needCustName'); return; }
+      const v = { shop_name: $('#psh').value.trim(), name: $('#pn').value.trim(), phone: SP.digits($('#pp').value).trim(), city: $('#pc').value.trim() };
+      const no = (id, k) => { $('#perr').textContent = t(k); $(id).focus(); };
+      if (!staffer && v.shop_name.length < 2) return no('#psh', 'needShop');
+      if (v.name.length < 2) return no('#pn', 'needCustName');
+      if (!staffer && !SP.waNum(v.phone, CFG.defaultCountry || 'LY')) return no('#pp', 'badPhone');
       const b = $('#pgo'); b.classList.add('busy');
       try { await api.saveMe(v); SP.toast(t('profileSaved')); SP.render(); } catch (x) { $('#perr').textContent = SP.errText(x); } finally { b.classList.remove('busy'); }
     };

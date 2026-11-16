@@ -175,6 +175,14 @@
   const waLink = (n, text, cc) => { const w = waNum(n, cc); return w ? `https://wa.me/${w}?text=${encodeURIComponent(text)}` : ''; };
   const telHref = (n, cc) => { const w = waNum(n, cc); return w ? `tel:+${w}` : ''; };
   const prettyPhone = (raw, cc) => { const w = waNum(raw, cc); return w ? '+' + w : String(raw || ''); };
+  /* Signing in with a phone number (company edition): the number becomes the account's sign-in address,
+     <international number>@<phoneDomain>, read with the company's home country so 091… and +21891… are the same account.
+     No email is sent to it: on the server «Confirm email» is off (docs/دليل-نسخة-الشركة.md). */
+  const phoneDomain = () => String(CFG.phoneDomain || 'phone.invalid').toLowerCase();
+  const phoneLogin = raw => { const w = waNum(raw, CFG.defaultCountry || 'LY'); return w ? w + '@' + phoneDomain() : ''; };
+  const isPhoneLogin = e => { e = String(e || '').toLowerCase(); return /^\d{8,15}@/.test(e) && e.slice(e.indexOf('@') + 1) === phoneDomain(); };
+  /* how a sign-in reads on screen: +218912345678 for a phone account, the email otherwise */
+  const loginShown = e => isPhoneLogin(e) ? '+' + String(e).split('@')[0] : String(e || '');
 
   /* ---------- state ---------- */
   const S = SP.S = {
@@ -619,7 +627,7 @@
   Object.assign(SP, {
     $, $$, esc, sleep, arr, uid, debounce, load, store, digits, norm, opt,
     COUNTRY, BRAND, flag, currencyOf, dialOf, setLang, t, fmtNum, plural, count, countryName, priceHTML, priceText, ago,
-    brandName, brandMark, modelObj, modelName, carText, catName, condName, fitText, fitsCar, waNum, waLink, telHref, prettyPhone,
+    brandName, brandMark, modelObj, modelName, carText, catName, condName, fitText, fitsCar, waNum, waLink, telHref, prettyPhone, phoneLogin, isPhoneLogin, loginShown,
     setCountry, setCity, setCar, toggleFav, toast, openSheet, confirmSheet, errText, api, auth, refreshUser, searchArgs, queryParts, searchText,
     hiddenLabel, brandsList, popularIds, applyBranding, cart, company: CFG.mode === 'company',
     uploadPhoto, removePhotos, thumbUrl, imgTag, route, render, go, here, alive, done, install, isIOS, standalone, boot, siteUrl, loadScript, saveFile

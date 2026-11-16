@@ -34,7 +34,7 @@ const log = s => console.log(`${++step}. ${s}`);
   const go = async h => { await page.evaluate(x => { location.hash = x; }, h); await page.waitForTimeout(400); };
   const home = async () => { await go('vin'); await go(''); await see('#gnew .card'); await page.waitForTimeout(300); };
   const db = (f, a) => page.evaluate(f, a);
-  const login = async e => { await go('mine'); if (await page.locator('#lo').count()) { await page.click('#lo'); await page.waitForTimeout(400); } await go('login'); await see('#ae');
+  const login = async e => { await go('mine'); if (await page.locator('#lo').count()) { await page.click('#lo'); await page.waitForTimeout(400); } await go('login'); await see('#ap'); if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]'); await see('#ae');
     await page.fill('#ae', e); await page.fill('#ap', '123456'); await page.click('#ago'); await page.waitForURL(/#mine/); await page.waitForTimeout(300); };
   const logout = async () => { await go('mine'); if (await page.locator('#lo').count()) { await page.click('#lo'); await page.waitForTimeout(400); } };
   const current = () => page.evaluate(() => [...document.querySelectorAll('.ads-dots button')].findIndex(b => b.getAttribute('aria-current') === 'true'));

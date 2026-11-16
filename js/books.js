@@ -106,13 +106,13 @@
     if (!ok) { shell(bar(title) + `<main class="wrap">${empty('lock', t('noPermT'), t('errPerm'))}</main>`); return false; }
     return true;
   }
-  SP.bk = { span, tz, when, dayText, money, amountOf, who, stat, chips };
+  SP.bk = { span, tz, when, dayText, money, amountOf, who, stat, chips, paySheet };
   const canStock = () => SP.can('products') || SP.can('purchases') || SP.can('reports');
   const canBuyers = () => SP.can('invoices') || SP.can('reports');
 
   /* Tiles under the sales system on the account page. */
   SP.booksEntry = () => {
-    const tiles = [['stock', 'stack', 'stkT', canStock()], ['buyers', 'users', 'buyT', canBuyers()], ['suppliers', 'truck', 'supT', SP.can('costs')],
+    const tiles = [['stock', 'stack', 'stkT', canStock()], ['merchants', 'store', 'mrT', !!(SP.company && SP.merchantsCan && SP.merchantsCan())], ['buyers', 'users', 'buyT', canBuyers()], ['suppliers', 'truck', 'supT', SP.can('costs')],
       ['expenses', 'wallet', 'expT', SP.can('expenses') || SP.can('costs')], ['pnl', 'trend', 'pnlT', SP.can('costs')]]
       .filter(x => x[3]).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('');
     return tiles ? `<section class="mcard"><h2 class="lbl">${esc(t('accT'))}</h2><div class="pos-grid">${tiles}</div></section>` : '';

@@ -48,7 +48,7 @@ const log = s => console.log(`${++step}. ${s}`);
   const must = (c, m) => { if (!c) throw new Error('assert: ' + m); };
   const go = async h => { await page.evaluate(x => { location.hash = x; }, h); await page.waitForTimeout(400); };
   const db = (f, a) => page.evaluate(f, a);
-  const login = async e => { await go('mine'); if (await page.locator('#lo').count()) { await page.click('#lo'); await page.waitForTimeout(400); } await go('login'); await see('#ae');
+  const login = async e => { await go('mine'); if (await page.locator('#lo').count()) { await page.click('#lo'); await page.waitForTimeout(400); } await go('login'); await see('#ap'); if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]'); await see('#ae');
     await page.fill('#ae', e); await page.fill('#ap', '123456'); await page.click('#ago'); await page.waitForURL(/#mine/); await page.waitForTimeout(400); };
   const logout = async () => { await go('mine'); if (await page.locator('#lo').count()) { await page.click('#lo'); await page.waitForTimeout(400); } };
   const open = async () => { await see('#aifab'); await page.click('#aifab'); await see('#aibox #aiin'); await page.waitForTimeout(150); };
@@ -315,7 +315,7 @@ const log = s => console.log(`${++step}. ${s}`);
 
     // ----- a customer (on: the manager turned it on) -----
     await logout(); await go('signup'); await see('#anm');
-    await page.fill('#anm', 'علي'); await page.fill('#aph', '0921234567'); await page.fill('#ae', 'ali@test.ly'); await page.fill('#ap', 'secret777'); await page.click('#ago');
+    await page.fill('#ash', 'محل علي'); await page.fill('#anm', 'علي'); await page.fill('#aph', '0921234567'); await page.click('[data-by="email"]'); await page.fill('#ae', 'ali@test.ly'); await page.fill('#ap', 'secret777'); await page.click('#ago');
     await page.waitForURL(/#mine/); await go('');
     await open(); await fresh();
     must((await text('#ailog .aimsg.hello')).includes('قولي سيارتك'), 'customer welcome');

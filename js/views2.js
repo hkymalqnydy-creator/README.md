@@ -54,7 +54,7 @@
     if (!SP.alive(n)) return;
     const shops = S.myShops || [];
     shell(bar(t('mine'), '', { noBack: true }) + `<main class="wrap mine">
-      <section class="mcard acct"><div class="mc-head">${I('user')}<span><b>${esc(t('signedInT'))}</b><small class="ltr">${esc(S.user.email)}</small></span>
+      <section class="mcard acct"><div class="mc-head">${I('user')}<span><b>${esc(t('signedInT'))}</b><small class="ltr">${esc(SP.loginShown(S.user.email))}</small></span>
         <button type="button" class="btn btn-ghost sm" id="lo">${I('logout', 'dirx')} ${esc(t('logout'))}</button></div></section>
       ${SP.bioCard ? SP.bioCard() : ''}
       ${SP.systemLink ? SP.systemLink() : ''}
@@ -72,7 +72,9 @@
   SP.route(/^(login|signup)$/, (m, n) => {
     if (gate(n)) return;
     const up = m[1] === 'signup';
-    if (S.user) { shell(bar(t('signedInT')) + `<main class="wrap">${empty('check', t('signedInT'), t('signedAs', { e: S.user.email }), `<a class="btn btn-ink" href="#mine">${esc(t('mine'))}</a>`)}</main>`); return; }
+    if (S.user) { shell(bar(t('signedInT')) + `<main class="wrap">${empty('check', t('signedInT'), t('signedAs', { e: SP.loginShown(S.user.email) }), `<a class="btn btn-ink" href="#mine">${esc(t('mine'))}</a>`)}</main>`); return; }
+    /* the company edition: merchants sign up with their shop and phone, and sign in with the phone or an email (js/company.js) */
+    if (SP.company && SP.authCompany) return SP.authCompany(up, n);
     shell(bar(t(up ? 'signupT' : 'loginT')) + `<main class="wrap form-wrap">
       <div class="chips light authtabs"><a class="chip${up ? '' : ' on'}" href="#login"${up ? '' : ' aria-current="page"'}>${esc(t('tabIn'))}</a><a class="chip${up ? ' on' : ''}" href="#signup"${up ? ' aria-current="page"' : ''}>${esc(t('tabUp'))}</a></div>
       ${up ? '' : '<div id="abio" class="bio-login" hidden></div>'}

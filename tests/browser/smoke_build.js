@@ -26,7 +26,9 @@ const URL0 = process.env.URL0 || 'http://localhost:8765/';
   const sw = await page.evaluate(async () => { await navigator.serviceWorker.register('sw.js'); const r = await navigator.serviceWorker.ready; await new Promise(s => setTimeout(s, 1500)); return { active: !!r.active, caches: await caches.keys() }; });
   must(sw.active && sw.caches.some(k => k.startsWith('crossky-')) && !sw.caches.some(k => k.startsWith('sparat-')), 'service worker caches: ' + sw.caches.join(','));
   // owner login (demo)
-  await page.evaluate(() => { location.hash = 'login'; }); await page.locator('#ae').waitFor();
+  await page.evaluate(() => { location.hash = 'login'; }); await page.locator('#ap').waitFor();
+  if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]');
+  await page.locator('#ae').waitFor();
   await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456');
   await page.locator('#ae').press('Enter'); await page.waitForTimeout(1200);
   await page.evaluate(() => { location.hash = 'receive'; }); await page.locator('#rpf').waitFor({ state: 'attached', timeout: 8000 }); await page.locator('#rscan').waitFor();

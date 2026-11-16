@@ -40,7 +40,7 @@ const log = s => console.log(`${++step}. ${s}`);
   const text = async sel => (await page.locator(sel).first().innerText()).trim();
   const must = (c, m) => { if (!c) throw new Error('assert: ' + m); };
   const go = async h => { await page.evaluate(x => { location.hash = x; }, h); await page.waitForTimeout(300); };
-  const login = async (e, p) => { await go('mine'); if (await page.locator('#lo').count()) { await page.click('#lo'); await page.waitForTimeout(400); } await go('login'); await see('#ae'); await page.fill('#ae', e); await page.fill('#ap', p); await page.click('#ago'); await page.waitForURL(/#mine/); await page.waitForTimeout(400); };
+  const login = async (e, p) => { await go('mine'); if (await page.locator('#lo').count()) { await page.click('#lo'); await page.waitForTimeout(400); } await go('login'); await see('#ap'); if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]'); await see('#ae'); await page.fill('#ae', e); await page.fill('#ap', p); await page.click('#ago'); await page.waitForURL(/#mine/); await page.waitForTimeout(400); };
   const ask = async q => { const n = await page.locator('.msg.bot').count(); await page.fill('#ci', q); await page.press('#ci', 'Enter'); await page.waitForFunction(k => document.querySelectorAll('.msg.bot:not(.typing)').length > k, n); return (await page.locator('.msg.bot').last().innerText()).trim(); };
   try {
     await page.goto(ORIGIN); await see('#gnew .card');
@@ -80,7 +80,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await shot('03-cart');
 
     await go('mine'); await see('.onb a[href="#signup"]'); await page.click('.onb a[href="#signup"]'); await see('#anm');
-    await page.fill('#anm', 'ورشة الأمل'); await page.fill('#aph', '0921112233'); await page.fill('#act', 'طرابلس'); await page.fill('#ae', 'cust@test.ly'); await page.fill('#ap', 'secret123'); await page.click('#ago');
+    await page.fill('#ash', 'محل ورشة الأمل'); await page.fill('#anm', 'ورشة الأمل'); await page.fill('#aph', '0921112233'); await page.fill('#act', 'طرابلس'); await page.click('[data-by="email"]'); await page.fill('#ae', 'cust@test.ly'); await page.fill('#ap', 'secret123'); await page.click('#ago');
     await page.waitForURL(/#mine/); await see('#pf'); must((await page.inputValue('#pn')) === 'ورشة الأمل', 'profile saved at sign-up'); log('customer sign-up saves name and phone');
     must(await page.locator('a[href="#new-shop"]').count() === 0, 'no shop registration for customers');
 
@@ -119,14 +119,14 @@ const log = s => console.log(`${++step}. ${s}`);
     // ----- sales system -----
     await login('owner@crossky.ly', '123456'); await go('system'); await see('.pos-tile');
     const hrefs = await page.$$eval('.pos-tile', l => l.map(a => a.getAttribute('href')));
-    must(hrefs.length === 18 && ['#admin', '#admin-control', '#admin-log', '#admin-prices', '#admin-ads', '#admin-ai', '#pos', '#orders', '#receive', '#invoices', '#purchases', '#reports', '#staff', '#stock', '#buyers', '#suppliers', '#expenses', '#pnl'].every(h => hrefs.includes(h)), 'owner has 7 sales (with orders) + 5 accounts + 6 owner tiles: ' + hrefs.join('|'));
+    must(hrefs.length === 19 && ['#admin', '#admin-control', '#admin-log', '#admin-prices', '#admin-ads', '#admin-ai', '#pos', '#orders', '#receive', '#invoices', '#purchases', '#reports', '#staff', '#stock', '#merchants', '#buyers', '#suppliers', '#expenses', '#pnl'].every(h => hrefs.includes(h)), 'owner has 7 sales (with orders) + 6 accounts (with merchants) + 6 owner tiles: ' + hrefs.join('|'));
     await go('staff'); await see('#sadd2'); await page.click('#sadd2'); await see('#se');
     await page.fill('#se', 'seller2@test.ly'); await page.fill('#sn2', 'سالم'); must(await page.locator('.perm-list input[value="sales"]').isChecked(), 'sell permission pre-ticked');
     must(await page.locator('.perm-list input[value="purchases"]').count() === 1 && !(await page.locator('.perm-list input[value="purchases"]').isChecked()), 'receiving permission offered, off by default');
     await page.click('#stf .btn-signal'); await page.waitForTimeout(400); must((await text('#sl')).includes('لم يسجّل بعد'), 'staff waiting'); log('owner added a salesperson with "sell" permission only');
     await shot('08-staff');
     await go('mine'); await page.click('#lo'); await page.waitForTimeout(300); await go('signup'); await see('#anm');
-    await page.fill('#anm', 'سالم'); await page.fill('#aph', '0931234567'); await page.fill('#ae', 'seller2@test.ly'); await page.fill('#ap', 'secret777'); await page.click('#ago');
+    await page.fill('#ash', 'محل سالم'); await page.fill('#anm', 'سالم'); await page.fill('#aph', '0931234567'); await page.click('[data-by="email"]'); await page.fill('#ae', 'seller2@test.ly'); await page.fill('#ap', 'secret777'); await page.click('#ago');
     await page.waitForURL(/#mine/); await see('a.sys-entry'); await go('system'); await see('.pos-tile'); const tl = await page.locator('.pos-tile').allInnerTexts();
     must(tl.length === 3 && tl.includes('الطلبات') && !tl.join().includes('التقارير'), 'seller tiles (sale, orders, invoices): ' + tl.join('|')); log('salesperson signed up and got exactly: ' + tl.join(' + '));
     await go('pos'); await see('#pq'); await page.fill('#pq', 'KI-26300'); await page.press('#pq', 'Enter'); await see('.pline');

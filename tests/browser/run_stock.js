@@ -35,7 +35,7 @@ const log = s => console.log(`${++step}. ${s}`);
     return { lv, low: low.map(p => ({ id: p.id, title: p.title, qty: p.qty })), out: D.products.filter(p => p.qty === 0).map(p => p.title) }; });
   try {
     await page.goto(ORIGIN); await page.waitForTimeout(1200);
-    await go('login'); await see('#ae'); await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago'); await page.waitForURL(/#mine/);
+    await go('login'); await see('#ap'); if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]'); await see('#ae'); await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago'); await page.waitForURL(/#mine/);
     let f = await facts();
     must(f.low.length >= 2 && f.out.length >= 1, 'the demo has parts running low and run out ' + JSON.stringify(f));
     await go('stock'); await see('.stk-alert');

@@ -1342,3 +1342,48 @@ body.ai-open{overflow:hidden}
 .linkbtn{border:0;background:none;padding:2px 0;color:var(--royal,var(--ink));font:inherit;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap}
 .stk-good{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:12px 14px;border-radius:14px;background:rgba(31,157,85,.10);color:var(--good,#11744a);font-weight:600;font-size:14px}
 .stk-good .ic{width:18px;height:18px;flex:none}
+
+/* merchants (js/merchants.js): «صادر ووارد», the merchants list, «ابعث الفاتورة للتاجر»; sign-in by phone or email (js/company.js) */
+.mr-head .mr-who{display:flex;align-items:center;gap:12px}
+.mr-head .mr-who .ar-main{flex:1;min-width:0;display:grid;gap:2px}
+.mr-head .mr-who .ar-main b{font-size:17px;line-height:1.35}
+.mr-head .mr-who small{color:var(--muted);font-size:13px}
+.led-bal.zero b{color:var(--good)}
+.mr-tabs{margin-top:16px}
+.mr-tabs .chip{display:inline-flex;align-items:center;gap:6px}
+.mr-tabs .chip .ic{width:18px;height:18px}
+.mr-tabs .chip .cn,.mr-filter .chip .cn{font-style:normal;font-size:11.5px;font-weight:800;margin-inline-start:2px;color:var(--muted)}
+.mr-filter .chip .cn:empty{display:none}
+.mr-tabs .nbadge{position:static;box-shadow:none}
+.mr-tabh{margin:8px 2px}
+.mr-list{padding-block:4px}
+.mr-list .arow:last-child{border-bottom:0}
+.mr-ic{width:42px;height:42px;flex:none;border-radius:12px;display:grid;place-items:center;background:var(--chip);color:var(--ink)}
+.mr-ic .ic{width:20px;height:20px}
+.mr-ic.pay{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}
+.inv-row.fresh .inv-badge{background:var(--signal);color:var(--on-signal)}
+.pill.new{background:var(--signal);color:var(--on-signal)}
+[data-skin=royal] .pill.new,[data-skin=royal] .inv-row.fresh .inv-badge{background:var(--royal,#2F54E6);color:#fff}
+.owe-t{color:var(--bad);white-space:nowrap}
+.cr-t{color:var(--good);white-space:nowrap}
+.mr-filter{margin:10px 0 6px}
+.mr-acts{margin:12px 0 0}
+.send-card{display:grid;gap:10px;margin-top:14px}
+.sc-head{display:flex;gap:10px;align-items:flex-start}
+.sc-head>.ic{width:22px;height:22px;color:var(--royal,var(--signal));flex:none;margin-top:2px}
+.sc-head span{display:grid;gap:2px}
+.sc-head small{color:var(--muted);font-size:13px}
+.sc-sent{display:flex;align-items:center;gap:6px;color:var(--good);font-weight:700;font-size:14px}
+.sc-sent .ic{width:18px;height:18px;flex:none}
+.send-card .form-actions{margin:0}
+.pk-list{display:grid;margin-top:10px;max-height:52vh;overflow:auto}
+.pk-row{width:100%;text-align:start;background:none;border:0;border-bottom:1px solid var(--line);font:inherit;color:inherit;cursor:pointer}
+.pk-row:hover,.pk-row:focus-visible{background:var(--chip)}
+.loginby{border:0;padding:0;margin:0}
+.loginby .chips{margin-top:6px}
+.loginby .chip{display:inline-flex;align-items:center;gap:6px}
+.loginby .chip .ic{width:17px;height:17px}
+.loginby .hint{display:block;margin-top:6px}
+.ok-t{color:var(--good);display:flex;align-items:center;gap:6px;font-weight:700}
+.ok-t .ic{width:18px;height:18px}
+@media print{.send-card{display:none}}
