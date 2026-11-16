@@ -1,8 +1,7 @@
-/* The System tab (المنظومة) for the owner: windows at the top to swipe between, «اليوم», «المبيعات» (a day, a week, the month
-   or the year: day by day, how it was paid, what sold most, who sold), «الأرباح والخسائر» (the same periods) and «الرصيد الكلي»
-   (the stock, what customers owe, what is owed to suppliers, the money in and out);
+/* The System tab (المنظومة) for the owner: windows at the top to swipe between, «اليوم», «الأرباح والخسائر» (a day, a week,
+   the month or the year) and «الرصيد الكلي» (the stock, what customers owe, what is owed to suppliers, the money in and out);
    and a Face ID lock: once turned on for this phone, the sales system opens only after Face ID (or the password), again
-   after the app has been away for a minute. The numbers come from sales_report, pnl_report and stock_report (supabase/setup.sql). */
+   after the app has been away for a minute. The numbers come from pnl_report and stock_report (supabase/setup.sql). */
 (function () {
   'use strict';
   const SP = window.SP;
@@ -15,14 +14,7 @@
   Object.assign(SP.L.T, {
     spToday: ["اليوم", "Today"], spPnl: ["الأرباح والخسائر", "Profit and loss"], spBal: ["الرصيد الكلي", "Total balance"],
     spP_today: ["اليوم", "Today"], spP_7: ["أسبوع", "Week"], spP_month: ["الشهر", "Month"], spP_year: ["السنة", "Year"],
-    spSales: ["المبيعات", "Sales"], spInvN: ["{n} فاتورة", "{n} invoices"], spAvg: ["متوسط الفاتورة {m}", "Average invoice {m}"],
-    spByDay: ["المبيعات يوم بيوم", "Sales day by day"], spByMonth: ["المبيعات شهر بشهر", "Sales month by month"],
-    spTblDay: ["الأرقام يوم بيوم", "The numbers day by day"], spTblMonth: ["الأرقام شهر بشهر", "The numbers month by month"],
-    spBestDay: ["أحسن يوم كان {d}: {m}", "The best day was {d}: {m}"], spBestMonth: ["أحسن شهر كان {d}: {m}", "The best month was {d}: {m}"],
-    spPayT: ["كيف تخلّصت", "How it was paid"], spCreditLeft: ["{m} منها ما تخلّصش وقت البيع (آجل).", "{m} of it was not paid at the sale (on credit)."],
-    spTopT: ["الأكثر مبيعاً", "Best sellers"], spStaffT: ["مين باع", "Who sold"],
-    spNoSales: ["ما فيش مبيعات في الفترة هذي.", "No sales in this period."], spSell: ["بيع جديد", "New sale"],
-    spRepL: ["التقارير", "Reports"], spInvL: ["الفواتير", "Invoices"], spDisc: ["منها خصومات", "Discounts given"], spRet: ["مرتجعات", "Returns"],
+    spSales: ["المبيعات", "Sales"], spInvN: ["{n} فاتورة", "{n} invoices"], spDisc: ["منها خصومات", "Discounts given"], spRet: ["مرتجعات", "Returns"],
     spCogs: ["تكلفة البضاعة المبيوعة", "Cost of goods sold"], spGross: ["الربح الإجمالي", "Gross profit"], spMargin: ["{p}٪ من المبيعات", "{p}% of sales"],
     spExp: ["المصروفات", "Expenses"], spAdj: ["تالف ونواقص المخزن", "Damaged and missing stock"],
     spNet: ["صافي الربح", "Net profit"], spLoss: ["صافي الخسارة", "Net loss"], spMore: ["التفاصيل", "Details"],
@@ -48,14 +40,13 @@
   const money = v => SP.priceText(Number(v || 0), SP.currencyOf(S.country));
   const num = v => SP.fmtNum(+v || 0);
   const pnl = per => { const [from, to] = BK().span(per); return rpc('pnl_report', { p_from: from.toISOString(), p_to: to.toISOString(), p_branch: null, p_tz: BK().tz() }); };
-  const line = (label, v, o) => {
+  const row = (k, v, o) => {
     o = o || {};
     const tag = o.href ? 'a' : 'div';
-    return `<${tag} class="pl-row${o.cls ? ' ' + o.cls : ''}"${o.href ? ` href="#${o.href}"` : ''}><span>${esc(label)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</span><b class="num${o.tone ? ' ' + o.tone : ''}">${esc(v)}</b>${o.href ? I('chevL', 'dirx') : ''}</${tag}>`;
+    return `<${tag} class="pl-row${o.cls ? ' ' + o.cls : ''}"${o.href ? ` href="#${o.href}"` : ''}><span>${esc(t(k, o.a))}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</span><b class="num${o.tone ? ' ' + o.tone : ''}">${esc(v)}</b>${o.href ? I('chevL', 'dirx') : ''}</${tag}>`;
   };
-  const row = (k, v, o) => line(t(k, (o || {}).a), v, o);
-  // the big number on top: green for a gain, red for a loss, plain ink for an amount that is neither (tone 'flat')
-  const head = (net, k, sub, tone) => `<div class="pl-net ${tone || (net < 0 ? 'down' : 'up')}"><small>${esc(t(k))}</small><b class="num">${esc(money(Math.abs(net)))}</b>${sub ? `<span class="hint">${esc(sub)}</span>` : ''}</div>`;
+  // the big number on top: green for a gain, red for a loss
+  const head = (net, k, sub) => `<div class="pl-net ${net < 0 ? 'down' : 'up'}"><small>${esc(t(k))}</small><b class="num">${esc(money(Math.abs(net)))}</b>${sub ? `<span class="hint">${esc(sub)}</span>` : ''}</div>`;
   const oops = () => `<p class="form-err">${esc(t('spErr'))}</p>`;
 
   /* a window with the period chips on top. Another period keeps the numbers on screen, faded, until the new ones come */
@@ -77,87 +68,6 @@
       put: html => { body.classList.remove('stale'); body.innerHTML = html; },
       fail: () => { if (mine()) { body.classList.remove('stale'); body.innerHTML = oops(); } }
     };
-  }
-
-  /* «المبيعات»: how much was sold, day by day (month by month for the year), how it was paid, what sold most and who sold it */
-  const pad = x => String(x).padStart(2, '0');
-  const dkey = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
-  const fmtD = (d, o) => { try { return new Intl.DateTimeFormat(SP.LANG + '-u-nu-latn', o).format(d); } catch (e) { return dkey(d); } };
-  const dayName = d => fmtD(d, { weekday: 'long', day: 'numeric', month: 'long' });
-  const monthName = d => fmtD(d, { month: 'long', year: 'numeric' });
-  const short = v => { if (v < 10000) return num(v); try { return new Intl.NumberFormat(SP.LANG + '-u-nu-latn', { notation: 'compact', maximumFractionDigits: 1 }).format(v); } catch (e) { return num(v); } };
-  const nice = v => { if (!(v > 0)) return 0; const e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; };
-  // every day of the period (every month of the year), the days with no sale included
-  function series(per, r) {
-    const [from, to] = BK().span(per), year = per === 'year', got = {}, out = [];
-    (r.by_day || []).forEach(x => { const k = String(x.day).slice(0, year ? 7 : 10); got[k] = (got[k] || 0) + (+x.total || 0); });
-    if (year) for (let m = 0; m <= new Date().getMonth(); m++) { const d = new Date(from.getFullYear(), m, 1), k = d.getFullYear() + '-' + pad(m + 1); out.push({ d, v: got[k] || 0, name: monthName(d), x: String(m + 1) }); }
-    else for (let d = new Date(from); d < to; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
-      const day = d.getDate();
-      out.push({ d, v: got[dkey(d)] || 0, name: dayName(d), x: per === 'month' && !(day === 1 || day % 5 === 0) ? '' : String(day) });
-    }
-    return out;
-  }
-  // one column a day, the latest one darker; tap (or slide a finger along) to read a day
-  function chart(per, list) {
-    const top = nice(Math.max(0, ...list.map(x => x.v))), year = per === 'year', last = list.length - 1;
-    const h = v => !top || !v ? 0 : Math.max(1.5, v / top * 100).toFixed(1);
-    return `<div class="sc">
-      <p class="sc-read" aria-live="polite"><b class="num"></b><small></small></p>
-      <div class="sc-plot">
-        <div class="sc-grid" aria-hidden="true">${top ? `<span style="bottom:100%"><em class="num">${esc(short(top))}</em></span><span style="bottom:50%"><em class="num">${esc(short(top / 2))}</em></span>` : ''}</div>
-        <div class="sc-cols" role="group" aria-label="${esc(t(year ? 'spByMonth' : 'spByDay'))}">${list.map((x, i) =>
-          `<button type="button" class="sc-col${i === last ? ' cur' : ''}" data-i="${i}" tabindex="${i === last ? 0 : -1}" aria-label="${esc(x.name + ': ' + money(x.v))}"><i style="height:${h(x.v)}%"></i></button>`).join('')}</div>
-      </div>
-      <div class="sc-x" aria-hidden="true">${list.map(x => `<span>${esc(x.x)}</span>`).join('')}</div>
-      <details class="sc-tbl"><summary>${esc(t(year ? 'spTblMonth' : 'spTblDay'))}</summary><table><tbody>${list.slice().reverse().map(x =>
-        `<tr><td>${esc(x.name)}</td><td class="num">${esc(money(x.v))}</td></tr>`).join('')}</tbody></table></details>
-    </div>`;
-  }
-  function wireChart(box, list) {
-    const sc = $('.sc', box);
-    if (!sc) return;
-    const cols = $$('.sc-col', sc), rd = $('.sc-read', sc), area = $('.sc-cols', sc);
-    let sel = list.length - 1;
-    const show = i => { $('b', rd).textContent = money(list[i].v); $('small', rd).textContent = list[i].name; cols.forEach((c, j) => c.classList.toggle('sel', j === i)); };
-    const pick = (i, focus) => { sel = Math.max(0, Math.min(list.length - 1, i)); cols.forEach((c, j) => { c.tabIndex = j === sel ? 0 : -1; }); show(sel); if (focus) cols[sel].focus(); };
-    const at = e => { const r = area.getBoundingClientRect(); let f = (e.clientX - r.left) / Math.max(1, r.width); if (getComputedStyle(area).direction === 'rtl') f = 1 - f; return Math.floor(Math.max(0, Math.min(0.9999, f)) * list.length); };
-    let down = false;
-    area.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button) return; down = true; try { area.setPointerCapture(e.pointerId); } catch (x) { /* fine */ } pick(at(e)); });
-    area.addEventListener('pointermove', e => { if (down) pick(at(e)); else if (e.pointerType === 'mouse') show(at(e)); });
-    const up = () => { down = false; };
-    area.addEventListener('pointerup', up); area.addEventListener('pointercancel', up);
-    area.addEventListener('pointerleave', e => { if (!down && e.pointerType === 'mouse') show(sel); });
-    cols.forEach((c, i) => { c.addEventListener('focus', () => { if (sel !== i) pick(i); }); c.addEventListener('click', () => pick(i)); });
-    area.addEventListener('keydown', e => {
-      const rtl = getComputedStyle(area).direction === 'rtl', k = e.key;
-      const d = k === 'ArrowLeft' ? (rtl ? 1 : -1) : k === 'ArrowRight' ? (rtl ? -1 : 1) : 0;
-      if (d) { e.preventDefault(); pick(sel + d, true); } else if (k === 'Home' || k === 'End') { e.preventDefault(); pick(k === 'Home' ? 0 : list.length - 1, true); }
-    });
-    show(sel);
-  }
-  async function drawSales(box, n) {
-    const c = perCard(box, n, 'sysSalesPer', '7', drawSales);
-    const [from, to] = BK().span(c.per);
-    let r;
-    try { r = await rpc('sales_report', { p_from: from.toISOString(), p_to: to.toISOString(), p_branch: null, p_tz: BK().tz() }); } catch (e) { return c.fail(); }
-    if (!c.ok()) return;
-    const cnt = +r.count || 0, total = +r.total || 0;
-    const acts = `<div class="form-actions sp-acts"><a class="btn btn-ghost sm" href="#reports">${I('grid')} ${esc(t('spRepL'))}</a><a class="btn btn-ghost sm" href="#invoices">${I('copy')} ${esc(t('spInvL'))}</a></div>`;
-    if (!cnt) return c.put(head(0, 'spSales', '', 'flat') + `<p class="hint sp-none">${esc(t('spNoSales'))}</p><div class="form-actions sp-acts"><a class="btn btn-signal sm" href="#pos">${I('tag')} ${esc(t('spSell'))}</a></div>`);
-    const list = c.per === 'today' ? null : series(c.per, r);
-    const best = list && list.filter(x => x.v > 0).length > 1 ? list.reduce((a, x) => x.v > a.v ? x : a, list[0]) : null;
-    const pays = Object.entries(r.by_payment || {}).map(([k, v]) => [k, +v || 0]).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]);
-    const pmax = Math.max(1, ...pays.map(x => x[1]));
-    const top = (r.top || []).slice(0, 5), staff = (r.by_staff || []).slice(0, 4);
-    c.put(head(total, 'spSales', t('spInvN', { n: num(cnt) }) + ' · ' + t('spAvg', { m: money(total / cnt) }), 'flat')
-      + (list ? chart(c.per, list) + (best ? `<p class="hint sp-best">${esc(t(c.per === 'year' ? 'spBestMonth' : 'spBestDay', { d: best.name, m: money(best.v) }))}</p>` : '') : '')
-      + (pays.length ? `<h3 class="lbl sp-h">${esc(t('spPayT'))}</h3>${pays.map(([k, v]) => `<div class="rbar"><span>${esc(t('pay_' + k))}</span><i style="--w:${Math.round(v / pmax * 100)}%"></i><b class="num">${esc(money(v))}</b></div>`).join('')}`
-        + (+r.credit > 0 ? `<p class="hint">${esc(t('spCreditLeft', { m: money(r.credit) }))}</p>` : '') : '')
-      + (top.length ? `<h3 class="lbl sp-h">${esc(t('spTopT'))}</h3>${top.map(x => line(x.title, money(x.total), { sub: '× ' + num(x.qty) })).join('')}` : '')
-      + (staff.length > 1 ? `<h3 class="lbl sp-h">${esc(t('spStaffT'))}</h3>${staff.map(x => line(x.name || '—', money(x.total), { sub: t('spInvN', { n: num(x.count) }) })).join('')}` : '')
-      + acts);
-    if (list) wireChart(c.body, list);
   }
 
   /* «الأرباح والخسائر»: the period's sales down to the net profit */
@@ -195,7 +105,7 @@
 
   /* the windows: tabs on top, swiped sideways, the last one seen opens again. A window is drawn when it is shown
      or is next to the one shown, so opening the System asks the server only for what can be seen */
-  const PANES = [['spToday', (b, n) => SP.adminToday && SP.adminToday(b, n, { compact: true })], ['spSales', drawSales], ['spPnl', drawPnl], ['spBal', drawBal]];
+  const PANES = [['spToday', (b, n) => SP.adminToday && SP.adminToday(b, n, { compact: true })], ['spPnl', drawPnl], ['spBal', drawBal]];
   SP.adminPanels = (el, n) => {
     if (!el || !S.admin) return;
     const k = Math.min(PANES.length - 1, Math.max(0, +S.sysPanel || 0));
@@ -223,7 +133,7 @@
 
   /* ---------- the Face ID lock (on this phone, for this account) ---------- */
   const LOCK = 'sp_sys_lock';
-  const SYS = /^(system|pos|orders|order-|receive|invoices|inv-|purchases|reports|staff|stock|merchants|merchant-|buyers|buyer-|suppliers|supplier-|expenses|pnl|admin)/;
+  const SYS = /^(system|pos|lookup|orders|order-|receive|invoices|inv-|purchases|reports|staff|stock|merchants|merchant-|buyers|buyer-|suppliers|supplier-|expenses|pnl|admin)/;
   const staffer = () => !!(S.user && SP.isStaff && SP.isStaff());
   const lockOn = () => staffer() && SP.load(LOCK, null) === S.user.id;
   let openAt = 0, hiddenAt = 0;

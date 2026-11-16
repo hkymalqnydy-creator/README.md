@@ -1,4 +1,4 @@
-// The System tab for the owner: the windows (اليوم، المبيعات، الأرباح والخسائر، الرصيد الكلي), swiped or tapped, with the right numbers;
+// The System tab for the owner: the windows (اليوم، الأرباح والخسائر، الرصيد الكلي), swiped or tapped, with the right numbers;
 // and the Face ID lock (Chrome's virtual platform authenticator stands in for Face ID). Same set-up as run_controls.js.
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 const fs = require('fs'), path = require('path');
@@ -35,8 +35,6 @@ const log = s => console.log(`${++step}. ${s}`);
   const db = (f, a) => page.evaluate(f, a);
   const digits = s => String(s).replace(/[^\d−-]/g, '').replace('−', '-');
   const report = per => db(async k => { const [f, to] = window.SP.bk.span(k); const r = await window.SP.sb.rpc('pnl_report', { p_from: f.toISOString(), p_to: to.toISOString(), p_branch: null, p_tz: 'Africa/Tripoli' }); return r.data; }, per);
-  const sales = per => db(async k => { const [f, to] = window.SP.bk.span(k); const r = await window.SP.sb.rpc('sales_report', { p_from: f.toISOString(), p_to: to.toISOString(), p_branch: null, p_tz: window.SP.bk.tz() }); return r.data; }, per);
-  const dayOf = (per, i) => db(([k, j]) => { const d = window.SP.bk.span(k)[0]; const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + j); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }, [per, i]);
   try {
     await page.goto(ORIGIN); await page.waitForTimeout(1200);
     await go('login'); await see('#ap'); await page.click('[data-by="email"]'); await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago'); await page.waitForURL(/#mine/);
@@ -45,56 +43,24 @@ const log = s => console.log(`${++step}. ${s}`);
       await window.SP.sb.rpc('create_invoice', { p: { payment: 'credit', customer_name: 'ورشة الشهر', customer_phone: '0915556677', items: [{ id: p.id, qty: 2 }] } }); });
 
     await go('system'); await see('.sysp');
-    must(await page.locator('.sysp-tabs [data-sp]').count() === 4 && /اليوم/.test(await text('[data-sp="0"]')) && /المبيعات/.test(await text('[data-sp="1"]')) && /الأرباح والخسائر/.test(await text('[data-sp="2"]')) && /الرصيد الكلي/.test(await text('[data-sp="3"]')), 'four windows');
+    must(await page.locator('.sysp-tabs [data-sp]').count() === 3 && /اليوم/.test(await text('[data-sp="0"]')) && /الأرباح والخسائر/.test(await text('[data-sp="1"]')) && /الرصيد الكلي/.test(await text('[data-sp="2"]')), 'three windows, no «المبيعات»');
     await see('#sp0 .today .astat');
     await shot('01-today');
-
-    // ----- «المبيعات» -----
     await page.click('[data-sp="1"]'); await page.waitForTimeout(700); await see('#sp1 .pl-net b');
-    const wk = await sales('7');
-    must(digits(await text('#sp1 .pl-net b')) === String(Math.round(wk.total)) && (await text('#sp1 .pl-net')).includes(wk.count + ' فاتورة'), 'the week\'s sales ' + wk.total + ' / ' + await text('#sp1 .pl-net'));
-    must(await page.locator('#sp1 .sc-col').count() === 7 && await page.locator('#sp1 .sc-col').last().evaluate(e => e.classList.contains('cur') && e.classList.contains('sel')), 'seven columns, today the darker one and read out');
-    const byDay = Object.fromEntries((wk.by_day || []).map(x => [String(x.day).slice(0, 10), +x.total]));
-    must(digits(await text('#sp1 .sc-read b')) === String(Math.round(byDay[await dayOf('7', 6)] || 0)), 'today read out');
-    await shot('06-sales-week');
-    await page.locator('#sp1 .sc-col').first().click(); await page.waitForTimeout(150);
-    must(digits(await text('#sp1 .sc-read b')) === String(Math.round(byDay[await dayOf('7', 0)] || 0)) && await page.locator('#sp1 .sc-col').first().evaluate(e => e.classList.contains('sel')), 'tapping the first day reads it');
-    await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(150);
-    const lab1 = await page.locator('#sp1 .sc-col').nth(1).getAttribute('aria-label');
-    must(lab1.startsWith(await text('#sp1 .sc-read small')) && await page.evaluate(() => document.activeElement && document.activeElement.dataset.i) === '1', 'the arrow key moves to the next day (right to left)');
-    must(await db(() => { document.querySelector('#sp1 [data-per="month"]').click(); return document.querySelector('#sp1 .pl-body').classList.contains('stale') && !!document.querySelector('#sp1 .sc'); }), 'another period keeps the old numbers, faded');
-    await page.waitForTimeout(700);
-    const mo = await sales('month');
-    must(digits(await text('#sp1 .pl-net b')) === String(Math.round(mo.total)) && await page.locator('#sp1 .sc-col').count() === new Date().getDate(), 'the month: a column a day');
-    must((await text('#sp1')).includes('أحسن يوم كان') === ((mo.by_day || []).filter(x => +x.total > 0).length > 1), 'the best day');
-    const top = (mo.top || [])[0];
-    must(!top || (await text('#sp1')).includes(top.title), 'the best seller: ' + (top && top.title));
-    const pays = Object.values(mo.by_payment || {}).filter(v => +v > 0).length;
-    must(await page.locator('#sp1 .rbar').count() === pays && (await text('#sp1')).includes('كيف تخلّصت'), 'how it was paid: ' + pays);
-    await shot('07-sales-month');
-    await page.click('#sp1 [data-per="year"]'); await page.waitForTimeout(700);
-    must(await page.locator('#sp1 .sc-col').count() === new Date().getMonth() + 1 && /شهر بشهر/.test(await text('#sp1 .sc-tbl summary')), 'the year: a column a month');
-    await page.click('#sp1 .sc-tbl summary'); await page.waitForTimeout(200);
-    must(await page.locator('#sp1 .sc-tbl tr').count() === new Date().getMonth() + 1, 'the numbers as a table');
-    await page.click('#sp1 [data-per="today"]'); await page.waitForTimeout(700);
-    const td = await sales('today');
-    must(digits(await text('#sp1 .pl-net b')) === String(Math.round(td.total)) && await page.locator('#sp1 .sc').count() === 0, 'today: no chart');
-    log('«المبيعات»: the week ' + wk.total + ' in ' + wk.count + ' invoices, a column a day (tap or arrow keys to read a day); the month, with the best day, how it was paid and the best seller; the year month by month, also as a table; today');
-
-    await page.click('[data-sp="2"]'); await page.waitForTimeout(700); await see('#sp2 .pl-net b');
     const m = await report('month');
-    must(digits(await text('#sp2 .pl-net b')) === String(Math.round(Math.abs(m.net))) && /صافي/.test(await text('#sp2 .pl-net small')), 'the month\'s net: ' + m.net + ' / ' + await text('#sp2 .pl-net b'));
-    must((await text('#sp2 .pl-body')).includes('تكلفة البضاعة') && (await text('#sp2 .pl-body')).includes('المصروفات'), 'sales, cost, gross, expenses');
+    must(digits(await text('#sp1 .pl-net b')) === String(Math.round(Math.abs(m.net))) && /صافي/.test(await text('#sp1 .pl-net small')), 'the month\'s net: ' + m.net + ' / ' + await text('#sp1 .pl-net b'));
+    must((await text('#sp1 .pl-body')).includes('تكلفة البضاعة') && (await text('#sp1 .pl-body')).includes('المصروفات'), 'sales, cost, gross, expenses');
     await shot('02-pnl');
-    await page.click('#sp2 [data-per="year"]'); await page.waitForTimeout(800);
+    must(await db(() => { document.querySelector('#sp1 [data-per="year"]').click(); return document.querySelector('#sp1 .pl-body').classList.contains('stale') && !!document.querySelector('#sp1 .pl-net'); }), 'another period keeps the old numbers, faded, until the new ones come');
+    await page.waitForTimeout(800);
     const y = await report('year');
-    must(digits(await text('#sp2 .pl-net b')) === String(Math.round(Math.abs(y.net))), 'the year');
+    must(digits(await text('#sp1 .pl-net b')) === String(Math.round(Math.abs(y.net))), 'the year');
     log('«الأرباح والخسائر»: the month\'s net ' + m.net + ' from sales ' + m.sales + ', cost, gross, expenses; the year too');
-    await page.click('[data-sp="3"]'); await page.waitForTimeout(700); await see('#sp3 .pl-net b');
+    await page.click('[data-sp="2"]'); await page.waitForTimeout(700); await see('#sp2 .pl-net b');
     const s = await db(async () => (await window.SP.sb.rpc('stock_report', { p_limit: 1 })).data.summary);
     const total = (+s.value_cost || 0) + (+m.receivable) - (+m.payable);
-    must(digits(await text('#sp3 .pl-net b')) === String(Math.round(Math.abs(total))), 'the total balance ' + total + ' / ' + await text('#sp3 .pl-net b'));
-    must((await text('#sp3')).includes('ديون لينا') && (await text('#sp3')).includes('ديون علينا') && (await text('#sp3')).includes('دخلت'), 'stock, owed, owing, money in and out');
+    must(digits(await text('#sp2 .pl-net b')) === String(Math.round(Math.abs(total))), 'the total balance ' + total + ' / ' + await text('#sp2 .pl-net b'));
+    must((await text('#sp2')).includes('ديون لينا') && (await text('#sp2')).includes('ديون علينا') && (await text('#sp2')).includes('دخلت'), 'stock, owed, owing, money in and out');
     await shot('03-balance');
     log('«الرصيد الكلي»: stock at cost ' + s.value_cost + ' + owed to us ' + m.receivable + ' − we owe ' + m.payable + ' = ' + total + ', and the month\'s money in and out');
     await db(() => { const tr = document.querySelector('#spt'); tr.scrollTo({ left: 0, behavior: 'auto' }); }); await page.waitForTimeout(600);
@@ -103,8 +69,26 @@ const log = s => console.log(`${++step}. ${s}`);
     must(await page.locator('[data-sp="0"].on').count() === 1, 'the window seen last opens again');
     log('swiping moves the tabs; the last window opens again');
 
+    // ----- «استعلام سعر»: a part's price and details by barcode, item code or name -----
+    await go('system'); await see('.sys-look');
+    await page.click('.sys-look'); await page.waitForURL(/#lookup/); await see('#pqq');
+    const part = await db(() => { const p = window.__mockdb.products.find(x => x.barcode && x.price != null && x.cost != null && x.qty > 0 && x.status === 'active'); return p && { id: p.id, bar: p.barcode, title: p.title, price: p.price, cost: p.cost, qty: p.qty }; });
+    must(part, 'a demo part with a barcode');
+    await page.fill('#pqq', part.bar); await page.press('#pqq', 'Enter'); await see('.pq-card');
+    must((await text('.pq-name b')) === part.title && digits(await text('.pq-price b')) === String(Math.round(part.price)) && (await text('.pq-rows')).includes(String(part.qty)), 'by its barcode: the name, price and stock');
+    must((await text('.pq-rows')).includes('سعر الشراء') && (await text('.pq-rows')).includes('الربح في القطعة'), 'the owner sees the cost and the profit');
+    await shot('06-lookup');
+    await page.click('#pqagain'); await page.fill('#pqq', 'فلتر'); await page.waitForTimeout(800); await see('#pqres .pres-row');
+    const n1 = await page.locator('#pqres .pres-row').count();
+    await page.click('#pqres .pres-row'); await see('.pq-card');
+    must(n1 >= 2 && /فلتر/.test(await text('.pq-name b')), 'by name: a list, then the part');
+    await page.click('#pqsell'); await page.waitForURL(/#pos/); await see('.pline');
+    must(/فلتر/.test(await text('.pline')), '«بيعها» puts it on a sales invoice');
+    await page.click('#pnew'); await page.waitForTimeout(200);
+    log('«استعلام سعر» on the System tab: by barcode the part, its price, stock, cost and profit; by name a list; «بيعها» starts a sales invoice');
+
     // ----- the Face ID lock -----
-    await see('#lkc .lock-row', 8000);
+    await go('system'); await see('#lkc .lock-row', 8000);
     await page.click('#lkt'); await see('#lkreg', 8000);
     await page.click('#lkreg'); await page.waitForTimeout(900);
     must(/تتحل بـ/.test(await text('#lkc')) && await db(() => localStorage.getItem('sp_sys_lock') !== null), 'Face ID set up on this phone and the lock on');

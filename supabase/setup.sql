@@ -2222,7 +2222,8 @@ create or replace function public.merchant_detail(p_user uuid) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 begin
   if auth.uid() is null or not (public.has_perm('customers') or public.has_perm('invoices') or public.has_perm('reports')) then raise exception 'not authorized' using errcode = '42501'; end if;
-  return public.merchant_book(p_user) || jsonb_build_object('key', public.cust_key('', (select phone from public.customers where user_id = p_user)));
+  return public.merchant_book(p_user) || (select jsonb_build_object('key', public.cust_key('', c.phone), 'shop_on', c.shop_on, 'phone_public', c.phone_public,
+                                                                      'shop_shown', public.shop_shown(c)) from public.customers c where c.user_id = p_user);
 end $$;
 
 -- the owner gives a merchant a new password (a merchant who signed up with his phone number has no email to reset it with)
@@ -2269,3 +2270,48 @@ begin
   return found;
 end $$;
 grant execute on function public.link_login_phone() to authenticated;
+
+-- ---------- 17) محلات التجار في الشاشة الرئيسية ----------
+-- A merchant's shop shows in the app when the company shows it (shop_on, from «التجار»), or for every merchant with a shop's name
+-- when the company lets anyone (settings.open_shops, «السماح لأي شخص بتسجيل محل»). Its phone shows only if the merchant says so (phone_public).
+alter table public.customers add column if not exists shop_on      boolean not null default false;
+alter table public.customers add column if not exists phone_public boolean not null default false;
+alter table public.settings  add column if not exists open_shops   boolean not null default false;
+-- only the company turns a shop on (the merchant may still show or hide his own phone)
+create or replace function public.customers_guard() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if not (public.is_admin() or public.has_perm('customers')) then
+    if tg_op = 'INSERT' then new.user_id := auth.uid(); new.approved := false; new.created_at := now(); new.shop_on := false;
+    else
+      new.user_id := old.user_id; new.created_at := old.created_at; new.shop_on := old.shop_on;
+      -- an approved merchant sees every sale under his phone number (section 16): a new number needs the company's approval again
+      new.approved := old.approved and public.cust_key('', new.phone) is not distinct from public.cust_key('', old.phone);
+    end if;
+  end if;
+  return new;
+end $$;
+create or replace function public.shop_shown(c public.customers) returns boolean language sql stable security definer set search_path = public as $$
+  select btrim(c.shop_name) <> ''
+     and (c.shop_on or coalesce((select open_shops from public.settings where id = 1), false))
+     and not exists (select 1 from public.staff s where s.user_id = c.user_id)
+     and not exists (select 1 from public.admins a where a.user_id = c.user_id);
+$$;
+revoke execute on function public.shop_shown(public.customers) from public, anon;
+-- the shops for everyone (signed in or not): the name, the city, and the phone only when the merchant shows it
+create or replace function public.merchant_shops(p_q text default null, p_limit integer default 20, p_offset integer default 0)
+returns setof jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', c.user_id, 'name', btrim(c.shop_name), 'city', c.city, 'phone', case when c.phone_public then nullif(c.phone, '') end,
+                            'total_count', count(*) over ())
+  from public.customers c
+  where public.shop_shown(c)
+    and (coalesce(btrim(p_q), '') = '' or public.norm_ar(concat_ws(' ', c.shop_name, c.city)) like '%' || public.norm_ar(btrim(p_q)) || '%')
+  order by c.shop_on desc, c.created_at, c.user_id
+  limit least(greatest(coalesce(p_limit, 20), 1), 100) offset greatest(coalesce(p_offset, 0), 0);
+$$;
+create or replace function public.merchant_shop(p_id uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', c.user_id, 'name', btrim(c.shop_name), 'city', c.city, 'phone', case when c.phone_public then nullif(c.phone, '') end)
+  from public.customers c where c.user_id = p_id and public.shop_shown(c);
+$$;
+grant execute on function public.merchant_shops(text, integer, integer) to anon, authenticated;
+grant execute on function public.merchant_shop(uuid) to anon, authenticated;

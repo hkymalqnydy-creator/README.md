@@ -22,9 +22,9 @@
     scanNotFound: ["ما لقيناش باركود في الصورة. قرّب أكثر وخلي الإضاءة كويسة.", "No barcode found in the photo. Move closer and use good light."],
     scanGot: ["تمت القراءة: {c}", "Read: {c}"], scanUnknown: ["الكود {c} مش موجود في الكتالوج", "Code {c} isn't in the catalog"], scanAdded: ["أضيفت: {t}", "Added: {t}"],
     scanBtn: ["مسح بالكاميرا", "Scan with the camera"], barcodeL: ["الباركود", "Barcode"],
-    barcodeHint: ["امسحه بالكاميرا أو بجهاز الباركود، باش تلقى القطعة بسرعة في البيع والاستلام.", "Scan it with the camera or a barcode scanner to find the part fast when selling and receiving."],
-    rcvT: ["استلام بضاعة", "Receive stock"], rcvPhoto: ["صوّر فاتورة المورّد", "Photograph the supplier invoice"], rcvPhotoSub: ["يقرا الأصناف والكميات والأسعار", "Reads items, quantities and prices"],
-    rcvScan: ["امسح باركود القطع", "Scan part barcodes"], rcvScanSub: ["قطعة قطعة بالكاميرا", "One by one with the camera"], rcvSearchPh: ["أضف قطعة: اسم، رقم صنف، باركود أو شركة…", "Add a part: name, item code, barcode or maker…"],
+    barcodeHint: ["امسحه بالكاميرا أو بجهاز الباركود، باش تلقى القطعة بسرعة في البيع والشراء.", "Scan it with the camera or a barcode scanner to find the part fast when selling and buying."],
+    rcvT: ["فاتورة شراء", "Purchase invoice"], rcvPhoto: ["صوّر فاتورة المورّد", "Photograph the supplier invoice"], rcvPhotoSub: ["يقرا الأصناف والكميات والأسعار", "Reads items, quantities and prices"],
+    rcvScan: ["امسح باركود القطع", "Scan part barcodes"], rcvScanSub: ["قطعة قطعة بالكاميرا", "One by one with the camera"], rcvSearchPh: ["دوّر: اسم، رقم صنف، باركود أو شركة…", "Find: name, item code, barcode or maker…"], rcvManT: ["أو دخّل الأصناف يدوي", "Or enter the items by hand"], rcvAddMan: ["أضف صنف جديد يدوي", "Add a new item by hand"],
     rcvSupplier: ["المورّد", "Supplier"], rcvNote: ["ملاحظة", "Note"],
     rcvPayT: ["الدفع للمورّد", "Paying the supplier"], rcvPaidFull: ["دفعت كاملة", "Paid in full"], rcvCredit: ["آجل (دين للمورّد)", "On credit"], rcvPart: ["دفعت جزء", "Part paid"],
     rcvPaidNow: ["المدفوع توا", "Paid now"], purOwed: ["باقي للمورّد {m}", "{m} still owed"], rcvNeedSupplier: ["اكتب اسم المورّد باش يتسجّل الدين عليه.", "Enter the supplier's name so the debt is recorded."], rcvReading: ["جاري قراءة الفاتورة…", "Reading the invoice…"],
@@ -39,26 +39,26 @@
     rcvCode: ["الكود / الباركود", "Code / barcode"], rcvName: ["اسم الصنف", "Item name"], rcvCost: ["سعر الشراء", "Unit cost"], rcvSell: ["سعر البيع", "Selling price"],
     rcvChange: ["غيّر القطعة", "Change part"], rcvPick: ["اختر القطعة من الكتالوج", "Pick the part from the catalog"], rcvAsNew: ["خليها قطعة جديدة", "Keep it as a new part"], rcvDel: ["احذف السطر", "Remove line"],
     rcvTotal: ["إجمالي الشراء", "Purchase total"], rcvUnits: ["عدد القطع", "Units"], rcvSave: ["أدخلها للمخزون", "Add to stock"], rcvToPos: ["افتحها كفاتورة بيع", "Open as a sale"],
-    rcvSaved: ["تم الاستلام رقم {n}: زادت كمية {u} صنف، وانضاف {a} صنف جديد", "Receipt {n} saved: {u} restocked, {a} new"],
+    rcvSaved: ["تحفظت فاتورة الشراء رقم {n}: زادت كمية {u} صنف، وانضاف {a} صنف جديد", "Purchase invoice {n} saved: {u} restocked, {a} new"],
     rcvAuto: ["أدخلها للمخزن بروحها بعد ما تتقرا", "Put it into stock by itself once read"],
     rcvAutoHint: ["تصوّر الفاتورة والقطع تدخل بأسمائها وكمياتها وأرقام الأصناف، وتقدر تتراجع لو فيه غلط.", "Photograph the invoice and the parts go in with their names, quantities and codes; you can take it back if something is wrong."],
-    rcvAutoDone: ["دخلت للمخزن بروحها", "In stock, entered by itself"], rcvAutoSum: ["استلام رقم {n} · زادت {u}، وجديدة {a}", "Receipt {n} · {u} restocked, {a} new"],
-    rcvUndo: ["تراجع عن الإدخال", "Take it back"], rcvUndoQ: ["ترجّع الاستلام رقم {n}؟", "Take back receipt {n}?"],
+    rcvAutoDone: ["دخلت للمخزن بروحها", "In stock, entered by itself"], rcvAutoSum: ["فاتورة شراء رقم {n} · زادت {u}، وجديدة {a}", "Purchase invoice {n} · {u} restocked, {a} new"],
+    rcvUndo: ["تراجع عن الإدخال", "Take it back"], rcvUndoQ: ["تلغي فاتورة الشراء رقم {n}؟", "Cancel purchase invoice {n}?"],
     rcvUndoB: ["القطع تطلع من المخزن، وسعر التكلفة يرجع كيف كان، والقطع الجديدة اللي انضافت معاه تنحذف.", "The parts come out of stock, costs go back to what they were, and new parts it added are removed."],
-    rcvUndone: ["رجّعنا الاستلام {n}. السطور قدامك تصلحها وتدخلها.", "Receipt {n} taken back. The lines are here to fix and enter again."],
-    rcvUndoneList: ["رجّعنا الاستلام {n}", "Receipt {n} taken back"], rcvUndoSold: ["ما نقدروش نرجّعوه: انباع من «{t}»", "Can’t take it back: some of “{t}” was already sold"],
-    rcvUndoOld: ["الموظف يقدر يرجّع استلامه بس، وفي نفس اليوم.", "Staff can take back only their own receipts, within a day."],
-    rcvAnother: ["صوّر فاتورة ثانية", "Photograph another invoice"], rcvSeeList: ["شوف الاستلامات", "See receipts"],
+    rcvUndone: ["لغينا فاتورة الشراء {n}. السطور قدامك تصلحها وتدخلها.", "Purchase invoice {n} cancelled. The lines are here to fix and enter again."],
+    rcvUndoneList: ["لغينا فاتورة الشراء {n}", "Purchase invoice {n} cancelled"], rcvUndoSold: ["ما نقدروش نرجّعوه: انباع من «{t}»", "Can’t take it back: some of “{t}” was already sold"],
+    rcvUndoOld: ["الموظف يقدر يلغي فاتورة الشراء متاعه بس، وفي نفس اليوم.", "Staff can cancel only their own purchase invoices, within a day."],
+    rcvAnother: ["صوّر فاتورة ثانية", "Photograph another invoice"], rcvSeeList: ["شوف فواتير الشراء", "See purchase invoices"],
     rcvWaitFix: ["ما دخلتش بروحها: {n} سطر يحتاج تكمّله (الاسم أو الكمية). صلّحه واضغط «أدخلها للمخزون».", "Not entered: {n} lines need a name or quantity. Fix them and tap Add to stock."],
     rcvWaitDevice: ["ما دخلتش بروحها: القراية على الجهاز وفيه قطع مش معروفة عندنا. راجعها واضغط «أدخلها للمخزون».", "Not entered: it was read on this device and has parts we don’t know. Check them and tap Add to stock."],
     rcvWaitPaid: ["ما دخلتش بروحها: اكتب كم دفعت للمورّد، واضغط «أدخلها للمخزون».", "Not entered: enter what you paid the supplier, then tap Add to stock."],
     rcvWaitSupplier: ["ما دخلتش بروحها: الدين يحتاج اسم المورّد. اكتبه واضغط «أدخلها للمخزون».", "Not entered: a credit receipt needs the supplier name. Enter it and tap Add to stock."],
-    purUndo: ["رجّع الاستلام", "Take back"], rcvNewShort: ["جديدة", "New"], rcvToPosSkip: ["{n} صنف مش في الكتالوج ما انضافش للبيع", "{n} lines not in the catalog were left out of the sale"],
+    purUndo: ["ألغِ الفاتورة", "Cancel the invoice"], rcvNewShort: ["جديدة", "New"], rcvToPosSkip: ["{n} صنف مش في الكتالوج ما انضافش للبيع", "{n} lines not in the catalog were left out of the sale"],
     rcvClear: ["امسح القائمة", "Clear the list"], rcvClearQ: ["تمسح كل الأصناف من القائمة؟", "Remove all lines from the list?"], rcvFromPhoto: ["من الصورة", "From the photo"],
-    rcvNeedLines: ["ما فيش أصناف للإدخال", "There are no lines to save"], rcvMany: ["الحد 300 صنف في الاستلام الواحد", "A receipt can have up to 300 lines"],
-    purT: ["سجل الاستلام", "Receiving history"], purEmpty: ["ما فيش استلام بضاعة بعد.", "No stock has been received yet."],
-    purSearchPh: ["المورّد، اسم القطعة، رقم الصنف أو الشركة…", "Supplier, part name, item code or maker…"], purNoHit: ["ما فيش استلام فيه «{q}».", "No receipt has «{q}»."], purNo: ["استلام {n}", "Receipt {n}"],
-    perm_purchases: ["استلام البضاعة وإدخال فواتير الموردين", "Receive stock and enter supplier invoices"]
+    rcvNeedLines: ["ما فيش أصناف للإدخال", "There are no lines to save"], rcvMany: ["الحد 300 صنف في الفاتورة الواحدة", "An invoice can have up to 300 lines"],
+    purT: ["فواتير الشراء", "Purchase invoices"], purEmpty: ["ما فيش فواتير شراء بعد.", "No purchase invoices yet."],
+    purSearchPh: ["المورّد، اسم القطعة، رقم الصنف أو الشركة…", "Supplier, part name, item code or maker…"], purNoHit: ["ما فيش فاتورة شراء فيها «{q}».", "No purchase invoice has «{q}»."], purNo: ["فاتورة شراء {n}", "Purchase {n}"],
+    perm_purchases: ["فواتير الشراء (إدخال المشتريات)", "Purchase invoices (entering purchases)"]
   });
 
   /* ---------- shared helpers ---------- */
@@ -393,8 +393,10 @@
         <button type="button" class="rcv-big" id="rscan">${I('scan')}<b>${esc(t('rcvScan'))}</b><small>${esc(t('rcvScanSub'))}</small></button></div>
       <label class="switch rcv-auto"><input type="checkbox" id="rauto"${autoOn() ? ' checked' : ''}><span></span>${esc(t('rcvAuto'))}</label><span class="hint">${esc(t('rcvAutoHint'))}</span>
       <div id="rread"></div>
-      <form class="field" id="rsf" role="search"><label for="rq" class="sr">${esc(t('search'))}</label><div class="inrow"><input id="rq" class="input" autocomplete="off" placeholder="${esc(t('rcvSearchPh'))}" enterkeyhint="search"></div></form>
+      <h2 class="lbl rcv-man"><label for="rq">${esc(t('rcvManT'))}</label></h2>
+      <form class="field" id="rsf" role="search"><div class="inrow"><input id="rq" class="input" autocomplete="off" placeholder="${esc(t('rcvSearchPh'))}" enterkeyhint="search"></div></form>
       <div id="rres" class="pres"></div>
+      <button type="button" class="btn btn-ghost sm rcv-add" id="radd">${I('plus')} ${esc(t('rcvAddMan'))}</button>
       <div class="row2"><div class="field"><label for="rsup">${esc(t('rcvSupplier'))}</label><input id="rsup" class="input" maxlength="120" value="${esc(st.supplier || '')}"></div>
         <div class="field"><label for="rbr">${esc(t('posBranch'))}</label><select id="rbr" class="input"${fixedBranch ? ' disabled' : ''}></select></div></div>
       <div id="rpayb"></div>
@@ -457,20 +459,26 @@
         if (!SP.alive(n) || !$('#rres')) return;
         const k = key(q), exact = r.items.filter(p => (p.sku && key(p.sku) === k) || (p.barcode && key(p.barcode) === k) || (p.part_no && key(p.part_no) === k));
         if (exact.length === 1) { addPart(exact[0]); $('#rq').value = ''; $('#rres').innerHTML = ''; return; }
-        const asNew = k.length >= 4 && !/\s/.test(q) ? `<button type="button" class="pres-row" data-new="1"><span><b>${esc(t('rcvAsNew'))}</b><small class="mono">${esc(q)}</small></span>${I('plus')}</button>` : '';
+        // not in the catalog: a new item, by its code (letters and digits, no spaces) or by its name
+        const codeLike = /^[\w\-./]{3,}$/.test(q) && /\d/.test(q);
+        const asNew = q.length >= 2 ? `<button type="button" class="pres-row" data-new="1"><span><b>${esc(t('rcvAsNew'))}</b><small${codeLike ? ' class="mono"' : ''}>${esc(q)}</small></span>${I('plus')}</button>` : '';
         $('#rres').innerHTML = r.items.map(p => `<button type="button" class="pres-row" data-id="${p.id}"><span><b>${esc(p.title)}</b><small>${esc([p.sku || p.part_no, SP.makerModel(p), p.qty != null ? t('posInStock', { n: p.qty }) : ''].filter(Boolean).join(' · '))}</small></span>${I('plus')}</button>`).join('') + asNew
           || `<p class="muted-p">${esc(t('noResT'))}</p>`;
         $('#rres').onclick = e => {
           const b = e.target.closest('[data-id],[data-new]');
           if (!b) return;
-          if (b.dataset.id) addPart(r.items.find(p => p.id === b.dataset.id));
-          else { const isBar = /^\d{8,14}$/.test(q); addLine({ code: isBar ? '' : q.toUpperCase(), barcode: isBar ? q : '', src: 'search' }, 'top').state = 'new'; saveR(st); draw(); }
-          $('#rq').value = ''; $('#rres').innerHTML = ''; $('#rq').focus();
+          $('#rq').value = ''; $('#rres').innerHTML = '';
+          if (b.dataset.id) { addPart(r.items.find(p => p.id === b.dataset.id)); $('#rq').focus(); return; }
+          const isBar = /^\d{8,14}$/.test(q), l = addLine(codeLike ? { code: isBar ? '' : q.toUpperCase(), barcode: isBar ? q : '', src: 'search' } : { title: q, src: 'search' }, 'top');
+          l.state = 'new'; saveR(st); draw(); focusLine(l, codeLike ? 'title' : 'code');
         };
       } catch (e) { if ($('#rres')) $('#rres').innerHTML = `<p class="form-err">${esc(SP.errText(e))}</p>`; }
     }
     $('#rsf').onsubmit = e => { e.preventDefault(); find($('#rq').value); };
     $('#rq').oninput = SP.debounce(e => find(e.target.value), 350);
+    /* by hand: a new line to fill in (a part not in the catalog yet), its name first */
+    const focusLine = (l, f) => { const row = $(`#rlines [data-k="${l.k}"]`), i = row && $(`[data-f="${f}"]`, row); if (i) i.focus(); };
+    $('#radd').onclick = () => { const l = addLine({ src: 'manual' }, 'top'); l.state = 'new'; saveR(st); draw(); focusLine(l, 'title'); };
     /* camera scanning: several parts in a row */
     $('#rscan').onclick = () => SP.scanCode({
       title: t('rcvScan'),

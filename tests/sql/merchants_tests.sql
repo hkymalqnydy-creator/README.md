@@ -187,3 +187,37 @@ select 'MC51 money in = paid at the sale + customers'' payments; out = purchases
                             + (select coalesce(sum(paid), 0) from public.invoices where status = 'returned' and returned_at >= now() - interval '1 day') out_ok
 from public.pnl_report(now() - interval '1 day', now() + interval '1 day') r;
 reset role;
+
+-- the merchants' shops on the home screen (section 17)
+update public.settings set open_shops = false where id = 1;
+set role anon; select set_config('request.jwt.claim.sub', '', false);
+select 'MC52 no shop shows before the company shows it (expect 0)' t, count(*) from public.merchant_shops();
+reset role;
+set role authenticated; select set_config('request.jwt.claim.sub', '88888888-8888-8888-8888-888888888888', false);
+update public.customers set shop_on = true, phone_public = true where user_id = '88888888-8888-8888-8888-888888888888';
+reset role;
+select 'MC53 a merchant cannot show his own shop, but may show his phone (expect f, t)' t, shop_on, phone_public from public.customers where user_id = '88888888-8888-8888-8888-888888888888';
+set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+update public.customers set shop_on = true where user_id = '88888888-8888-8888-8888-888888888888';
+select 'MC54 the owner shows it (expect t t f)' t, (r->>'shop_on')::boolean shop_on, (r->>'shop_shown')::boolean shown, (r->>'phone_public') is null missing
+from public.merchant_detail('88888888-8888-8888-8888-888888888888') r;
+reset role;
+set role anon; select set_config('request.jwt.claim.sub', '', false);
+select 'MC55 anyone sees it: the name, the city and the phone he shows (expect 1, محل الأمل لقطع الغيار, مصراتة, t)' t, count(*) over () n, r->>'name' name, r->>'city' city, r->>'phone' is not null phone
+from public.merchant_shops() r;
+select 'MC56 one shop by its id, and the search (expect محل الأمل لقطع الغيار, 1, 0)' t, public.merchant_shop('88888888-8888-8888-8888-888888888888')->>'name' name,
+  (select count(*) from public.merchant_shops('مصراته')) by_city, (select count(*) from public.merchant_shops('ما فيش')) none;
+reset role;
+update public.customers set phone_public = false where user_id = '88888888-8888-8888-8888-888888888888';
+select 'MC57 a hidden phone stays hidden (expect t)' t, public.merchant_shop('88888888-8888-8888-8888-888888888888')->>'phone' is null hidden;
+update public.settings set open_shops = true where id = 1;
+select 'MC58 «anyone may register a shop»: every merchant with a shop''s name shows, no staff, no owner (expect t, f, f)' t,
+  (select count(*) from public.merchant_shops()) = (select count(*) from public.customers c where btrim(c.shop_name) <> ''
+      and not exists (select 1 from public.staff s where s.user_id = c.user_id) and not exists (select 1 from public.admins a where a.user_id = c.user_id)) all_shown,
+  exists (select 1 from public.merchant_shops() r, public.staff s where s.user_id = (r->>'id')::uuid) staff_shown,
+  exists (select 1 from public.merchant_shops() r, public.admins a where a.user_id = (r->>'id')::uuid) owner_shown;
+update public.settings set open_shops = false where id = 1;
+set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+update public.customers set shop_on = false where user_id = '88888888-8888-8888-8888-888888888888';
+reset role;
+select 'MC59 hidden again: no page for it either (expect t)' t, public.merchant_shop('88888888-8888-8888-8888-888888888888') is null gone;

@@ -181,7 +181,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await lastAi().locator('[data-alt]').click(); await page.waitForURL(/#receive/); await see('#rlines');
     await page.waitForTimeout(400);
     must(await page.locator('#rlines [data-k]').count() === 4 && await page.inputValue('#rsup') === 'شركة الأمل للتوريد', 'opened in Receive to edit');
-    log('when the lines don\'t add up to the printed total it says so; «عدّلها في الاستلام» opens the same 4 lines and supplier in Receive');
+    log('when the lines don\'t add up to the printed total it says so; «عدّلها في فاتورة الشراء» opens the same 4 lines and supplier in the purchase invoice');
 
     // ----- the manager's page -----
     await go('system'); await see('.pos-tile[href="#admin-ai"]'); await page.click('.pos-tile[href="#admin-ai"]');

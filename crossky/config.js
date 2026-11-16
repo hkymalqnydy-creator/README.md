@@ -17,6 +17,6 @@ window.SPARAT_CONFIG = {
   defaultLang: '',          // '' = follow the phone's language; or 'ar', 'en', 'fr', 'es', 'de', 'tr', 'ru', 'zh'
   demo: true,             // demo data on the device while no server is set
   demoEmail: "owner@crossky.ly",      // demo owner login (password 123456)
-  brands: ["toyota", "lexus", "nissan", "infiniti", "honda", "acura", "mazda", "mitsubishi", "subaru", "suzuki", "isuzu", "daihatsu", "hyundai", "kia", "genesis", "ssangyong", "daewoo", "hino"]  // brands shown until the owner picks them (Owner panel → Company settings); [] = all
+  brands: []  // brands shown until the owner picks them (Owner panel → Company settings); [] = all
   // aiScan: false          // stop the app from trying the AI invoice reader (supabase/functions/scan-invoice)
 };

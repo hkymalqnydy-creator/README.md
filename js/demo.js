@@ -40,7 +40,7 @@
     activity: [], act_seq: 0, price_changes: [], batch_seq: 0, passkeys: [],
     settings: { id: 1, admin_wa: '', notice: '', updated_at: now(), price_mode: 'all', brand_name: '', tagline: '', logo: '', accent: '', hero_title: '', hero_sub: '',
       about: '', contact_wa: '', contact_phone: '', address: '', open_signup: true, orders_enabled: false, brands: [], brand_logos: {}, bot_enabled: true, bot_welcome: '', bot_rules: [],
-      hide_qty: false, hide_branches: false, shop_closed: false, closed_msg: '', no_below_cost: false, low_stock: 3, invoice_footer: '', ads: [],
+      hide_qty: false, hide_branches: false, shop_closed: false, closed_msg: '', no_below_cost: false, low_stock: 3, invoice_footer: '', ads: [], open_shops: false,
       ai_customers: false, ai_name: '', ai_rules: '', ai_daily: 40 },
     ai_turns: []
   });
@@ -67,17 +67,29 @@
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   }
 
+  /* the merchants' shops the company shows on the home screen (supabase/setup.sql section 17): three more merchants, and
+     every demo merchant's shop shown; two of them show their phone */
+  function demoShops(DB) {
+    const ago = m => new Date(Date.now() - m * 60000).toISOString();
+    [['خالد المصراتي', 'قطع غيار الأمانة', '0913334455', 'مصراتة', true, 2600], ['أحمد الزاوي', 'محل الوفاء للسيارات', '0926667788', 'الزاوية', false, 1800],
+      ['سالم الفزاني', 'مركز البركة لقطع الغيار', '0945556677', 'سبها', true, 900]].forEach(([name, shop, phone, city, approved, m]) => {
+      if (DB.customers.some(c => c.phone === phone)) return;
+      const id = uuid(); DB.users.push({ id, email: 'c' + DB.users.length + '@demo.app', password: uuid() });
+      DB.customers.push({ user_id: id, name, shop_name: shop, phone, city, approved, created_at: ago(m) });
+    });
+    DB.customers.forEach(c => { c.shop_on = !!String(c.shop_name || '').trim(); c.phone_public = ['0925551234', '0913334455'].includes(c.phone); });
+    DB.mshops = 1;
+  }
   function seedCompany(DB) {
     const C = window.SPARAT_CONFIG || {}, app = C.appName || 'CROSSKY', email = C.demoEmail || 'owner@demo.app';
     const owner = { id: uuid(), email, password: '123456' };
     DB.users.push(owner); DB.admins.push(owner.id);
     const ago = m => new Date(Date.now() - m * 60000).toISOString();
-    const KJ = (window.SP_DATA ? window.SP_DATA.BRANDS : []).filter(b => b.origin === 'KR' || b.origin === 'JP').map(b => b.id);
     Object.assign(DB.settings, {
       brand_name: app, tagline: 'قطع غيار السيارات الكورية واليابانية', hero_title: 'قطع الكوري والياباني… كلها عندنا',
       hero_sub: 'أصلي وتجاري بأسعار الجملة والقطاعي، مع التوصيل لكل المدن الليبية.',
       about: app + ' شركة متخصصة في قطع غيار السيارات الكورية واليابانية: هيونداي، كيا، تويوتا، نيسان، ميتسوبيشي وغيرها.\n\nنوفر القطع الأصلية والتجارية بضمان، ونخدم الزبائن والورش والتجار في كل ليبيا.',
-      contact_wa: '0912345678', contact_phone: '0912345678', address: 'طرابلس – طريق المطار', price_mode: 'all', orders_enabled: true, open_signup: false, brands: KJ, ads: demoAds(),
+      contact_wa: '0912345678', contact_phone: '0912345678', address: 'طرابلس – طريق المطار', price_mode: 'all', orders_enabled: true, open_signup: false, brands: [], ads: demoAds(),
       bot_rules: [
         { k: 'توصيل, شحن, delivery', a: 'نعم، التوصيل متاح لكل المدن الليبية. ابعتلنا موقعك على واتساب ونحددلك الوقت والتكلفة.' },
         { k: 'ضمان, كفالة, warranty', a: 'القطع الأصلية عليها ضمان الوكيل، والتجاري عليه ضمان التركيب. التفاصيل مكتوبة في كل قطعة.' },
@@ -174,6 +186,7 @@
     cu('محمد سالم', 'محل سالم لقطع الغيار', '0947778899', 'بنغازي', false, 200);
     const sent = DB.invoices.find(v => v.customer_phone === '0925551234');
     if (sent) { sent.customer_id = nour; sent.sent_at = ago(50); }
+    demoShops(DB);
     DB.merchants = 1; DB.makers = 1;
     /* the activity log of everything above, as the database writes it (supabase/setup.sql section 12) */
     const L = [], who = id => id === owner.id ? email : (DB.staff.find(x => x.user_id === id) || {}).name || '';
@@ -232,6 +245,14 @@
         if (v) { v.customer_id = u.id; v.sent_at = new Date(Date.now() - 50 * 60000).toISOString(); }
       }
     } else if (!DB.merchants) DB.merchants = 1;
+    if (!DB.mshops && opts.seed && CONF.mode === 'company' && DB.users.length > 0) demoShops(DB);
+    else if (!DB.mshops) DB.mshops = 1;
+    /* every car brand in the world now: a demo saved with only the Korean and Japanese ones shows them all */
+    if (!DB.allBrands) {
+      DB.allBrands = 1;
+      const kj = new Set((window.SP_DATA ? window.SP_DATA.BRANDS : []).filter(b => b.origin === 'KR' || b.origin === 'JP').map(b => b.id)), cur = DB.settings && DB.settings.brands;
+      if (CONF.mode === 'company' && Array.isArray(cur) && cur.length && cur.every(id => kj.has(id))) DB.settings.brands = [];
+    }
     window.__mockdb = DB;
     let session = null; const listeners = [];
     try { const s = opts.persist && JSON.parse(localStorage.getItem(KEY + '_session') || 'null'); if (s && DB.users.some(u => u.id === s.user.id)) session = s; } catch (e) { /* signed out */ }
@@ -408,7 +429,7 @@
       if (name === 'customers') {
         if (DB.customers.some(c => c.user_id === uid())) return { error: { message: 'duplicate key', code: '23505' } };
         if (String(v.shop_name || '').length > 80) return { error: { message: 'new row for relation "customers" violates check constraint "customers_shop_name_check"', code: '23514' } };
-        return { row: { phone: '', city: '', shop_name: '', ...v, user_id: uid(), approved: false, created_at: now() } };
+        return { row: { phone: '', city: '', shop_name: '', phone_public: false, ...v, user_id: uid(), approved: false, shop_on: false, created_at: now() } };
       }
       return rls();
     }
@@ -422,7 +443,7 @@
       }
       if (name === 'customers' && 'shop_name' in v && String(v.shop_name || '').length > 80) return { error: { message: 'new row for relation "customers" violates check constraint "customers_shop_name_check"', code: '23514' } };
       if (name === 'customers' && !hasPerm('customers')) {
-        delete v.approved; delete v.user_id;
+        delete v.approved; delete v.user_id; delete v.shop_on; // only the company shows a merchant's shop
         /* an approved merchant sees every sale under his number: a new number needs the company's approval again */
         if ('phone' in v && custKey('', v.phone) !== custKey('', r.phone)) v.approved = false;
       }
@@ -585,6 +606,8 @@
     };
     const canOpen = v => hasPerm('invoices') || v.staff_id === uid() || (v.source === 'app' && hasPerm('sales'));
     const shopOrName = c => String(c.shop_name || '').trim() || c.name;
+    const shopShown = c => !!String(c.shop_name || '').trim() && (!!c.shop_on || !!DB.settings.open_shops) && !DB.admins.includes(c.user_id) && !DB.staff.some(x => x.user_id === c.user_id);
+    const shopOut = c => ({ id: c.user_id, name: String(c.shop_name).trim(), city: c.city || '', phone: c.phone_public && c.phone ? c.phone : null });
     function buyers() {
       const m = {};
       DB.invoices.filter(v => v.status === 'done').sort((x, y) => x.created_at.localeCompare(y.created_at)).forEach(v => {
@@ -1089,9 +1112,17 @@
       },
       merchant_detail(a) {
         if (!uid() || !(hasPerm('customers') || hasPerm('invoices') || hasPerm('reports'))) fail('not authorized', '42501');
-        const b = merchantBook(a.p_user);
-        return b ? { ...b, key: custKey('', b.phone) } : null;
+        const b = merchantBook(a.p_user), c = DB.customers.find(x => x.user_id === a.p_user);
+        return b ? { ...b, key: custKey('', b.phone), shop_on: !!(c && c.shop_on), phone_public: !!(c && c.phone_public), shop_shown: !!(c && shopShown(c)) } : null;
       },
+      /* the merchants' shops for everyone (supabase/setup.sql section 17): the name, the city, the phone only if the merchant shows it */
+      merchant_shops(a) {
+        const q = norm(String(a.p_q || '').trim()), off = Math.max(a.p_offset || 0, 0), lim = Math.min(Math.max(a.p_limit || 20, 1), 100);
+        const L = DB.customers.filter(c => shopShown(c) && (!q || norm(c.shop_name + ' ' + (c.city || '')).includes(q)))
+          .sort((x, y) => (!!y.shop_on - !!x.shop_on) || x.created_at.localeCompare(y.created_at) || x.user_id.localeCompare(y.user_id));
+        return L.slice(off, off + lim).map(c => ({ ...shopOut(c), total_count: L.length }));
+      },
+      merchant_shop(a) { const c = DB.customers.find(x => x.user_id === a.p_id); return c && shopShown(c) ? shopOut(c) : null; },
       set_customer_password(a) {
         if (!isAdmin()) fail('not authorized', '42501');
         const pw = String(a.p_pw || '');

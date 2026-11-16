@@ -22,7 +22,7 @@
     aiPer_today: ["اليوم", "today"], aiPer_yesterday: ["امس", "yesterday"], aiPer_week: ["آخر 7 أيام", "the last 7 days"], aiPer_month: ["هالشهر", "this month"],
     aiPer_last_month: ["الشهر اللي فات", "last month"], aiPer_year: ["هالسنة", "this year"],
     aiPSale: ["فاتورة بيع", "Sale"], aiPReturn: ["ترجيع فاتورة رقم {n}", "Return invoice no. {n}"], aiPStock: ["تعديل كمية", "Change stock"], aiPPrice: ["تغيير سعر", "Change a price"],
-    aiPBulk: ["تغيير الأسعار بالجملة", "Change prices in bulk"], aiPRecv: ["استلام بضاعة", "Receive stock"], aiPPay: ["دفعة من زبون", "Payment from a customer"],
+    aiPBulk: ["تغيير الأسعار بالجملة", "Change prices in bulk"], aiPRecv: ["فاتورة شراء", "Purchase invoice"], aiPPay: ["دفعة من زبون", "Payment from a customer"],
     aiPSupPay: ["دفعة لمورّد", "Payment to a supplier"], aiPExp: ["مصروف", "Expense"], aiPShop: ["إعدادات المحل", "Shop settings"], aiPAd: ["إعلان جديد في الرئيسية", "New home screen ad"],
     aiGoSell: ["نفّذ البيع", "Make the sale"], aiGoDo: ["نفّذ", "Do it"], aiGoReturn: ["نفّذ الترجيع", "Return it"], aiEditPos: ["عدّلها في نقطة البيع", "Edit in point of sale"],
     aiRCustomer: ["الزبون", "Customer"], aiRPay: ["الدفع", "Payment"], aiRPaid: ["المدفوع توا", "Paid now"], aiRDisc: ["تخفيض", "Discount"], aiRTotal: ["المجموع", "Total"], aiRNote: ["ملاحظة", "Note"],
@@ -32,7 +32,7 @@
     aiNew: ["جديدة", "new"], aiItems: ["{n} قطعة", "{n} items"],
     aiDSold: ["تمت الفاتورة رقم {n} بـ {m}", "Invoice no. {n} done, {m}"], aiDReturned: ["ترجعت الفاتورة رقم {n} والقطع رجعت للمخزن", "Invoice no. {n} returned; the parts are back in stock"],
     aiDStock: ["الكمية توا {n}", "Stock is now {n}"], aiDPrice: ["السعر توا {m}", "The price is now {m}"], aiDBulk: ["تغير سعر {n} قطعة. تقدر ترجعها من «الأسعار»", "{n} prices changed. You can undo it in Prices"],
-    aiDRecv: ["تم الاستلام رقم {n}: {u} قطعة زادت و{a} جديدة", "Receipt no. {n}: {u} updated, {a} new"], aiDPay: ["تسجلت الدفعة", "Payment recorded"],
+    aiDRecv: ["تحفظت فاتورة الشراء رقم {n}: {u} قطعة زادت و{a} جديدة", "Purchase invoice {n}: {u} updated, {a} new"], aiDPay: ["تسجلت الدفعة", "Payment recorded"],
     aiDExp: ["تسجل المصروف", "Expense recorded"], aiDShop: ["تحفظت الإعدادات", "Settings saved"], aiDAd: ["الإعلان طلع في الرئيسية", "The ad is on the home screen"],
     aiLOpenInv: ["افتح الفاتورة", "Open the invoice"], aiLOpenPart: ["افتح القطعة", "Open the part"], aiLOpenCust: ["افتح حساب الزبون", "Open the customer"], aiLOpenRecv: ["افتح المشتريات", "Open purchases"],
     aiLHome: ["شوف الرئيسية", "See the home screen"], aiLCart: ["افتح السلة", "Open the cart"], aiLPrices: ["افتح الأسعار", "Open Prices"],
@@ -206,7 +206,7 @@
     expenses: ['expenses', ['expenses', 'reports']], profit: ['pnl', { all: ['reports', 'costs'] }], staff: ['staff', 'admin'], admin: ['admin', 'admin'],
     controls: ['admin-control', 'admin'], activity: ['admin-log', 'admin'], bulk_prices: ['admin-prices', 'admin'], ads: ['admin-ads', 'admin'], company_settings: ['admin-company', 'admin'],
     customer_approvals: ['admin-customers', 'admin'], auto_reply: ['admin-bot', 'admin'], sync: ['admin-sync', 'admin'], assistant_settings: ['admin-ai', 'admin'],
-    orders: ['orders', ['sales', 'invoices'], true], my_orders: ['my-orders', null, true]
+    orders: ['orders', ['sales', 'invoices'], true], my_orders: ['my-orders', null, true], lookup: ['lookup', 'staff'], shops: ['mshops', null, true]
   };
   tool({
     name: 'open_page', perm: null,
@@ -720,7 +720,7 @@
     aiCartAdded: ["زدت {n} من «{t}» للسلة", "Added {n} × “{t}” to the cart"], aiRSearch: ["يبحث عن", "Searches"],
     aiLogSale: ["فاتورة بيع رقم {n} ({m})", "Sale no. {n} ({m})"], aiLogReturn: ["ترجيع الفاتورة رقم {n}", "Returned invoice no. {n}"], aiLogPay: ["دفعة {m} من {t}", "Payment of {m} from {t}"],
     aiLogSupPay: ["دفعة {m} لـ {t}", "Payment of {m} to {t}"], aiLogExp: ["مصروف {m} ({t})", "Expense of {m} ({t})"], aiLogStock: ["كمية «{t}»: {a} ← {b}", "Stock of “{t}”: {a} → {b}"],
-    aiLogPrice: ["سعر «{t}» توا {m}", "Price of “{t}” is now {m}"], aiLogBulk: ["تغيير أسعار {n} قطعة", "Changed {n} prices"], aiLogRecv: ["استلام بضاعة رقم {n}", "Receipt no. {n}"],
+    aiLogPrice: ["سعر «{t}» توا {m}", "Price of “{t}” is now {m}"], aiLogBulk: ["تغيير أسعار {n} قطعة", "Changed {n} prices"], aiLogRecv: ["فاتورة شراء رقم {n}", "Purchase invoice {n}"],
     aiLogShop: ["إعدادات المحل", "Shop settings"], aiLogAd: ["إعلان «{t}»", "Ad “{t}”"]
   });
 
@@ -731,15 +731,15 @@
 
   /* ---------- the app guide: what the assistant knows about using the app ---------- */
   const HELP = [
-    ['pos', 'sales', 'بيع فاتورة نقطة كاشير', 'نقطة البيع (#pos): دوّر على القطعة بالاسم أو الرقم أو صوّر الباركود وتتزاد للفاتورة، حدد الكمية والزبون وطريقة الدفع (كاش، بطاقة، تحويل، دين) واضغط «احفظ الفاتورة». بعدها تطبعها أو تبعتها على واتساب.', 'Point of sale (#pos): find the part by name, number or barcode photo, set quantities, customer and payment (cash, card, transfer, credit), then Save. Print it or send it on WhatsApp.'],
-    ['invoices', ['sales', 'invoices'], 'فواتير فاتورة طباعة اطبع', 'الفواتير (#invoices): كل فواتير البيع، تدوّر برقمها أو اسم الزبون أو رقمه، وتفتح أي واحدة تطبعها أو تبعتها.', 'Invoices (#invoices): every sale; search by number, customer name or phone; open one to print or send it.'],
+    ['pos', 'sales', 'بيع فاتورة نقطة كاشير فاتورة بيع اكتب فاتورة', 'فاتورة بيع (#pos، أول زر في تبويب المنظومة): دوّر على القطعة بالاسم أو الرقم أو صوّر الباركود وتتزاد للفاتورة، حدد الكمية والزبون وطريقة الدفع (كاش، بطاقة، تحويل، دين) واضغط «احفظ الفاتورة». بعدها تطبعها أو تبعتها على واتساب.', 'Sales invoice (#pos, the first button on the System tab): find the part by name, number or barcode photo, set quantities, customer and payment (cash, card, transfer, credit), then Save. Print it or send it on WhatsApp.'],
+    ['invoices', ['sales', 'invoices'], 'فواتير فاتورة طباعة اطبع فواتير البيع', 'فواتير البيع (#invoices): كل فواتير البيع، تدوّر برقمها أو اسم الزبون أو رقمه، وتفتح أي واحدة تطبعها أو تبعتها.', 'Invoices (#invoices): every sale; search by number, customer name or phone; open one to print or send it.'],
     ['returns', 'returns', 'ترجيع ترجع مرتجع رجع', 'ترجيع فاتورة: افتحها من «الفواتير» واضغط «ترجيع»؛ القطع ترجع للمخزن والفاتورة تتعلّم مرجّعة.', 'Returns: open the invoice and tap Return; the parts go back to stock.'],
     ['invphoto', ['purchases', 'sales'], 'صورة صوره فاتورة فاتوره نزل نزّل دخل سجل طبق الاصل', 'فاتورة من صورة: في المساعد اضغط زر الكاميرا وصوّر الفاتورة وقول «نزّل الفاتورة». يقراها سطر سطر (الأصناف والأرقام والعدد والأسعار والمورّد ورقم الفاتورة) ويوريك بطاقة طبق الأصل ويقارن المجموع بالمكتوب في الورقة؛ تضغط «نفّذ» وتدخل للمخزن، واللي مش موجود يتزاد قطعة جديدة. ولو هي فاتورة بيع قول «فاتورة بيع».', 'An invoice from its photo: in the assistant tap the camera, photograph the invoice and say “enter this invoice”. It reads it line by line (items, codes, quantities, prices, supplier, invoice number), shows a card just like the paper and checks the total; tap Do it and it goes into stock, new items as new parts. For a sales invoice say “sales invoice”.'],
-    ['receive', 'purchases', 'استلام بضاعة مورد فاتورة شراء صور', 'استلام البضاعة (#receive): صوّر فاتورة المورّد وتدخل الأصناف للمخزن وحدها (الاسم والكمية ورقم الصنف)، أو صوّر الباركود، أو زيد بالكود. حدد المورّد والدفع (كاش، دين، جزء). لو فيه غلط ترجّع الاستلام من «المشتريات».', 'Receive stock (#receive): photograph the supplier invoice and the lines go into stock by themselves, or scan barcodes, or add by code; set the supplier and payment. Undo a receipt from Purchases.'],
+    ['receive', 'purchases', 'استلام بضاعة مورد فاتورة شراء صور مشتريات يدوي', 'فاتورة شراء (#receive، الزر الثاني في تبويب المنظومة): دخّل المشتريات يدوي (دوّر على الصنف بالاسم أو رقم الصنف أو الباركود أو الشركة، أو «أضف صنف يدوي» للصنف الجديد)، أو صوّر فاتورة المورّد وتدخل الأصناف للمخزن وحدها، أو امسح الباركود. حدد المورّد والدفع (كاش، دين، جزء). لو فيه غلط تلغي الفاتورة من «فواتير الشراء».', 'Purchase invoice (#receive, the second button on the System tab): enter purchases by hand (find the part by name, item code, barcode or maker, or «Add an item by hand» for a new one), or photograph the supplier invoice and the lines go into stock by themselves, or scan barcodes; set the supplier and payment. Cancel one from Purchase invoices.'],
     ['stock', ['products', 'purchases', 'reports'], 'مخزن كمية جرد تالف ضايع ناقص خالص', 'المخزن (#stock): الكميات وقيمتها، الناقص والخالص، وتعديل الكمية (جرد، تالف، ضايع) من زر التعديل جنب القطعة.', 'Stock (#stock): quantities and value, low and out of stock; change a quantity (count, damaged, lost) with the edit button.'],
     ['addpart', 'products', 'اضيف قطعة جديدة صنف', 'قطعة جديدة: من «حسابي» افتح الفرع واضغط «أضف قطعة» (الاسم، الرقم، السيارة، السعر، الكمية، الصور)، أو تتزاد وحدها لما تستلم بضاعة جديدة.', 'New part: in Account open the branch and tap Add part, or it is created when you receive new goods.'],
     ['buyers', ['invoices', 'reports'], 'زبائن ديون دين عليه حساب دفعة', 'الزبائن والديون (#buyers): كل زبون وفواتيره وكم عليه، وتسجل دفعة من صفحته.', 'Customers (#buyers): each customer, their invoices and what they owe; record a payment on their page.'],
-    ['suppliers', 'costs', 'موردين مورد ليهم دفعة', 'الموردين (#suppliers): كم ليهم عليك من الاستلامات بالدين، وتسجل الدفعات.', 'Suppliers (#suppliers): what you owe them from receipts on credit; record payments.'],
+    ['suppliers', 'costs', 'موردين مورد ليهم دفعة', 'الموردين (#suppliers): كم ليهم عليك من فواتير الشراء بالدين، وتسجل الدفعات.', 'Suppliers (#suppliers): what you owe them from receipts on credit; record payments.'],
     ['expenses', ['expenses', 'reports'], 'مصروف مصروفات ايجار رواتب كهرباء', 'المصروفات (#expenses): إيجار، رواتب، كهرباء وماء، نقل، صيانة، وأخرى.', 'Expenses (#expenses): rent, salaries, utilities, transport, maintenance, other.'],
     ['pnl', { all: ['reports', 'costs'] }, 'ارباح خسائر ربح صافي', 'الأرباح والخسائر (#pnl): المبيعات ناقص تكلفة البضاعة والمصروفات = الصافي، لأي فترة.', 'Profit and loss (#pnl): sales minus cost of goods and expenses = net, for any period.'],
     ['reports', 'reports', 'تقارير تقرير مبيعات', 'التقارير (#reports): مبيعات اليوم والأسبوع والشهر، حسب البايع والفرع وطريقة الدفع، والأكثر بيعاً.', 'Reports (#reports): sales by day, week and month, by seller, branch and payment, and best sellers.'],
@@ -754,7 +754,9 @@
     ['vin', null, 'شاصي vin هيكل سيارتي', 'رقم الشاصي (#vin): اكتب رقم الشاصي ونعرفو السيارة والقطع اللي تركب عليها.', 'VIN (#vin): enter the VIN to identify the car and the parts that fit.'],
     ['order', null, 'طلب اطلب سلة توصيل استلام طلبي طلباتي', 'الطلب من التطبيق: زيد القطع لطلبك، وافتح السلة (#cart) واختار استلام من الفرع أو توصيل، واضغط «أكّد الطلب». يوصل للشركة «قيد التجهيز»، وبعدها «قيد الاستلام» لما يكون جاهز، وتتابعه في «طلباتي» (#my-orders). الدفع عند الاستلام، وتقدر تلغيه وهو قيد التجهيز.', 'Ordering in the app: add parts, open the basket (#cart), choose pickup or delivery and tap Place order. The company gets it “being prepared”, then “ready”; follow it in My orders (#my-orders). Pay when you receive it; you can cancel while it is being prepared.'],
     ['orders', ['sales', 'invoices'], 'طلبات الزبائن التطبيق جاهز تجهيز استلام سلم', 'طلبات الزبائن (#orders): الطلب يوصل «قيد التجهيز» ويطلع رقم على تبويب المنظومة. جهّز القطع واضغط «جاهز للاستلام»، ولما الزبون يستلم اضغط «تم الاستلام» واختار كيف دفع: تولي فاتورة بيع في المبيعات. «إلغاء الطلب» يرجّع القطع للمخزن.', 'Customer orders (#orders): an order arrives “being prepared” with a count on the System tab. Prepare it and tap Ready; when the customer receives it tap Received and choose how they paid: it becomes a sale. Cancel puts the parts back in stock.'],
-    ['barcode', 'staff', 'باركود كاميرا', 'الباركود: في نقطة البيع والاستلام زر الكاميرا يقرا الباركود، أو استعمل جهاز باركود (يكتب الرقم ويضغط Enter).', 'Barcodes: the camera button in point of sale and receiving reads them, or use a scanner.'],
+    ['lookup', 'staff', 'استعلام سعر قطعه كم سعر معلومات باركود رقم صنف', 'استعلام سعر قطعة (#lookup، تحت زرّي «فاتورة بيع» و«فاتورة شراء» في المنظومة): امسح الباركود أو اكتب رقم الصنف أو اسم القطعة، وتطلعلك بسعرها والموجود منها وفرعها وشركتها، وسعر الشراء والربح لصاحب الصلاحية، و«بيعها» يفتح فاتورة بيع.', 'Look up a part (#lookup, under the sales and purchase invoice buttons on the System tab): scan the barcode or type the item code or name to see its price, stock, branch and maker, the cost and profit for those allowed, and «Sell it» starts a sales invoice.'],
+    ['shops', null, 'محلات التجار محل تاجر المحلات', 'المحلات (#mshops، في الشاشة الرئيسية تحت «وصل حديثاً»): محلات التجار اللي تظهرهم الشركة، كل محل بمدينته وصفحته، والرقم لو التاجر اختار يظهره.', 'Shops (#mshops, on the home screen under New arrivals): the merchants’ shops the company shows, each with its city and page, and the number when the merchant shows it.'],
+    ['barcode', 'staff', 'باركود كاميرا', 'الباركود: في فاتورة البيع وفاتورة الشراء زر الكاميرا يقرا الباركود، أو استعمل جهاز باركود (يكتب الرقم ويضغط Enter).', 'Barcodes: the camera button in the sales and purchase invoices reads them, or use a scanner.'],
     ['settings', 'admin', 'اعدادات الشركة الشعار الالوان', 'إعدادات الشركة (#admin-company): الاسم والشعار والألوان والنصوص وأرقام التواصل والتنبيه.', 'Company settings (#admin-company): name, logo, colours, texts, contacts and notice.'],
     ['sync', 'admin', 'ربط مزامنة اكسل excel منظومة', 'الربط مع منظومة ثانية (#admin-sync): ملف Excel/CSV أو برنامج المزامنة.', 'Sync with another system (#admin-sync): Excel/CSV or the sync program.']
   ];
@@ -771,7 +773,7 @@
 
   Object.assign(SP.L.T, {
     aiPInvBuy: ["فاتورة شراء من الصورة", "Purchase invoice from the photo"], aiPInvSell: ["فاتورة بيع من الصورة", "Sales invoice from the photo"],
-    aiGoRecv: ["نفّذ ودخّلها للمخزن", "Enter it into stock"], aiEditRecv: ["عدّلها في الاستلام", "Edit in Receive"],
+    aiGoRecv: ["نفّذ ودخّلها للمخزن", "Enter it into stock"], aiEditRecv: ["عدّلها في فاتورة الشراء", "Edit as a purchase invoice"],
     aiReadingInv: ["نقرا في الفاتورة…", "Reading the invoice…"], aiCheckingInv: ["قريت {n} سطر، نطابقهم مع القطع…", "Read {n} lines, matching them with the parts…"],
     aiNeedPhoto: ["ابعتلي صورة الفاتورة بزر الكاميرا اللي جنب الكتابة، وقولي «نزّل الفاتورة».", "Send me the invoice photo with the camera button next to the text box, and say “enter this invoice”."],
     aiInvNoRead: ["ما قدرتش نقرا الصورة: {e}", "I couldn’t read the photo: {e}"],
@@ -781,15 +783,15 @@
     aiInvMany: ["فاتورة البيع لحد 200 صنف. قسّمها على فاتورتين.", "A sale takes up to 200 lines. Split it in two."],
     aiNeedSupplier: ["بالدين يحتاج اسم المورّد. شنو اسمه؟", "On credit needs the supplier’s name. What is it?"],
     aiWQty: ["{n} أسطر ما انقراش عددها وحطيتها 1. قارنها بالورقة.", "{n} lines had no readable quantity and were set to 1. Check them against the paper."],
-    aiWNoCost: ["{n} أسطر بدون سعر. تقدر تكمّلها من «عدّلها في الاستلام».", "{n} lines have no price. You can fill them in “Edit in Receive”."],
+    aiWNoCost: ["{n} أسطر بدون سعر. تقدر تكمّلها من «عدّلها في فاتورة الشراء».", "{n} lines have no price. You can fill them in “Edit as a purchase invoice”."],
     aiWTotal: ["مجموع الأسطر {a} والمكتوب في الفاتورة {b}. راجع الأسطر أو الخصم.", "The lines add up to {a}; the invoice says {b}. Check the lines or a discount."],
     aiWDevice: ["انقرت على الجهاز بدون Claude: قارن الأسطر بالورقة قبل ما تنفّذ.", "Read on the device without Claude: check the lines against the paper before confirming."],
     aiWNotFound: ["{n} أصناف مش موجودة عندنا وما تنباعش: {l}", "{n} lines are not parts of the shop and can’t be sold: {l}"],
     aiWPrice: ["أسعار الورقة تختلف على أسعارنا، وحطيت أسعار المنظومة (تعديل السعر مش من صلاحياتك).", "The paper’s prices differ; the shop’s prices are used (changing prices isn’t among your permissions)."],
     aiInvNo: ["فاتورة المورّد رقم {n}", "Supplier invoice no. {n}"], aiInvSaleNo: ["من فاتورة ورقية رقم {n}", "From paper invoice no. {n}"],
     aiRInvNo: ["رقم الفاتورة", "Invoice no."], aiRLines: ["الأصناف", "Lines"], aiRLinesV: ["{l} صنف · {u} حبة · {a} جديدة", "{l} lines · {u} units · {a} new"],
-    aiDRecvPhoto: ["دخلت الفاتورة للمخزن: استلام رقم {n}، {l} صنف ({a} جديدة).", "Entered into stock: receipt no. {n}, {l} lines ({a} new)."],
-    aiLogRecvPhoto: ["دخّل فاتورة «{s}» من الصورة: استلام رقم {n}", "Entered the “{s}” invoice from its photo: receipt no. {n}"]
+    aiDRecvPhoto: ["دخلت الفاتورة للمخزن: فاتورة شراء رقم {n}، {l} صنف ({a} جديدة).", "Entered into stock: purchase invoice {n}, {l} lines ({a} new)."],
+    aiLogRecvPhoto: ["دخّل فاتورة «{s}» من الصورة: فاتورة شراء رقم {n}", "Entered the “{s}” invoice from its photo: purchase invoice {n}"]
   });
 
   SP.aiTimeSpan = span;

@@ -46,9 +46,14 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.goto(ORIGIN); await see('#gnew .card');
     must((await text('.topbar .brand')).includes('CROSSKY'), 'brand name'); must((await text('.hero h1')).includes('الكوري والياباني'), 'hero title from settings');
     must(await page.locator('.demo-b').count() === 1, 'demo banner'); must(await page.locator('.cartbtn').count() === 1, 'cart button'); must(await page.locator('#botfab').count() === 1, 'assistant button');
-    const tiles = await page.locator('.btile').allInnerTexts();
-    must(tiles.some(x => x.includes('هيونداي')) && !tiles.some(x => x.includes('مرسيدس')), 'only Korean/Japanese brands: ' + tiles.join('|'));
-    log('company home: name, hero, demo banner, basket, assistant, KR/JP brands only'); await shot('01-home');
+    must(await page.locator('#gnew .card').count() === 2 && await page.locator('main .cats, main .btile').count() === 0, 'the home screen: two new parts, no sections or brands');
+    await shot('01-home');
+    await go('cats'); await see('.bgrid .bgt');
+    const tiles = await page.locator('.bgt').allInnerTexts();
+    must(tiles.some(x => x.includes('هيونداي')) && tiles.some(x => x.includes('مرسيدس')) && /\(135\)/.test(await text('.sec-h .more')), 'every brand in the world, in the store tab: ' + tiles.join('|'));
+    must(await page.locator('.bgt .bmark').first().evaluate(e => getComputedStyle(e, '::after').backgroundImage.includes('gradient') && getComputedStyle(e).filter.includes('drop-shadow')), 'the brands are 3D emblems');
+    await go('');
+    log('company home: name, hero, demo banner, basket, assistant; two new parts; the store tab has every brand as a 3D emblem');
     // bundled part pictures show their real photo when the photo site answers, and the bundled file when it doesn't
     const tags = await page.evaluate(() => [SP.imgTag('img/parts/battery.jpg', '', 'b'), SP.imgTag('img/parts/battery.jpg', '', 'b', true), SP.imgTag('img/parts/clutch-kit.jpg', '', 'c', true)]);
     must(/images\.pexels\.com\/photos\/4374843\/.*w=1200&amp;h=900/.test(tags[0]) && /w=480&amp;h=360/.test(tags[1]) && /data-local="img\/parts\/battery\.jpg"/.test(tags[1]) && !/pexels/.test(tags[2]), 'photo sizes and backup: ' + tags.join(' | '));
@@ -94,14 +99,14 @@ const log = s => console.log(`${++step}. ${s}`);
     must(await page.locator('#gnew .price.locked').count() === 0, 'owner still sees prices');
 
     await go('mine'); await page.click('#lo'); await page.waitForTimeout(400); await go(''); await see('#gnew .card');
-    must(await page.locator('#gnew .price.locked').count() >= 4, 'guest sees locked prices'); log('guest: ' + await text('#gnew .price.locked'));
+    must(await page.locator('#gnew .price.locked').count() === 2, 'guest sees locked prices'); log('guest: ' + await text('#gnew .price.locked'));
     await login('cust@test.ly', 'secret123'); await see('.mcard .banner.warn'); log('customer waits for approval: ' + (await text('.mcard .banner.warn')).slice(0, 30));
     await go(''); await see('#gnew .card'); must((await text('#gnew .price.locked')).includes('المعتمدين'), 'approved-only label');
     await login('owner@crossky.ly', '123456'); await go('admin-customers'); await see('[data-c]');
     await page.locator('.arow', { hasText: 'ورشة الأمل' }).locator('[data-c]').click(); await page.waitForTimeout(400);
     must(await page.locator('.arow', { hasText: 'ورشة الأمل' }).locator('.pill.ok').count() === 1, 'approved'); log('owner approved the workshop'); await shot('05-customers');
     await login('cust@test.ly', 'secret123'); await go(''); await see('#gnew .card');
-    const lk = await page.locator('#gnew .price.locked').allInnerTexts(); must(!lk.some(x => x.includes('المعتمدين')) && await page.locator('#gnew .price.num').count() >= 5, 'approved customer sees prices: ' + lk.join('|')); log('approved customer now sees prices (owner-hidden parts stay hidden)');
+    const lk = await page.locator('#gnew .price.locked').allInnerTexts(); must(!lk.some(x => x.includes('المعتمدين')) && await page.locator('#gnew .price.num').count() === 2, 'approved customer sees prices: ' + lk.join('|')); log('approved customer now sees prices (owner-hidden parts stay hidden)');
 
     await login('owner@crossky.ly', '123456'); await go('admin-sync'); await see('#ifile', 4000).catch(() => {}); await page.waitForTimeout(400);
     await page.setInputFiles('#ifile', path.join(__dirname, 'import.csv')); await page.waitForFunction(() => /1/.test((document.querySelector('#istat b') || {}).textContent || ''), null, { timeout: 8000 });
@@ -118,7 +123,8 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('#bclr'); await page.waitForTimeout(200);
     // ----- sales system -----
     await login('owner@crossky.ly', '123456'); await go('system'); await see('.pos-tile');
-    const hrefs = await page.$$eval('.pos-tile', l => l.map(a => a.getAttribute('href')));
+    const hrefs = await page.$$eval('.sys-act, .pos-tile', l => l.map(a => a.getAttribute('href')));
+    must(await page.$$eval('.sys-act', l => l.map(a => a.getAttribute('href')).join()) === '#pos,#receive' && (await text('.sys-act.main b')) === 'فاتورة بيع' && (await text('.sys-act:not(.main) b')) === 'فاتورة شراء', 'first on the System tab: «فاتورة بيع» and «فاتورة شراء»');
     must(hrefs.length === 19 && ['#admin', '#admin-control', '#admin-log', '#admin-prices', '#admin-ads', '#admin-ai', '#pos', '#orders', '#receive', '#invoices', '#purchases', '#reports', '#staff', '#stock', '#merchants', '#buyers', '#suppliers', '#expenses', '#pnl'].every(h => hrefs.includes(h)), 'owner has 7 sales (with orders) + 6 accounts (with merchants) + 6 owner tiles: ' + hrefs.join('|'));
     await go('staff'); await see('#sadd2'); await page.click('#sadd2'); await see('#se');
     await page.fill('#se', 'seller2@test.ly'); await page.fill('#sn2', 'سالم'); must(await page.locator('.perm-list input[value="sales"]').isChecked(), 'sell permission pre-ticked');
@@ -127,8 +133,8 @@ const log = s => console.log(`${++step}. ${s}`);
     await shot('08-staff');
     await go('mine'); await page.click('#lo'); await page.waitForTimeout(300); await go('signup'); await see('#anm');
     await page.fill('#ash', 'محل سالم'); await page.fill('#anm', 'سالم'); await page.fill('#aph', '0931234567'); await page.click('[data-by="email"]'); await page.fill('#ae', 'seller2@test.ly'); await page.fill('#ap', 'secret777'); await page.click('#ago');
-    await page.waitForURL(/#mine/); await see('a.sys-entry'); await go('system'); await see('.pos-tile'); const tl = await page.locator('.pos-tile').allInnerTexts();
-    must(tl.length === 3 && tl.includes('الطلبات') && !tl.join().includes('التقارير'), 'seller tiles (sale, orders, invoices): ' + tl.join('|')); log('salesperson signed up and got exactly: ' + tl.join(' + '));
+    await page.waitForURL(/#mine/); await see('a.sys-entry'); await go('system'); await see('.pos-tile'); const tl = (await page.locator('.sys-act b').allInnerTexts()).concat(await page.locator('.pos-tile').allInnerTexts());
+    must(tl.length === 3 && tl[0] === 'فاتورة بيع' && tl.includes('الطلبات') && tl.includes('فواتير البيع') && !tl.join().includes('التقارير') && !tl.join().includes('فاتورة شراء'), 'seller (sales invoice, orders, sales invoices): ' + tl.join('|')); log('salesperson signed up and got exactly: ' + tl.join(' + '));
     await go('pos'); await see('#pq'); await page.fill('#pq', 'KI-26300'); await page.press('#pq', 'Enter'); await see('.pline');
     await page.click('.pline [data-d="1"]'); await page.waitForTimeout(150); must((await text('.pline .stepper b')) === '2', 'qty 2');
     must(await page.locator('#pdisc').count() === 0 && await page.locator('.pl-price').count() === 0, 'no discount/price edit without permission');
@@ -230,7 +236,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('#rpos'); await page.waitForURL(/#pos/); await see('.pline'); must(await page.locator('.pline').count() === 3, 'three lines on the sale'); log('"open as a sale" put the 3 parts on the point of sale');
     await page.click('#pnew'); await go('receive'); await see('#rclr'); await page.click('#rclr'); await see('[data-ok]'); await page.click('[data-ok]'); await page.waitForTimeout(200);
     // a salesperson without the receiving permission
-    await login('seller@crossky.ly', '123456'); await go('system'); await see('.pos-tile'); must(!(await page.locator('.pos-tile').allInnerTexts()).join().includes('استلام'), 'no receive tile for seller');
+    await login('seller@crossky.ly', '123456'); await go('system'); await see('.sys-act'); must(await page.locator('main [href="#receive"]').count() === 0 && !(await page.locator('main').innerText()).includes('فاتورة شراء'), 'no purchase invoice for the seller');
     await go('receive'); await see('.empty'); log('salesperson without permission cannot receive stock');
     // ----- accounts: stock, customers (الشاري), suppliers (البايع), expenses, profit and loss -----
     await go('system'); await see('.pos-tile'); must(!(await page.locator('.pos-tile[href="#pnl"], .pos-tile[href="#stock"], .pos-tile[href="#buyers"]').count()), 'no accounts tiles for the salesperson');

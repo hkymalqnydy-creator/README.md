@@ -22,7 +22,7 @@ const URL0 = process.env.URL0 || 'http://localhost:8765/';
   const man = await (await page.request.get(URL0 + 'manifest.webmanifest')).json();
   must(man.name === 'CROSSKY' && man.shortcuts.some(s => s.url === './#receive'), 'manifest');
   const cfg = await page.evaluate(() => window.SPARAT_CONFIG);
-  must(cfg.mode === 'company' && cfg.demo === true && cfg.brands.length === 18, 'config');
+  must(cfg.mode === 'company' && cfg.demo === true && cfg.brands.length === 0, 'config (every brand)');
   const sw = await page.evaluate(async () => { await navigator.serviceWorker.register('sw.js'); const r = await navigator.serviceWorker.ready; await new Promise(s => setTimeout(s, 1500)); return { active: !!r.active, caches: await caches.keys() }; });
   must(sw.active && sw.caches.some(k => k.startsWith('crossky-')) && !sw.caches.some(k => k.startsWith('sparat-')), 'service worker caches: ' + sw.caches.join(','));
   // owner login (demo)

@@ -369,7 +369,7 @@
   SP.route(/^$/, async (m, n) => {
     if (gate(n)) return;
     const car = S.car, notice = (S.settings && S.settings.notice) || '';
-    const brands = SP.popularIds().slice(0, 16).map(id => BRAND.get(id)).filter(Boolean);
+    const brands = SP.popularIds().slice(0, 16).map(id => BRAND.get(id)).filter(Boolean), newN = SP.company ? 2 : 8;
     shell(homeBar() + `<section class="hero"><div class="wrap">${SP.adsBanner ? SP.adsBanner() : ''}
         ${S.settings.hero_title ? `<h1>${esc(S.settings.hero_title)}</h1>` : `<h1>${esc(t('heroA'))} <em>${esc(t('heroB'))}</em></h1>`}<p>${esc(S.settings.hero_sub || t('heroSub'))}</p>
         <form class="searchbox" role="search" id="hs">${I('search')}<input type="search" name="q" placeholder="${esc(t('searchPh'))}" enterkeyhint="search" aria-label="${esc(t('search'))}"><button class="go">${esc(t('search'))}</button></form>
@@ -380,13 +380,14 @@
       <main class="wrap" id="home">${SP.demo ? `<a class="banner warn demo-b" href="#mine">${I('info')}<span>${esc(t('demoB', { e: SP.CFG.demoEmail || 'owner@demo.app' }))}${SP.company ? ' ' + esc(t('demoM')) : ''}</span></a>` : ''}${installBanner()}
         ${SP.closedBanner ? SP.closedBanner() : ''}${notice ? `<div class="banner note">${I('megaphone')}<span>${esc(notice)}</span></div>` : ''}
         <a class="banner vinb" href="#vin">${I('barcode')}<span><b>${esc(t('vinCta'))}</b><small>${esc(t('vinSub'))}</small></span>${I('chevL', 'dirx')}</a>
-        <section class="sec"><div class="sec-h"><h2>${esc(t('cats'))}</h2><a class="more" href="#cats">${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div>
+        ${SP.company ? '' : `<section class="sec"><div class="sec-h"><h2>${esc(t('cats'))}</h2><a class="more" href="#cats">${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div>
           <div class="cats">${D.CATS.slice(0, 7).map(c => `<a class="cat" ${sf({ cat: c.id })}><span class="hex">${I(c.icon)}</span><span>${esc(SP.catName(c.id, true))}</span></a>`).join('')}
           <a class="cat" href="#cats"><span class="hex dark">${I('grid')}</span><span>${esc(t('allCats'))}</span></a></div></section>
         <section class="sec"><div class="sec-h"><h2>${esc(t('brands'))}</h2><a class="more" href="#brands">${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div>
-          <div class="hscroll">${brands.map(b => `<a class="btile" href="#b-${b.id}">${SP.brandMark(b.id)}<span>${esc(SP.brandName(b.id))}</span></a>`).join('')}</div></section>
+          <div class="hscroll">${brands.map(b => `<a class="btile" href="#b-${b.id}">${SP.brandMark(b.id)}<span>${esc(SP.brandName(b.id))}</span></a>`).join('')}</div></section>`}
         ${car ? `<section class="sec"><div class="sec-h"><h2>${esc(t('fitsYourCar'))} <small>${esc(SP.carText(car))}</small></h2><a class="more" ${sf({ fit: true })}>${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div><div class="grid" id="gfit">${skel(4)}</div></section>` : ''}
-        <section class="sec"><div class="sec-h"><h2>${esc(t('newArrivals'))}</h2><a class="more" ${sf({})}>${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div><div class="grid" id="gnew">${skel(8)}</div></section>
+        <section class="sec"><div class="sec-h"><h2>${esc(t('newArrivals'))}</h2><a class="more" ${sf({})}>${esc(t('seeAll'))} ${I('chevL', 'dirx')}</a></div><div class="grid" id="gnew">${skel(newN)}</div></section>
+        ${SP.company && SP.homeShops ? SP.homeShops() : ''}
         <section class="sec" id="secshops"${SP.hideBranches && SP.hideBranches() ? ' hidden' : ''}><div class="sec-h"><h2>${esc(t('shops'))}</h2><a class="more" href="#shops">${esc(t('allShops'))} ${I('chevL', 'dirx')}</a></div><div class="hscroll" id="hshops"></div></section>
         ${SP.company && SP.contactCta ? SP.contactCta() : `<section class="cta"><h2>${esc(t('ctaT'))}</h2><p>${esc(t('ctaB'))}</p><a class="btn btn-signal" href="#mine">${I('store')} ${esc(t('ctaBtn'))}</a></section>`}
       </main>`);
@@ -405,7 +406,8 @@
       }).catch(e => { if (SP.alive(n)) $('#gfit').innerHTML = errBox(e); });
     }
     try {
-      const [r, sh] = await Promise.all([api.search(SP.searchArgs(FDEF, { limit: 8 })), api.shops({ p_country: cc, p_city: S.city || null, p_limit: 12 })]);
+      if (SP.company && SP.homeShopsFill) SP.homeShopsFill(n);
+      const [r, sh] = await Promise.all([api.search(SP.searchArgs(FDEF, { limit: newN })), api.shops({ p_country: cc, p_city: S.city || null, p_limit: 12 })]);
       if (!SP.alive(n)) return;
       $('#gnew').innerHTML = r.items.length ? cards(r.items) : empty('store', t('emptyStoreT'), t('emptyStoreB', { c: SP.countryName(cc) }), `<a class="btn btn-signal" href="#mine">${esc(t('firstShop'))}</a>`);
       if (sh.items.length) $('#hshops').innerHTML = sh.items.map(shopTile).join(''); else $('#secshops').remove();
@@ -418,7 +420,11 @@
   SP.route(/^cats$/, async (m, n) => {
     if (gate(n)) return;
     /* the company edition calls it «المتجر»: the company's parts by section */
-    shell(bar(t(SP.company ? 'tabStore' : 'cats'), '', { noBack: true }) + `<main class="wrap"><div class="catlist" id="cl">${D.CATS.map(c => catRow(c, null)).join('')}</div></main>`);
+    /* and every car brand the company shows (all of them unless the owner picked some), the best known first */
+    const BL = SP.brandsList(), P = SP.popularIds(), bl = P.map(id => BRAND.get(id)).filter(b => b && BL.includes(b)).concat(BL.filter(b => !P.includes(b.id))).slice(0, 12);
+    shell(bar(t(SP.company ? 'tabStore' : 'cats'), '', { noBack: true }) + `<main class="wrap"><div class="catlist" id="cl">${D.CATS.map(c => catRow(c, null)).join('')}</div>
+      ${SP.company ? `<section class="sec"><div class="sec-h"><h2>${esc(t('brands'))}</h2><a class="more" href="#brands">${esc(t('seeAll'))} <span class="num">(${esc(SP.fmtNum(BL.length))})</span> ${I('chevL', 'dirx')}</a></div>
+        <div class="bgrid">${bl.map(b => `<a class="bgt" href="#b-${b.id}">${SP.brandMark(b.id)}<span>${esc(SP.brandName(b.id))}</span></a>`).join('')}</div></section>` : ''}</main>`);
     try {
       const st = await api.stats({ country: S.country, city: S.city });
       if (SP.alive(n)) $('#cl').innerHTML = D.CATS.map(c => catRow(c, (st.cats || {})[c.id] || 0)).join('');

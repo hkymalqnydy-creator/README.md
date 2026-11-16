@@ -8,7 +8,7 @@
   const chk = r => { if (r && r.error) throw r.error; return r ? r.data : null; };
 
   Object.assign(SP.L.T, {
-    posT: ["منظومة المبيعات", "Sales system"], posSale: ["نقطة البيع", "Point of sale"], posSearchPh: ["اسم، رقم صنف، باركود أو شركة…", "Name, item code, barcode or maker…"],
+    posT: ["منظومة المبيعات", "Sales system"], posSale: ["فاتورة بيع", "Sales invoice"], sysSellSub: ["اكتب فاتورة للزبون", "Write an invoice for a customer"], sysBuySub: ["دخّل المشتريات يدوي أو بتصوير الفاتورة", "Enter purchases by hand or from a photo"], posSearchPh: ["اسم، رقم صنف، باركود أو شركة…", "Name, item code, barcode or maker…"],
     posNoItems: ["ابحث عن قطعة وأضفها للفاتورة.", "Search for a part and add it to the invoice."], posPrice: ["السعر", "Price"], posQty: ["الكمية", "Qty"],
     posSubtotal: ["المجموع", "Subtotal"], posDiscount: ["الخصم", "Discount"], posTotal: ["الإجمالي", "Total"], posPaid: ["المدفوع", "Paid"], posRemain: ["المتبقي", "Balance due"],
     posCustomer: ["اسم الزبون (اختياري)", "Customer name (optional)"], posPhone: ["هاتف الزبون", "Customer phone"], posPay: ["طريقة الدفع", "Payment"],
@@ -18,7 +18,7 @@
     posNote: ["ملاحظة", "Note"], posRemove: ["احذف", "Remove"],
     invT: ["فاتورة رقم {n}", "Invoice {n}"], invDate: ["التاريخ", "Date"], invStaff: ["البائع", "Seller"], invPrint: ["طباعة", "Print"], invShare: ["إرسال للزبون", "Send to customer"],
     invReturn: ["مرتجع", "Return"], invReturned: ["مرتجعة", "Returned"], invReturnQ: ["ترجيع الفاتورة كاملة للمخزون؟", "Return the whole invoice to stock?"],
-    invReturnDone: ["تم المرتجع ورجعت الكميات للمخزون", "Returned; quantities are back in stock"], invList: ["الفواتير", "Invoices"], invEmpty: ["لا توجد فواتير في هذه الفترة", "No invoices in this period"],
+    invReturnDone: ["تم المرتجع ورجعت الكميات للمخزون", "Returned; quantities are back in stock"], invList: ["فواتير البيع", "Sales invoices"], invEmpty: ["لا توجد فواتير في هذه الفترة", "No invoices in this period"],
     rangeToday: ["اليوم", "Today"], range7: ["آخر 7 أيام", "Last 7 days"], rangeMonth: ["هذا الشهر", "This month"], rangeAll: ["الكل", "All"],
     invSearchPh: ["رقم الفاتورة أو اسم الزبون", "Invoice number or customer"], invExport: ["تصدير Excel", "Export to Excel"], invItem: ["الصنف", "Item"],
     invMsg: ["فاتورة رقم {n} من {app}\n{items}\nالإجمالي: {t}\nشكراً لتعاملكم معنا.", "Invoice {n} from {app}\n{items}\nTotal: {t}\nThank you for your business."],
@@ -94,7 +94,16 @@
     tabSystem: ["المنظومة", "System"], sysB: ["البيع والمخزن والحسابات", "Sales, stock and accounts"],
     sysSignIn: ["ادخل بحساب الموظف أو صاحب الشركة باش تفتح المنظومة.", "Sign in with a staff or owner account to open the system."],
     sysStaffOnly: ["المنظومة للموظفين وصاحب الشركة بس.", "The system is for staff and the owner only."],
-    sysAdminT: ["تحكم المالك", "Owner controls"]
+    sysAdminT: ["تحكم المالك", "Owner controls"],
+    /* «استعلام سعر»: a part's price and details, by its barcode, item code or name */
+    pqT: ["استعلام سعر قطعة", "Look up a part"], pqBar: ["استعلم عن سعر قطعة: باركود، رقم صنف أو اسم", "Look up a part: barcode, item code or name"],
+    pqPh: ["باركود، رقم صنف أو اسم القطعة…", "Barcode, item code or part name…"], pqScan: ["امسح الباركود", "Scan the barcode"],
+    pqHint: ["اكتب أو امسح، وتطلعلك القطعة بسعرها والموجود منها.", "Type or scan to see the part with its price and what is in stock."],
+    pqNone: ["ما لقيناش قطعة بـ «{q}».", "No part matches «{q}»."], pqPrice: ["سعر البيع", "Selling price"], pqNoPrice: ["بدون سعر", "No price"],
+    pqHidden: ["السعر مخفي على الزبائن", "Price hidden from customers"], pqSku: ["رقم الصنف", "Item code"], pqPart: ["رقم القطعة", "Part number"],
+    pqBarcode: ["الباركود", "Barcode"], pqStock: ["الموجود", "In stock"], pqStockN: ["{n} قطعة · {b}", "{n} · {b}"], pqOut: ["خلصت", "Out of stock"],
+    pqCat: ["القسم", "Section"], pqCond: ["الحالة", "Condition"], pqCost: ["سعر الشراء", "Cost"], pqGain: ["الربح في القطعة", "Profit per part"],
+    pqSell: ["بيعها", "Sell it"], pqOpen: ["صفحة القطعة", "Part page"], pqEdit: ["عدّلها", "Edit"], pqAgain: ["استعلم عن قطعة ثانية", "Look up another part"]
   });
   SP.systemLink = () => SP.isStaff() ? `<a class="admin-entry sys-entry" href="#system">${I('sys')}<span><b>${esc(t('tabSystem'))}</b><small>${esc(t('sysB'))}</small></span>${I('chevL', 'dirx')}</a>` : '';
   SP.route(/^system$/, (m, n) => {
@@ -104,7 +113,7 @@
     if (!SP.isStaff()) { shell(head + `<main class="wrap">${empty('lock', t('tabSystem'), t('sysStaffOnly'))}</main>`); return SP.done(n); }
     const own = S.admin ? [['admin', 'shield', 'admin'], ['admin-control', 'lock', 'ctlT'], ['admin-log', 'history', 'logT'], ['admin-prices', 'percent', 'bpT'], ['admin-ads', 'megaphone', 'adsT'], ['admin-ai', 'spark', 'aiSetT']]
       .filter(([h]) => h === 'admin' || SP.company).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('') : '';
-    shell(head + `<main class="wrap mine sys">${S.admin && SP.company && SP.adminToday ? '<div id="atoday"></div>' : ''}${SP.posEntry()}
+    shell(head + `<main class="wrap mine sys">${SP.sysActs()}${S.admin && SP.company && SP.adminToday ? '<div id="atoday"></div>' : ''}${SP.posEntry()}
       ${own ? `<section class="mcard"><h2 class="lbl">${esc(t('sysAdminT'))}</h2><div class="pos-grid">${own}</div></section>` : ''}${SP.lockCard ? SP.lockCard() : ''}</main>`);
     /* the owner's windows: today, profit and loss, the total balance (js/sysview.js) */
     if ($('#atoday')) { if (SP.adminPanels) SP.adminPanels($('#atoday'), n); else SP.adminToday($('#atoday'), n, { compact: true }); }
@@ -112,13 +121,75 @@
     SP.done(n);
   }, { tab: 'system' });
 
+  /* the two things done most, first on the System tab: a sales invoice for a customer, a purchase invoice for what came in */
+  SP.sysActs = () => {
+    if (!SP.isStaff()) return '';
+    const a = [['pos', 'tag', 'posSale', 'sysSellSub', SP.can('sales')], ['receive', 'receipt', 'rcvT', 'sysBuySub', SP.can('purchases')]].filter(x => x[4]);
+    return (a.length ? `<nav class="sys-acts${a.length === 1 ? ' one' : ''}" aria-label="${esc(t('posT'))}">${a.map(([h, ic, k, sub], i) =>
+      `<a class="sys-act${i ? '' : ' main'}" href="#${h}"><span class="sa-ic">${I(ic)}</span><b>${esc(t(k))}</b><small>${esc(t(sub))}</small></a>`).join('')}</nav>` : '')
+      + `<a class="sys-look" href="#lookup">${I('search')}<span>${esc(t('pqBar'))}</span>${I('scan')}</a>`;
+  };
   SP.posEntry = () => {
     if (!SP.isStaff()) return '';
-    const tiles = [['pos', 'tag', 'posSale', SP.can('sales')], ['orders', 'bag', 'ordT', SP.company && !!SP.ordPill && (SP.can('sales') || SP.can('invoices'))], ['receive', 'receipt', 'rcvT', SP.can('purchases')], ['invoices', 'copy', 'invList', SP.can('sales') || SP.can('invoices')],
+    const tiles = [['orders', 'bag', 'ordT', SP.company && !!SP.ordPill && (SP.can('sales') || SP.can('invoices'))], ['invoices', 'copy', 'invList', SP.can('sales') || SP.can('invoices')],
       ['purchases', 'box', 'purT', SP.can('purchases') || SP.can('reports')], ['reports', 'grid', 'repT', SP.can('reports')], ['staff', 'user', 'staffT', S.admin]]
       .filter(x => x[3]).map(([h, ic, k]) => `<a class="pos-tile" href="#${h}">${I(ic)}<span>${esc(t(k))}</span></a>`).join('');
     return tiles ? `<section class="mcard"><h2 class="lbl">${esc(t('posT'))}</h2><div class="pos-grid">${tiles}</div></section>` : '';
   };
+
+  /* ---------- «استعلام سعر»: any staff looks up a part by its barcode (camera or scanner), item code or name ---------- */
+  SP.route(/^lookup$/, async (m, n) => {
+    if (gate(n) || !guard(n)) return;
+    if (!SP.isStaff()) { shell(bar(t('pqT')) + `<main class="wrap">${empty('lock', t('noPermT'), t('sysStaffOnly'))}</main>`); return SP.done(n); }
+    shell(bar(t('pqT')) + `<main class="wrap pos pq">
+      <form class="field" id="pqf" role="search"><label for="pqq" class="sr">${esc(t('pqT'))}</label><div class="inrow">
+        <input id="pqq" class="input" autocomplete="off" enterkeyhint="search" placeholder="${esc(t('pqPh'))}" value="${esc(S.pqQ || '')}">
+        <button type="button" class="btn btn-ink" id="pqscan" aria-label="${esc(t('pqScan'))}">${I('scan')}</button></div></form>
+      <div id="pqres" class="pres"></div><div id="pqcard"><p class="muted-p pq-hint">${esc(t('pqHint'))}</p></div></main>`);
+    const costs = SP.can('costs');
+    let shown = [];
+    const card = p => {
+      const cur = p.shop && p.shop.currency, mm = SP.makerModel(p), out = p.qty != null && p.qty <= 0, gain = p.price != null && p.cost != null ? p.price - p.cost : null;
+      const rowv = (k, v, cls) => v == null || v === '' ? '' : `<div class="pl-row${cls ? ' ' + cls : ''}"><span>${esc(t(k))}</span><b${/^lk(Sku|Part|Barcode)$/.test(k) ? ' class="mono" dir="ltr"' : ''}>${esc(v)}</b></div>`;
+      const sell = SP.can('sales') && p.price != null && !out;
+      return `<section class="mcard pq-card"><div class="pq-head">${p.imgs && p.imgs[0] ? `<span class="pq-img">${SP.imgTag(p.imgs[0], '', p.title, true)}</span>` : ''}
+          <span class="pq-name"><b>${esc(p.title)}</b>${mm ? `<small>${esc(mm)}</small>` : ''}</span></div>
+        <div class="pq-price"><small>${esc(t('pqPrice'))}</small><b class="num">${esc(p.price == null ? t('pqNoPrice') : money(p.price, cur))}</b>${p.hide_price ? `<span class="pill demo">${esc(t('pqHidden'))}</span>` : ''}</div>
+        <div class="pq-rows">${rowv('pqStock', p.qty == null ? '' : out ? t('pqOut') : t('pqStockN', { n: SP.fmtNum(p.qty), b: (p.shop && p.shop.name) || '' }), out ? 'bad' : '')}
+          ${rowv('pqSku', p.sku)}${p.part_no && codeKey(p.part_no) !== codeKey(p.sku) ? rowv('pqPart', p.part_no) : ''}${rowv('pqBarcode', p.barcode)}
+          ${rowv('pqCat', p.cat ? SP.catName(p.cat) : '')}${rowv('pqCond', p.cond ? SP.condName(p.cond) : '')}
+          ${costs && p.cost != null ? rowv('pqCost', money(p.cost, cur)) + (gain != null ? rowv('pqGain', (gain < 0 ? '− ' : '') + money(Math.abs(gain), cur) + (p.price ? ' (' + Math.round(100 * gain / p.price) + '٪)' : ''), gain < 0 ? 'bad' : 'good') : '') : ''}</div>
+        <div class="form-actions pq-acts">${sell ? `<button type="button" class="btn btn-signal" id="pqsell">${I('tag')} ${esc(t('pqSell'))}</button>` : ''}
+          <a class="btn btn-ghost" href="#p-${esc(p.id)}">${I('eye')} ${esc(t('pqOpen'))}</a>${SP.can('products') ? `<a class="btn btn-ghost" href="#edit-item-${esc(p.id)}">${I('edit')} ${esc(t('pqEdit'))}</a>` : ''}</div>
+        <button type="button" class="btn btn-ghost sm pq-again" id="pqagain">${I('search')} ${esc(t('pqAgain'))}</button></section>`;
+    };
+    const show = p => {
+      $('#pqres').innerHTML = ''; $('#pqcard').innerHTML = card(p);
+      if ($('#pqsell')) $('#pqsell').onclick = () => { SP.posLoad([{ id: p.id, title: p.title, sku: p.sku || p.part_no || '', mm: SP.makerModel(p), price: p.price, base: p.price, qty: 1, stock: p.qty, cur: p.shop && p.shop.currency }]); SP.go('pos'); };
+      $('#pqagain').onclick = () => { S.pqQ = ''; $('#pqq').value = ''; $('#pqcard').innerHTML = ''; $('#pqq').focus(); };
+    };
+    const find = async (q, exactOnly) => {
+      q = q.trim(); S.pqQ = q;
+      if (!SP.alive(n) || !$('#pqres')) return;
+      if (!q) { $('#pqres').innerHTML = ''; return; }
+      try {
+        const r = await api.search({ ...SP.searchArgs({ ...SP.FDEF, q }, { limit: 10 }), p_country: null, p_city: null, p_include_sold: true });
+        if (!SP.alive(n) || !$('#pqres') || S.pqQ !== q) return;
+        shown = r.items;
+        const k = codeKey(q), exact = r.items.filter(p => [p.sku, p.barcode, p.part_no].some(c => c && codeKey(c) === k));
+        if (exact.length === 1 || (r.items.length === 1 && exactOnly)) return show(exact[0] || r.items[0]);
+        $('#pqcard').innerHTML = '';
+        $('#pqres').innerHTML = r.items.length ? r.items.map(p => `<button type="button" class="pres-row" data-id="${esc(p.id)}"><span><b>${esc(p.title)}</b><small>${esc([p.sku || p.part_no, SP.makerModel(p), p.qty != null ? (p.qty > 0 ? t('posInStock', { n: p.qty }) : t('pqOut')) : ''].filter(Boolean).join(' · '))}</small></span><b class="num pq-p">${esc(p.price == null ? '—' : money(p.price, p.shop && p.shop.currency))}</b></button>`).join('')
+          : `<p class="muted-p">${esc(t('pqNone', { q }))}</p>`;
+      } catch (e) { if ($('#pqres')) $('#pqres').innerHTML = `<p class="form-err">${esc(SP.errText(e))}</p>`; }
+    };
+    $('#pqres').onclick = e => { const b = e.target.closest('[data-id]'); if (b) { const p = shown.find(x => x.id === b.dataset.id); if (p) show(p); } };
+    $('#pqf').onsubmit = e => { e.preventDefault(); find($('#pqq').value, true); };
+    $('#pqq').oninput = SP.debounce(e => find(e.target.value), 300);
+    $('#pqscan').onclick = async () => { const c = await SP.scanCode({ title: t('pqScan') }); if (c && SP.alive(n)) { $('#pqq').value = c; find(c, true); } };
+    if (S.pqQ) find(S.pqQ); else $('#pqq').focus();
+    SP.done(n);
+  });
 
   /* ---------- point of sale ---------- */
   const POS_KEY = 'sp_pos';

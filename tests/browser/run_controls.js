@@ -162,7 +162,7 @@ const log = s => console.log(`${++step}. ${s}`);
     // ----- the activity log -----
     await go('admin-log'); await see('.log-row');
     const rows = await page.locator('.log-row').allInnerTexts(), all = rows.join('\n');
-    must(['بروحها', 'ألغى الاستلام', 'غيّر أسعار', 'رجّع الأسعار', 'غيّر الإعدادات', 'عدّل الموظف', 'باع فاتورة'].every(w => all.includes(w)), 'log lines: ' + rows.slice(0, 12).join(' | '));
+    must(['بروحها', 'ألغى فاتورة الشراء', 'غيّر أسعار', 'رجّع الأسعار', 'غيّر الإعدادات', 'عدّل الموظف', 'باع فاتورة'].every(w => all.includes(w)), 'log lines: ' + rows.slice(0, 12).join(' | '));
     await page.click('[data-g="sales"]'); await page.waitForTimeout(400);
     must((await page.locator('.log-row').allInnerTexts()).every(r => /باع|رجّع فاتورة/.test(r)), 'sales filter');
     await page.click('[data-g="stock"]'); await page.waitForTimeout(400);
@@ -171,7 +171,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('[data-g=""]'); await page.waitForTimeout(400);
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#lgx')]);
     const csv = fs.readFileSync(await dl.path(), 'utf8');
-    must(/^\uFEFFdate,time,person,action,details,amount/.test(csv) && csv.includes('ألغى الاستلام') && csv.split('\n').length > 10, 'log download: ' + csv.slice(0, 200));
+    must(/^\uFEFFdate,time,person,action,details,amount/.test(csv) && csv.includes('ألغى فاتورة الشراء') && csv.split('\n').length > 10, 'log download: ' + csv.slice(0, 200));
     log('the log downloads for Excel (' + (csv.split('\n').length - 1) + ' rows)');
     await go('admin'); await see('.today .astat'); must(await page.locator('.today .log-row').count() > 0, 'today card with the latest activity');
     log('main admin tab: today card and the latest activity'); await shot('09-today');
@@ -183,13 +183,13 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.setInputFiles('#blg input[data-up="kia"]', path.join(SITE, 'icons/icon-192.png')); await see('#blg .blogo[data-id="kia"] .bmark.img img');
     await page.click('#cgo'); await page.waitForTimeout(500);
     must(/^data:image\/|^https?:/.test(await db(() => (window.__mockdb.settings.brand_logos || {}).kia || '')), 'logo saved for kia');
-    await go(''); await see('.btile .bmark');
-    must(await page.locator('.btile .fl').count() === 0 && await page.locator('.btile[href="#b-kia"] .bmark.img img').count() === 1
-      && (await text('.btile[href="#b-hyundai"] .bmark')) === 'H', 'home: no flags; kia shows its picture, hyundai its initials');
+    await go('cats'); await see('.bgt .bmark');
+    must(await page.locator('.bgt .fl').count() === 0 && await page.locator('.bgt[href="#b-kia"] .bmark.img img').count() === 1
+      && (await text('.bgt[href="#b-hyundai"] .bmark')) === 'H', 'the store tab: no flags; kia shows its picture, hyundai its initials');
     await go('brands'); await see('.catrow .bmark'); must(await page.locator('.catrow .bfl').count() === 0, 'brands page without flags');
     await go('b-kia'); await see('.bhead .bmark.img'); await shot('10-brands');
     await go('admin-company'); await see('#blg'); await page.click('#blg [data-rm="kia"]'); await page.click('#cgo'); await page.waitForTimeout(500);
-    await go(''); await see('.btile .bmark'); must((await text('.btile[href="#b-kia"] .bmark')) === 'K', 'logo removed: back to the initials');
+    await go('cats'); await see('.bgt .bmark'); must((await text('.bgt[href="#b-kia"] .bmark')) === 'K', 'logo removed: back to the initials');
     log('brands: initials on a hexagon instead of the flag; a logo uploaded for KIA shows everywhere, and removing it brings the initials back');
 
 
@@ -197,7 +197,7 @@ const log = s => console.log(`${++step}. ${s}`);
     const tabs = async () => (await page.locator('.tabs .tab').allInnerTexts()).map(x => x.trim());
     must((await tabs())[1] === 'المنظومة', 'system tab second for the owner: ' + (await tabs()).join('|'));
     await page.click('.tabs a[href="#system"]'); await page.waitForURL(/#system/); await see('.pos-tile'); await see('.today .astat');
-    must(await page.locator('.today .log-row').count() === 0 && await page.locator('.pos-tile[href="#pos"]').count() === 1 && await page.locator('.pos-tile[href="#admin-log"]').count() === 1, 'system page: today, sales, accounts, owner tiles');
+    must(await page.locator('.today .log-row').count() === 0 && await page.locator('.sys-act[href="#pos"]').count() === 1 && await page.locator('.pos-tile[href="#admin-log"]').count() === 1, 'system page: today, sales, accounts, owner tiles');
     await go('pos'); must(await page.locator('.tabs .tab.on').innerText() === 'المنظومة', 'the system tab stays lit on the point of sale');
     await shot('11-system');
     await logout(); await go('');
@@ -205,7 +205,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await go('system'); await see('.empty'); must((await text('.empty')).includes('ادخل'), 'system asks to sign in');
     await page.click('.empty a[href="#login"]'); await see('#ap'); if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]'); await see('#ae'); await page.fill('#ae', 'seller@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago');
     await page.waitForURL(/#system/); await see('.pos-tile');
-    must((await tabs())[1] === 'المنظومة' && await page.locator('.pos-tile[href="#pos"]').count() === 1 && await page.locator('.pos-tile[href="#admin-log"]').count() === 0, 'the seller: system tab, own tiles, no owner tiles');
+    must((await tabs())[1] === 'المنظومة' && await page.locator('.sys-act[href="#pos"]').count() === 1 && await page.locator('.pos-tile[href="#admin-log"]').count() === 0, 'the seller: system tab, own tiles, no owner tiles');
     log('system tab next to home for the owner and staff (today, sales, accounts, owner tiles); customers do not see it; signing in from it comes back to it');
 
     // ----- Face ID (passkeys) -----

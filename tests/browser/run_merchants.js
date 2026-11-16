@@ -128,7 +128,7 @@ const log = s => console.log(`${++step}. ${s}`);
     // ----- «التجار» and one merchant -----
     await go('system'); await see('.pos-tile[href="#merchants"]');
     await page.click('.pos-tile[href="#merchants"]'); await see('#ml .arow');
-    must(await page.locator('#ml .arow').count() === 3 && await text('[data-c="pending"]') === '2', 'the merchants: 3, 2 waiting for approval');
+    must(await page.locator('#ml .arow').count() === 6 && await text('[data-c="pending"]') === '3', 'the merchants: 6, 3 waiting for approval');
     await shot('08-merchants');
     await page.fill('#mrq input', '2223344'); await page.press('#mrq input', 'Enter'); await page.waitForTimeout(500);
     must(await page.locator('#ml .arow').count() === 1, 'found by his number');
@@ -145,7 +145,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await go('admin-log'); await page.waitForTimeout(600);
     const logText = await text('main');
     must(/بعث الفاتورة/.test(logText) && /كلمة سر جديدة/.test(logText), 'the activity log names both');
-    log('«التجار» on the System tab: 3 merchants, 2 waiting; search by number; approve; a new password sent on WhatsApp; both in the activity log');
+    log('«التجار» on the System tab: 6 merchants, 3 waiting; search by number; approve; a new password sent on WhatsApp; both in the activity log');
 
     // ----- the new merchant signs in with the new password and gets it -----
     await signIn('phone', '0912223344', pw); await page.waitForURL(/#mine/); await page.waitForTimeout(300);
@@ -170,6 +170,44 @@ const log = s => console.log(`${++step}. ${s}`);
       await go('order-' + o.id); await see('a[href="#bill-' + o.id + '"]');
       log('an order: the seller sends its invoice from the order page; the merchant\'s order page opens the invoice');
     }
+
+    // ----- «المحلات»: the merchants' shops on the home screen, each with its page -----
+    await out(); await go('vin'); await go(''); await see('#secms .mshop');
+    const shops = await page.locator('#hms .mshop b').allInnerTexts();
+    must(shops.length === 4 && shops[0] === 'ورشة النور للصيانة' && !shops.includes('محل الأمل لقطع الغيار'), 'four shops on the home screen, not the new merchant\'s: ' + shops.join('|'));
+    must(await page.locator('#gnew .card').count() === 2 && await page.locator('main .cats').count() === 0 && await page.locator('main .btile').count() === 0, 'the home screen: two new parts, no sections, no brands');
+    await shot('10-home-shops');
+    await page.click('#hms .mshop'); await see('.ms-head');
+    must((await text('.ms-head h1')) === 'ورشة النور للصيانة' && /218925551234/.test(await page.getAttribute('.ms-acts .btn-wa', 'href')) && await page.locator('.ms-acts a[href^="tel:"]').count() === 1, 'his page: WhatsApp and call (he shows his number)');
+    await go('mshops'); await see('#msl .mshop');
+    must(await page.locator('#msl .mshop').count() === 5, 'every shop shown: 5');
+    await page.fill('#msf input', 'سبها'); await page.press('#msf input', 'Enter'); await page.waitForTimeout(500);
+    must(await page.locator('#msl .mshop').count() === 1 && (await text('#msl .mshop b')) === 'مركز البركة لقطع الغيار', 'found by the city');
+    await page.click('#msl .mshop'); await see('.ms-head');
+    must(await page.locator('.ms-acts').count() === 0 && (await text('.ms-head')).includes('ما حطّش رقمه'), 'a shop that keeps its number to itself');
+    await shot('11-shop-page');
+    log('«المحلات» under «وصل حديثاً» (two parts, no sections or brands): long cards, each with its page; WhatsApp and call only when the merchant shows his number; all of them, found by city');
+    // the owner shows the new merchant's shop; the merchant shows his number; or the owner lets every merchant show his shop
+    await signIn('email', 'owner@crossky.ly'); await page.waitForURL(/#mine/);
+    const amal = await db(() => window.__mockdb.customers.find(c => c.shop_name === 'محل الأمل لقطع الغيار').user_id);
+    await go('merchant-' + amal); await see('.mr-shop');
+    must(await page.locator('#mshow').isChecked() === false && (await text('.mr-shop')).includes('رقمه مخفي'), 'his shop is not shown, his number hidden');
+    await page.click('label:has(#mshow)'); await page.waitForTimeout(600);
+    must(await db(id => window.__mockdb.customers.find(c => c.user_id === id).shop_on, amal) && await page.locator('.mr-shop a[href="#mshop-' + amal + '"]').count() === 1, 'the owner shows it');
+    await signIn('phone', '0912223344', pw); await page.waitForURL(/#mine/); await see('#ppub');
+    await page.click('label:has(#ppub)'); await page.click('#pgo'); await page.waitForTimeout(500);
+    must(await db(id => window.__mockdb.customers.find(c => c.user_id === id).phone_public, amal), 'he shows his number');
+    await out(); await go('mshop-' + amal); await see('.ms-head');
+    must((await text('.ms-head h1')) === 'محل الأمل لقطع الغيار' && /218912223344/.test(await page.getAttribute('.ms-acts .btn-wa', 'href')), 'his page, with his number');
+    await signIn('email', 'owner@crossky.ly'); await page.waitForURL(/#mine/);
+    await db(() => { window.__mockdb.customers.forEach(c => { c.shop_on = false; }); window.SP.S.msQ = ''; });
+    await out(); await go('mshops'); await page.waitForTimeout(500);
+    must(await page.locator('#msl .mshop').count() === 0, 'none shown');
+    await signIn('email', 'owner@crossky.ly'); await page.waitForURL(/#mine/);
+    await go('admin-control'); await see('#kms'); await page.click('label:has(#kms)'); await page.click('#kgo'); await page.waitForTimeout(600);
+    await out(); await go('mshops'); await see('#msl .mshop');
+    must(await page.locator('#msl .mshop').count() === 6, '«السماح لأي تاجر يظهر محله»: every merchant with a shop shows');
+    log('the owner shows a merchant\'s shop from his page, the merchant shows his number from his account; or «السماح لأي تاجر يظهر محله» shows them all');
     if (errors.length) throw new Error(errors.join('\n'));
     console.log(`MERCHANTS OK (${step} checks)`);
   } catch (e) {

@@ -2,7 +2,9 @@
    «صادر ووارد»: الوارد, the invoices the company sends him and the orders he received; الصادر, his orders and his payments;
    and, once the company has approved his account, what he still owes. The staff send an invoice to a merchant from the
    invoice or the order page («ابعث الفاتورة للتاجر»), and find every merchant in «التجار» with the same «صادر ووارد».
-   The rules are in supabase/setup.sql section 16 (and the same in js/demo.js). */
+   The rules are in supabase/setup.sql section 16 (and the same in js/demo.js).
+   «المحلات»: the merchants' shops on the home screen, as long cards, each with its page (section 17): shown when the company
+   shows it, or every merchant's when the company lets any merchant show his; the phone only when the merchant shows it. */
 (function () {
   'use strict';
   const SP = window.SP;
@@ -49,7 +51,19 @@ mrOweHim: ["الباقي عليه", "Owes"], mrCreditHim: ["ليه عندنا", 
     mrPickNone: ["ما لقيتش تاجر بالاسم أو الرقم هذا.", "No merchant with that name or number."], mrPickSame: ["نفس رقم الفاتورة", "Same number as the invoice"],
     mrPickQ: ["تبعث الفاتورة رقم {n} لـ {s}؟", "Send invoice {n} to {s}?"],
     mrErrCancelled: ["الفاتورة ملغية وما تنبعثش.", "A cancelled invoice can’t be sent."], mrErrOther: ["الفاتورة هذي متاعة تاجر ثاني.", "This invoice belongs to another merchant."],
-    mrErrGone: ["التاجر هذا ما كمّلش حسابه في التطبيق.", "This merchant hasn’t completed his account in the app."]
+    mrErrGone: ["التاجر هذا ما كمّلش حسابه في التطبيق.", "This merchant hasn’t completed his account in the app."],
+    /* the merchants' shops */
+    msT: ["المحلات", "Shops"], msAll: ["كل المحلات", "All shops"], msSearch: ["دوّر على محل أو مدينة…", "Find a shop or a city…"],
+    msNone: ["ما فيش محلات بعد.", "No shops yet."], msNoHit: ["ما فيش محل فيه «{q}».", "No shop has «{q}»."],
+    msCall: ["اتصل", "Call"], msWa: ["واتساب", "WhatsApp"], msOf: ["تاجر عند {a}", "A merchant with {a}"],
+    msNoPhone: ["المحل هذا ما حطّش رقمه في التطبيق.", "This shop hasn’t shared its number in the app."],
+    msGone: ["المحل هذا مش ظاهر توا.", "This shop isn’t shown now."], msHi: ["السلام عليكم، شفت محلكم في تطبيق {a}.", "Hello, I saw your shop in the {a} app."],
+    mrShopT: ["محله في التطبيق", "His shop in the app"], mrShopOn: ["اظهر محله في «المحلات» في الشاشة الرئيسية", "Show his shop in «Shops» on the home screen"],
+    mrShopAll: ["كل محلات التجار ظاهرة، لأنك سمحت لأي تاجر يظهر محله (من «التحكم»).", "Every merchant’s shop shows: you let any merchant show his (in Controls)."],
+    mrShopNoName: ["ما عندوش اسم محل، فما يظهرش.", "He has no shop name, so it can’t show."],
+    mrPhonePub: ["رقمه ظاهر في صفحة محله (هو اختار).", "His number shows on his shop’s page (his choice)."],
+    mrPhoneHid: ["رقمه مخفي في صفحة محله (هو يقرر).", "His number is hidden on his shop’s page (his choice)."],
+    mrShopSee: ["شوف صفحة محله", "See his shop’s page"]
   });
 
   const money = (v, c) => SP.priceText(+v || 0, c || SP.currencyOf(S.country));
@@ -217,6 +231,54 @@ mrOweHim: ["الباقي عليه", "Owes"], mrCreditHim: ["ليه عندنا", 
   });
 
   /* one merchant, as the staff see him: approve, a new password, a payment, his «صادر ووارد» */
+  /* the owner shows a merchant's shop on the home screen; whether its phone shows is the merchant's own choice */
+  const shopCard = b => {
+    const named = !!String(b.shop_name || '').trim(), all = !!(S.settings && S.settings.open_shops);
+    return `<section class="mcard mr-shop"><h2 class="lbl">${esc(t('mrShopT'))}</h2>
+      ${!named ? `<p class="hint">${esc(t('mrShopNoName'))}</p>` : all ? `<p class="hint">${esc(t('mrShopAll'))}</p>`
+        : `<label class="switch"><input type="checkbox" id="mshow"${b.shop_on ? ' checked' : ''}><span></span>${esc(t('mrShopOn'))}</label>`}
+      ${named ? `<p class="hint">${esc(t(b.phone_public ? 'mrPhonePub' : 'mrPhoneHid'))}</p>` : ''}
+      ${b.shop_shown ? `<div class="form-actions"><a class="btn btn-ghost sm" href="#mshop-${esc(b.user_id)}">${I('store')} ${esc(t('mrShopSee'))}</a></div>` : ''}</section>`;
+  };
+
+  /* ---------- «المحلات»: the merchants' shops, for everyone ---------- */
+  const msRow = x => `<a class="mshop" href="#mshop-${esc(x.id)}"><span class="ms-ic">${I('store')}</span><span class="ms-main"><b>${esc(x.name)}</b>${x.city ? `<small>${I('pin')} ${esc(x.city)}</small>` : ''}</span>${I('chevL', 'dirx')}</a>`;
+  SP.homeShops = () => `<section class="sec" id="secms" hidden><div class="sec-h"><h2>${esc(t('msT'))}</h2><a class="more" href="#mshops">${esc(t('msAll'))} ${I('chevL', 'dirx')}</a></div><div class="mshops" id="hms"></div></section>`;
+  SP.homeShopsFill = async n => {
+    try {
+      const L = chk(await sb().rpc('merchant_shops', { p_limit: 4 })) || [];
+      if (!SP.alive(n) || !$('#hms') || !L.length) return;
+      $('#hms').innerHTML = L.map(msRow).join(''); $('#secms').hidden = false;
+    } catch (e) { /* the shops are extra: the home screen works without them */ }
+  };
+  SP.route(/^mshops$/, async (m, n) => {
+    if (gate(n)) return;
+    const q = S.msQ || '';
+    shell(bar(t('msT')) + `<main class="wrap"><form class="searchbox flat ms-search" id="msf" role="search">${I('search')}<input type="search" value="${esc(q)}" placeholder="${esc(t('msSearch'))}" aria-label="${esc(t('search'))}" enterkeyhint="search"></form>
+      <div class="mshops" id="msl"><div class="sk sk-row"></div></div><div class="center"><button type="button" class="btn btn-ghost more-btn" id="more" hidden></button></div></main>`);
+    const sf = $('#msf'), go = () => { const v = $('input', sf).value.trim(); if (v === (S.msQ || '')) return; S.msQ = v; SP.render(); };
+    sf.onsubmit = e => { e.preventDefault(); go(); };
+    $('input', sf).addEventListener('search', go);
+    await SP.pager(n, $('#msl'), $('#more'), async off => { const rows = chk(await sb().rpc('merchant_shops', { p_limit: 30, p_offset: off, ...(q ? { p_q: q } : {}) })) || []; return { items: rows, total: rows.length ? +rows[0].total_count : 0 }; },
+      items => items.map(msRow).join(''), (r, first) => { if (first && !r.total) $('#msl').innerHTML = q ? `<p class="muted-p">${esc(t('msNoHit', { q }))}</p>` : empty('store', t('msNone')); });
+    SP.done(n);
+  });
+  SP.route(/^mshop-([0-9a-f-]{36})$/, async (m, n) => {
+    if (gate(n)) return;
+    shell(bar(t('msT')) + `<main class="wrap"><div class="sk sk-block"></div></main>`);
+    let x = null;
+    try { x = chk(await sb().rpc('merchant_shop', { p_id: m[1] })); } catch (e) { if (SP.alive(n)) $('main').innerHTML = SP.errBox(e); return; }
+    if (!SP.alive(n)) return;
+    if (!x) { shell(bar(t('msT')) + `<main class="wrap">${empty('store', t('msGone'), '', `<a class="btn btn-ink" href="#mshops">${esc(t('msAll'))}</a>`)}</main>`); return SP.done(n); }
+    const app = (S.settings && S.settings.brand_name) || SP.CFG.appName || '', wa = x.phone ? SP.waLink(x.phone, t('msHi', { a: app }), S.country) : '';
+    shell(bar(x.name) + `<main class="wrap mine"><section class="mcard ms-head"><span class="ms-ic big">${I('store')}</span>
+        <h1>${esc(x.name)}</h1>${x.city ? `<p class="ms-city">${I('pin')} ${esc(x.city)}</p>` : ''}<p class="hint">${esc(t('msOf', { a: app }))}</p>
+        ${x.phone ? `<div class="form-actions ms-acts">${wa ? `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('msWa'))}</a>` : ''}<a class="btn btn-ghost" href="tel:${esc(String(x.phone).replace(/[^0-9+]/g, ''))}">${I('phone')} ${esc(t('msCall'))}</a></div>`
+          : `<p class="muted-p">${esc(t('msNoPhone'))}</p>`}</section>
+      <div class="center"><a class="btn btn-ghost" href="#mshops">${I('store')} ${esc(t('msAll'))}</a></div></main>`);
+    SP.done(n);
+  });
+
   SP.route(/^merchant-([0-9a-f-]{36})$/, async (m, n) => {
     if (gate(n)) return;
     if (!SP.merchantsCan()) { shell(bar(t('mrT')) + `<main class="wrap">${empty('lock', t('noPermT'), t('errPerm'))}</main>`); return SP.done(n); }
@@ -232,8 +294,13 @@ mrOweHim: ["الباقي عليه", "Owes"], mrCreditHim: ["ليه عندنا", 
         <div class="form-actions mr-acts">${SP.can('customers') ? `<button type="button" class="btn ${b.approved ? 'btn-ghost' : 'btn-signal'}" id="mapp">${I(b.approved ? 'close' : 'verified')} ${esc(t(b.approved ? 'unapproveBtn' : 'approveBtn'))}</button>` : ''}
           ${canPay ? `<button type="button" class="btn btn-ghost" id="mpay">${I('plus')} ${esc(t('buyPay'))}</button>` : ''}
           ${S.admin ? `<button type="button" class="btn btn-ghost" id="mpw">${I('key')} ${esc(t('mrPw'))}</button>` : ''}</div>
-        ${bookTabs(b, tab, true)}</main>`);
+        ${SP.can('customers') ? shopCard(b) : ''}${bookTabs(b, tab, true)}</main>`);
       $$('[data-lt]').forEach(c => c.onclick = () => { S.mrTab = { u: b.user_id, t: c.dataset.lt }; draw(); });
+      if ($('#mshow')) $('#mshow').onchange = async e => {
+        const on = e.target.checked; e.target.disabled = true;
+        try { chk(await sb().from('customers').update({ shop_on: on }).eq('user_id', b.user_id).select().single()); SP.toast(t('custSaved')); await reload(); }
+        catch (x) { e.target.checked = !on; e.target.disabled = false; SP.toast(SP.errText(x)); }
+      };
       if ($('#mapp')) $('#mapp').onclick = async () => {
         const btn = $('#mapp'); btn.classList.add('busy');
         try { await SP.api.approve(b.user_id, !b.approved); SP.toast(t('custSaved')); await reload(); } catch (e) { SP.toast(SP.errText(e)); btn.classList.remove('busy'); }

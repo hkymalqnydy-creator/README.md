@@ -44,7 +44,8 @@
     forgotPhoneB: ["الحساب اللي يدخل برقم الهاتف، كلمة السر الجديدة تعطيهاله الشركة. كلّمهم وقولهم رقمك.", "For an account that signs in with a phone number, the company gives the new password. Contact them with your number."],
     forgotPhoneWa: ["السلام عليكم، نسيت كلمة السر متاع حسابي في التطبيق. رقمي: {p}", "Hello, I forgot the password of my app account. My number: {p}"],
     completeT: ["كمّل حسابك", "Complete your account"], completeB: ["اكتب اسم المحل ورقم هاتفك، باش يطلعلك «صادر ووارد» وتوصلك الفواتير.", "Add your shop name and phone number to get your account statement and your invoices."],
-    phoneAgainH: ["لو بدلت رقمك، الشركة تعتمد حسابك من جديد.", "If you change your number, the company approves your account again."],
+    phoneAgainH: ["لو بدلت رقمك، الشركة تعتمد حسابك من جديد.", "If you change your number, the company approves your account again."], cuPhonePub: ["اظهر رقمي في صفحة محلي", "Show my number on my shop’s page"],
+    cuPhonePubH: ["لما الشركة تظهر محلك في «المحلات»، الزبائن يقدروا يتصلوا بيك أو يكلموك واتساب من صفحته.", "When the company shows your shop in «Shops», customers can call you or WhatsApp you from its page."],
     demoM: ["ودخول التاجر: 0925551234 وكلمة السر 123456.", "Merchant sign-in: 0925551234, password 123456."],
     /* a forgotten password: a code by email or SMS, valid 90 seconds */
     rsT: ["كلمة سر جديدة", "New password"], rsB: ["اكتب رقمك أو إيميلك، ونبعتولك كود.", "Enter your number or email and we’ll send you a code."],
@@ -367,6 +368,7 @@
         <div class="row2"><div class="field"><label for="pp">${esc(t('phoneNum'))}${staffer ? '' : req}</label><input id="pp" class="input" type="tel" dir="ltr" maxlength="30" value="${esc(c.phone)}" autocomplete="tel"></div>
           <div class="field"><label for="pc">${esc(t('city'))}</label><input id="pc" class="input" maxlength="40" value="${esc(c.city)}"></div></div>
         ${c.approved ? `<p class="hint">${esc(t('phoneAgainH'))}</p>` : ''}
+        ${staffer ? '' : `<label class="switch"><input type="checkbox" id="ppub"${c.phone_public ? ' checked' : ''}><span></span>${esc(t('cuPhonePub'))}</label><span class="hint">${esc(t('cuPhonePubH'))}</span>`}
         <p class="form-err" id="perr" role="alert"></p><button class="btn btn-ink" id="pgo">${esc(t('saveProfile'))}</button></form>
       ${SP.prefs()}</main>`);
     SP.wirePrefs();
@@ -375,6 +377,7 @@
     $('#pf').onsubmit = async e => {
       e.preventDefault();
       const v = { shop_name: $('#psh').value.trim(), name: $('#pn').value.trim(), phone: SP.digits($('#pp').value).trim(), city: $('#pc').value.trim() };
+      if ($('#ppub')) v.phone_public = $('#ppub').checked;
       const no = (id, k) => { $('#perr').textContent = t(k); $(id).focus(); };
       if (!staffer && v.shop_name.length < 2) return no('#psh', 'needShop');
       if (v.name.length < 2) return no('#pn', 'needCustName');

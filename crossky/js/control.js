@@ -25,7 +25,8 @@
     ctlClosedPh: ["مسكرين اليوم، نرجعو بكرة الصبح إن شاء الله", "Closed today, back tomorrow morning"],
     ctlClosedDef: ["الطلبات مقفلة توا. تقدر تتصل بينا أو تكتبلنا على واتساب.", "Orders are closed for now. You can call us or message us on WhatsApp."],
     ctlHideQty: ["إخفاء الكميات", "Hide quantities"], ctlHideQtyH: ["الزبون يشوف «متوفر» بدل عدد الحبات.", "Customers see “In stock” instead of how many."],
-    ctlHideBr: ["إخفاء الفروع", "Hide branches"], ctlHideBrH: ["الزبون ما يشوفش أسماء الفروع وعناوينها، ويتواصل على رقم الشركة.", "Customers don’t see branch names or addresses and contact the company number."],
+    ctlHideBr: ["إخفاء الفروع", "Hide branches"], ctlHideBrH: ["الزبون ما يشوفش أسماء الفروع وعناوينها، ويتواصل على رقم الشركة.", "Customers don’t see branch names or addresses and contact the company number."], ctlShopsL: ["السماح لأي تاجر يظهر محله", "Let any merchant show his shop"],
+    ctlShopsH: ["كل تاجر سجّل باسم محله يظهر في «المحلات» في الشاشة الرئيسية، من غير ما تظهره أنت من صفحته في «التجار».", "Every merchant who signed up with his shop’s name shows in «Shops» on the home screen, without you showing each from his page in «Merchants»."],
     ctlStaffT: ["قواعد للموظفين", "Rules for staff"], ctlNoBelow: ["منع البيع بأقل من سعر التكلفة", "No selling below cost"],
     ctlNoBelowH: ["لا بسعر أقل ولا بتخفيض يطيّح الفاتورة تحت التكلفة. انت كمالك مش داخل في القاعدة.", "Neither a lower price nor a discount that takes the invoice under cost. This doesn’t apply to you as the owner."],
     ctlLimits: ["حد التخفيض لكل موظف", "Discount limit per employee"], ctlNoLimit: ["بدون حد", "No limit"], ctlLimitIs: ["أقصى تخفيض {n}٪", "Up to {n}% off"],
@@ -48,8 +49,8 @@
     lk_invoice_sent: ["بعث الفاتورة {no} لـ {t}", "Sent invoice {no} to {t}"], lk_invoice_sent_again: ["بعث الفاتورة {no} مرة ثانية لـ {t}", "Sent invoice {no} again to {t}"],
     lk_invoice_unsent: ["رجّع الفاتورة {no} من حساب {t}", "Took invoice {no} back from {t}"], lk_customer_password: ["عطا كلمة سر جديدة لـ {t}", "Gave {t} a new password"],
     lk_sale: ["باع فاتورة {no}", "Sold invoice {no}"], lk_saleTo: ["باع فاتورة {no} لـ {t}", "Sold invoice {no} to {t}"], lk_return: ["رجّع فاتورة {no}", "Returned invoice {no}"],
-    lk_receive: ["استلم بضاعة (استلام {no})", "Received stock (receipt {no})"], lk_receiveFrom: ["استلم بضاعة من {t} (استلام {no})", "Received stock from {t} (receipt {no})"],
-    lk_receipt_undo: ["ألغى الاستلام {no}", "Took back receipt {no}"], lk_stockOut: ["نقّص {n} من «{t}»", "Took {n} out of “{t}”"], lk_stockIn: ["زاد {n} على «{t}»", "Added {n} to “{t}”"],
+    lk_receive: ["دخّل فاتورة شراء ({no})", "Entered purchase invoice {no}"], lk_receiveFrom: ["دخّل فاتورة شراء من {t} ({no})", "Entered purchase invoice {no} from {t}"],
+    lk_receipt_undo: ["ألغى فاتورة الشراء {no}", "Cancelled purchase invoice {no}"], lk_stockOut: ["نقّص {n} من «{t}»", "Took {n} out of “{t}”"], lk_stockIn: ["زاد {n} على «{t}»", "Added {n} to “{t}”"],
     lk_stockCount: ["جرد «{t}»: من {a} لـ {b}", "Counted “{t}”: {a} to {b}"], lk_product_add: ["أضاف قطعة «{t}»", "Added the part “{t}”"], lk_product_del: ["حذف القطعة «{t}»", "Deleted the part “{t}”"],
     lk_product_edit: ["عدّل «{t}»", "Edited “{t}”"], lk_bulk_price: ["غيّر أسعار {n}", "Changed prices of {n}"], lk_bulk_undo: ["رجّع الأسعار كيف كانت ({n})", "Put prices back ({n})"],
     lk_pay_in: ["استلم دفعة من {t}", "Payment received from {t}"], lk_pay_in_del: ["حذف دفعة {t}", "Deleted a payment of {t}"], lk_pay_out: ["دفع للمورّد {t}", "Paid the supplier {t}"],
@@ -278,6 +279,7 @@
         <label class="switch"><input type="checkbox" id="kor"${st.orders_enabled ? ' checked' : ''}><span></span>${esc(t('ordersL'))}</label>
         <label class="switch"><input type="checkbox" id="khq"${st.hide_qty ? ' checked' : ''}><span></span>${esc(t('ctlHideQty'))}</label><span class="hint">${esc(t('ctlHideQtyH'))}</span>
         <label class="switch"><input type="checkbox" id="khb"${st.hide_branches ? ' checked' : ''}><span></span>${esc(t('ctlHideBr'))}</label><span class="hint">${esc(t('ctlHideBrH'))}</span>
+        <label class="switch"><input type="checkbox" id="kms"${st.open_shops ? ' checked' : ''}><span></span>${esc(t('ctlShopsL'))}</label><span class="hint">${esc(t('ctlShopsH'))}</span>
         <p class="lbl optg">${esc(t('priceModeL'))}</p><div class="radios" id="cpm">${['all', 'members', 'approved', 'hidden'].map(k => `<label class="radio"><input type="radio" name="pm" value="${k}"${mode === k ? ' checked' : ''}><span>${esc(t('pm_' + k))}</span></label>`).join('')}</div>
         <span class="hint">${esc(t('pmHint'))}</span>
         <label class="switch"><input type="checkbox" id="csu"${st.open_signup !== false ? ' checked' : ''}><span></span>${esc(t('signupL'))}</label><span class="hint">${esc(t('signupHint'))}</span></section>
@@ -303,7 +305,7 @@
       e.preventDefault();
       const low = BK.amountOf($('#klw').value);
       if (!Number.isInteger(low) || low < 0 || low > 1000) { $('#kerr').textContent = t('ctlBadLow'); $('#klw').classList.add('invalid'); $('#klw').focus(); return; }
-      const v = { shop_closed: $('#kcl').checked, closed_msg: $('#kcm').value.trim(), orders_enabled: $('#kor').checked, hide_qty: $('#khq').checked, hide_branches: $('#khb').checked,
+      const v = { shop_closed: $('#kcl').checked, closed_msg: $('#kcm').value.trim(), orders_enabled: $('#kor').checked, hide_qty: $('#khq').checked, hide_branches: $('#khb').checked, open_shops: $('#kms').checked,
         price_mode: ($('#cpm input:checked') || {}).value || 'all', open_signup: $('#csu').checked, no_below_cost: $('#knb').checked, low_stock: low, invoice_footer: $('#kft').value.trim() };
       const b = $('#kgo'); b.classList.add('busy');
       try { await SP.api.saveSettings(v); SP.toast(t('ctlSaved')); SP.render(); } catch (x) { $('#kerr').textContent = SP.errText(x); } finally { b.classList.remove('busy'); }
