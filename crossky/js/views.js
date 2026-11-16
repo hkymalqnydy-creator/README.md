@@ -29,7 +29,7 @@
     if (!nav) { nav = document.createElement('nav'); nav.id = 'tabs'; nav.className = 'tabs'; document.body.appendChild(nav); }
     nav.setAttribute('aria-label', t('nav'));
     const staff = !!(S.user && SP.isStaff && SP.isStaff());
-    const T = [['home', '', 'home', 'tabHome'], ['system', 'system', 'sys', 'tabSystem'], ['cats', 'cats', 'grid', 'tabCats'], ['shops', 'shops', 'store', SP.company ? 'tabBranches' : 'tabShops'], ['favs', 'favs', 'heart', 'tabFavs'], ['mine', 'mine', 'user', SP.company ? 'tabAccount' : 'tabMine']]
+    const T = [['home', '', 'home', 'tabHome'], ['system', 'system', 'sys', 'tabSystem'], ['cats', 'cats', 'grid', SP.company ? 'tabStore' : 'tabCats'], ['shops', 'shops', 'store', SP.company ? 'tabBranches' : 'tabShops'], ['favs', 'favs', 'heart', 'tabFavs'], ['mine', 'mine', 'user', SP.company ? 'tabAccount' : 'tabMine']]
       .filter(x => !(x[0] === 'shops' && SP.hideBranches && SP.hideBranches()) && (x[0] !== 'system' || staff));
     nav.innerHTML = `<div class="tabs-in" style="grid-template-columns:repeat(${T.length},minmax(0,1fr))">${T.map(([id, h, ic, k]) => `<a class="tab${SP.tab === id ? ' on' : ''}" href="#${h}"${SP.tab === id ? ' aria-current="page"' : ''}>${I(ic)}<span>${esc(t(k))}</span></a>`).join('')}</div>`;
   }
@@ -416,7 +416,8 @@
   const catRow = (c, k) => `<a class="catrow" ${sf({ cat: c.id })}><span class="hex">${I(c.icon)}</span><span class="cr-name">${esc(SP.catName(c.id))}</span><span class="cr-n num">${k == null ? '' : esc(SP.fmtNum(k))}</span>${I('chevL', 'dirx')}</a>`;
   SP.route(/^cats$/, async (m, n) => {
     if (gate(n)) return;
-    shell(bar(t('cats'), '', { noBack: true }) + `<main class="wrap"><div class="catlist" id="cl">${D.CATS.map(c => catRow(c, null)).join('')}</div></main>`);
+    /* the company edition calls it «المتجر»: the company's parts by section */
+    shell(bar(t(SP.company ? 'tabStore' : 'cats'), '', { noBack: true }) + `<main class="wrap"><div class="catlist" id="cl">${D.CATS.map(c => catRow(c, null)).join('')}</div></main>`);
     try {
       const st = await api.stats({ country: S.country, city: S.city });
       if (SP.alive(n)) $('#cl').innerHTML = D.CATS.map(c => catRow(c, (st.cats || {})[c.id] || 0)).join('');

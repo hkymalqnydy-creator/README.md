@@ -166,3 +166,12 @@ from auth.users where id = '99999999-9999-9999-9999-999999999999';
 select 'MC46 the activity log (expect customer_password, invoice_sent, invoice_unsent)' t, string_agg(distinct kind, ', ' order by kind) kinds
 from public.activity_log where kind in ('invoice_sent', 'invoice_unsent', 'customer_password');
 select 'MC47 the log names the shop (expect محل الأمل لقطع الغيار)' t, title from public.activity_log where kind = 'invoice_sent' order by id desc limit 1;
+
+-- a forgotten password by SMS: a phone account carries its number on the account
+set role authenticated; select set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', false);
+select 'MC48 a phone account takes its number from its sign-in (expect t)' t, public.link_login_phone() linked;
+reset role;
+select 'MC49 (expect 218911111111, t)' t, phone, phone_confirmed_at is not null confirmed from auth.users where id = '99999999-9999-9999-9999-999999999999';
+set role authenticated; select set_config('request.jwt.claim.sub', '88888888-8888-8888-8888-888888888888', false);
+select 'MC50 an email account has no number to take (expect f)' t, public.link_login_phone() linked;
+reset role;

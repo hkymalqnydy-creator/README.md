@@ -1387,3 +1387,7 @@ body.ai-open{overflow:hidden}
 .ok-t{color:var(--good);display:flex;align-items:center;gap:6px;font-weight:700}
 .ok-t .ic{width:18px;height:18px}
 @media print{.send-card{display:none}}
+/* a forgotten password: the code and how long it still works (js/company.js #reset) */
+.input.otp{font-size:24px;letter-spacing:.42em;text-align:center;font-weight:800}
+.rs-timer{margin:-4px 2px 10px;font-weight:800;color:var(--royal,var(--ink));font-variant-numeric:tabular-nums}
+.rs-timer.gone{color:var(--bad)}

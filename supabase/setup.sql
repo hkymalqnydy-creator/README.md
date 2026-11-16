@@ -2224,3 +2224,23 @@ grant execute on function public.find_merchants(text, integer) to authenticated;
 grant execute on function public.list_merchants(text, text, integer, integer) to authenticated;
 grant execute on function public.merchant_detail(uuid) to authenticated;
 grant execute on function public.set_customer_password(uuid, text) to authenticated;
+
+-- A forgotten password: a code by email (the account's email) or by SMS (the account's phone number), valid as long as the
+-- server's «Email OTP Expiration» / «SMS OTP Expiry» say (90 seconds: docs/دليل-نسخة-الشركة.md). The app asks Supabase Auth
+-- for the code and checks it (signInWithOtp / verifyOtp), then sets the new password. For SMS the phone account needs its
+-- number on the account itself: it signed up with <number>@phone.<domain>, so the number is taken from there, once, when
+-- no other account has it.
+create or replace function public.link_login_phone() returns boolean
+language plpgsql security definer set search_path = public as $$
+declare v_email text; v_digits text;
+begin
+  if auth.uid() is null then return false; end if;
+  select email into v_email from auth.users where id = auth.uid();
+  v_digits := substring(lower(coalesce(v_email, '')) from '^([0-9]{8,15})@phone\.[a-z0-9.-]+$');
+  if v_digits is null then return false; end if;
+  if exists (select 1 from auth.users where phone = v_digits and id <> auth.uid()) then return false; end if;
+  update auth.users set phone = v_digits, phone_confirmed_at = coalesce(phone_confirmed_at, now())
+  where id = auth.uid() and (phone is null or phone = '' or phone = v_digits);
+  return found;
+end $$;
+grant execute on function public.link_login_phone() to authenticated;

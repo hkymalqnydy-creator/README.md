@@ -258,6 +258,7 @@
     const fail = (m, code) => { throw Object.assign(new Error(m), { code: code || 'P0001' }); };
     const emit = ev => listeners.forEach(f => { try { f(ev, session); } catch (e) { console.error(e); } });
     const rls = () => ({ data: null, error: { message: 'new row violates row-level security policy', code: '42501' } });
+    const otpLogin = (email, phone) => email ? String(email).trim().toLowerCase() : phone ? String(phone).replace(/\D/g, '') + '@' + (CONF.phoneDomain || 'phone.invalid') : '';
 
     const auth = {
       getSession: () => later({ data: { session }, error: null }),
@@ -281,6 +282,29 @@
       },
       async signOut() { session = null; save(); setTimeout(() => emit('SIGNED_OUT')); return { error: null }; },
       async resetPasswordForEmail() { return { data: {}, error: null }; },
+      /* A forgotten password: a 6-digit code by email or SMS (Supabase Auth's signInWithOtp / verifyOtp, the code living 90 seconds
+         as the server is set). Nothing can be sent from the demo, so the code comes back for the screen to show (demo_code). */
+      async signInWithOtp({ email, phone, options }) {
+        const login = otpLogin(email, phone), u = login && DB.users.find(x => x.email === login);
+        if (!u) return { data: { user: null, session: null }, error: { message: 'Signups not allowed for otp', status: 422 } };
+        DB.otps = DB.otps || {};
+        const o = DB.otps[login];
+        if (o && Date.now() - o.at < 60000) return { data: { user: null, session: null }, error: { message: 'For security purposes, you can only request this after ' + Math.ceil((60000 - (Date.now() - o.at)) / 1000) + ' seconds.', status: 429 } };
+        const code = String(100000 + Math.floor(Math.random() * 900000));
+        DB.otps[login] = { code, at: Date.now(), exp: Date.now() + 90000, tries: 0 }; save();
+        return { data: { user: null, session: null, demo_code: code }, error: null };
+      },
+      async verifyOtp({ email, phone, token }) {
+        const login = otpLogin(email, phone), o = DB.otps && DB.otps[login];
+        const bad = { data: { user: null, session: null }, error: { message: 'Token has expired or is invalid', status: 403 } };
+        if (!o || Date.now() > o.exp) return bad;
+        if (String(token || '').trim() !== o.code) { if (++o.tries >= 5) delete DB.otps[login]; save(); return bad; }
+        delete DB.otps[login];
+        const u = DB.users.find(x => x.email === login);
+        if (!u) return bad;
+        session = { user: { id: u.id, email: u.email }, access_token: 'demo' }; save(); setTimeout(() => emit('SIGNED_IN'));
+        return { data: { user: session.user, session }, error: null };
+      },
       async updateUser({ password }) {
         if (!session) return { data: null, error: { message: 'not authorized' } };
         const u = DB.users.find(x => x.id === uid()); if (u && password) u.password = password; save();
@@ -991,6 +1015,7 @@
         save(); return null;
       },
       /* ---------- merchants: «صادر ووارد», sending invoices, a new password (setup.sql section 16) ---------- */
+      link_login_phone() { return !!uid(); },
       my_book() { return uid() ? merchantBook(uid()) : null; },
       my_bill(a) {
         if (!uid()) return null;

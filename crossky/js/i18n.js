@@ -358,6 +358,7 @@
 
     tabHome: ["الرئيسية", "Home", "Accueil", "Inicio", "Start", "Ana sayfa", "Главная", "首页"],
     tabCats: ["الأقسام", "Categories", "Catégories", "Categorías", "Kategorien", "Kategoriler", "Категории", "分类"],
+    tabStore: ["المتجر", "Store", "Boutique", "Tienda", "Shop", "Mağaza", "Магазин", "商店"],
     tabShops: ["المحلات", "Shops", "Magasins", "Tiendas", "Läden", "Dükkânlar", "Магазины", "店铺"],
     tabFavs: ["المفضلة", "Favorites", "Favoris", "Favoritos", "Favoriten", "Favoriler", "Избранное", "收藏"],
     tabMine: ["محلي", "My shop", "Mon magasin", "Mi tienda", "Mein Laden", "Dükkânım", "Мой магазин", "我的店铺"],

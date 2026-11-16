@@ -46,6 +46,16 @@
     completeT: ["كمّل حسابك", "Complete your account"], completeB: ["اكتب اسم المحل ورقم هاتفك، باش يطلعلك «صادر ووارد» وتوصلك الفواتير.", "Add your shop name and phone number to get your account statement and your invoices."],
     phoneAgainH: ["لو بدلت رقمك، الشركة تعتمد حسابك من جديد.", "If you change your number, the company approves your account again."],
     demoM: ["ودخول التاجر: 0925551234 وكلمة السر 123456.", "Merchant sign-in: 0925551234, password 123456."],
+    /* a forgotten password: a code by email or SMS, valid 90 seconds */
+    rsT: ["كلمة سر جديدة", "New password"], rsB: ["اكتب رقمك أو إيميلك، ونبعتولك كود.", "Enter your number or email and we’ll send you a code."],
+    rsSend: ["ابعتلي الكود", "Send me the code"], rsTo: ["بعثنالك كود على {d}.", "We sent a code to {d}."],
+    rsDemo: ["نسخة تجريبية: ما يطلعش منها SMS ولا إيميل. الكود اللي كان بيوصلك: {c}", "Demo: no SMS or email is sent from it. The code you would get: {c}"],
+    rsCode: ["الكود", "Code"], rsLeft: ["الكود صالح {t}", "The code works for {t}"], rsGone: ["خلص وقت الكود. اطلب كود جديد.", "The code has expired. Ask for a new one."],
+    rsNew: ["كلمة السر الجديدة", "New password"], rsSave: ["غيّر كلمة السر وادخل", "Change password and sign in"], rsAgain: ["ابعتلي كود جديد", "Send a new code"],
+    rsWrong: ["الكود غلط. تأكد منه.", "Wrong code. Check it."], rsNoAcct: ["ما فيش حساب بالرقم أو الإيميل هذا.", "No account with this number or email."],
+    rsWait: ["استنى {n} ثانية وبعدين اطلب كود جديد.", "Wait {n} seconds before asking for a new code."],
+    rsNoSms: ["إرسال الرسائل مش مفعّل عند الشركة. كلّمهم يعطوك كلمة سر جديدة.", "Text messages aren’t set up by the company. Contact them for a new password."],
+    rsDone: ["تبدلت كلمة السر ودخلت", "Password changed; you’re signed in"], rsNeedCode: ["اكتب الكود (6 أرقام).", "Enter the 6-digit code."],
     myAccount: ["حسابي", "My account"], signInToOrder: ["سجّل دخولك باش تشوف الأسعار وتطلب بسهولة.", "Sign in to see prices and order easily."],
     approvedYes: ["حسابك معتمد: تشوف أسعار الزبائن المعتمدين.", "Your account is approved: you see approved-customer prices."],
     approvedNo: ["حسابك بانتظار موافقة الشركة. بعد الموافقة تظهرلك الأسعار.", "Your account is waiting for company approval. Prices appear once approved."],
@@ -221,6 +231,7 @@
           return;
         }
         await SP.refreshUser(d.session);
+        if (by === 'phone') SP.sb.rpc('link_login_phone').then(() => {}, () => {});
         SP.toast(t('welcome'));
         const to = S.after || 'mine'; S.after = '';
         SP.go(to);
@@ -238,14 +249,96 @@
       const to = S.after || 'mine'; S.after = '';
       SP.go(to);
     });
-    if ($('#afg')) $('#afg').onclick = async () => {
-      if (by === 'phone') return forgotByPhone($('#alp').value);
-      const email = $('#ae').value.trim();
-      if (!okMail(email)) { err.textContent = t('emailFirst'); $('#ae').focus(); return; }
-      try { await SP.auth.reset(email); err.textContent = ''; SP.toast(t('resetSent'), 6000); } catch (x) { err.textContent = SP.errText(x); }
-    };
+    if ($('#afg')) $('#afg').onclick = () => { S.resetBy = by; S.resetLogin = (by === 'phone' ? $('#alp') : $('#ae')).value.trim(); SP.go('reset'); };
     SP.done(n);
   };
+
+  /* ---------- a forgotten password: a code by email (Gmail…) or by SMS, valid 90 seconds (the server's OTP expiry), then a new
+     password. The demo cannot send either, so it shows the code it would have sent. ---------- */
+  const OTP_SECS = +CFG.otpSeconds || 90;
+  SP.route(/^reset$/, (m, n) => {
+    if (gate(n)) return;
+    let by = S.resetBy === 'email' ? 'email' : 'phone', to = null, end = 0, tick = 0;
+    const pre = S.resetLogin || '';
+    shell(bar(t('rsT')) + `<main class="wrap form-wrap">
+      <form class="form" id="rsf" novalidate><p class="muted-p">${esc(t('rsB'))}</p>
+        <fieldset class="field loginby"><legend class="flabel">${esc(t('loginBy'))}</legend><div class="chips light" role="radiogroup">
+          <button type="button" class="chip" role="radio" data-by="phone">${I('phone')} ${esc(t('byPhone'))}</button>
+          <button type="button" class="chip" role="radio" data-by="email">${I('mail')} ${esc(t('byEmail'))}</button></div></fieldset>
+        <div class="field" id="rpw"><label for="rp">${esc(t('phoneNum'))}</label><input id="rp" class="input" type="tel" inputmode="tel" dir="ltr" maxlength="30" autocomplete="tel" placeholder="09XXXXXXXX" value="${by === 'phone' ? esc(pre) : ''}"></div>
+        <div class="field" id="rew"><label for="re">${esc(t('email'))}</label><input id="re" class="input" type="email" inputmode="email" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="name@gmail.com" value="${by === 'email' ? esc(pre) : ''}"></div>
+        <p class="form-err" id="rserr" role="alert"></p>
+        <div class="form-actions"><button class="btn btn-signal" id="rsgo">${I('send')} ${esc(t('rsSend'))}</button></div></form>
+      <form class="form" id="rcf" novalidate hidden>
+        <div class="banner note">${I('check')}<span id="rsto"></span></div>
+        <div class="banner warn" id="rsdemo" hidden></div>
+        <div class="field"><label for="rc">${esc(t('rsCode'))}</label><input id="rc" class="input num otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" dir="ltr" placeholder="••••••"></div>
+        <p class="rs-timer" id="rst" aria-live="polite"></p>
+        <div class="field"><label for="rn">${esc(t('rsNew'))}</label><input id="rn" class="input" type="password" autocomplete="new-password" minlength="6" dir="ltr"><span class="hint">${esc(t('passHint'))}</span></div>
+        <p class="form-err" id="rcerr" role="alert"></p>
+        <div class="form-actions"><button class="btn btn-signal" id="rcgo">${I('check')} ${esc(t('rsSave'))}</button>
+          <button type="button" class="btn btn-ghost" id="rsagain" hidden>${I('send')} ${esc(t('rsAgain'))}</button></div></form></main>`);
+    const pick = b => {
+      by = b; S.resetBy = b;
+      $$('[data-by]').forEach(c => { const on = c.dataset.by === b; c.classList.toggle('on', on); c.setAttribute('aria-checked', on ? 'true' : 'false'); });
+      $('#rpw').hidden = b !== 'phone'; $('#rew').hidden = b !== 'email'; $('#rserr').textContent = '';
+    };
+    $$('[data-by]').forEach(c => c.onclick = () => { pick(c.dataset.by); (by === 'phone' ? $('#rp') : $('#re')).focus(); });
+    pick(by);
+    const clock = () => {
+      const s = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      if (!SP.alive(n) || !$('#rst')) { clearInterval(tick); return; }
+      $('#rst').textContent = s ? t('rsLeft', { t: Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') }) : t('rsGone');
+      $('#rst').classList.toggle('gone', !s); $('#rsagain').hidden = !!s;
+      if (!s) clearInterval(tick);
+    };
+    const sendErr = x => {
+      const m = String((x && x.message) || ''), w = /after (\d+) seconds?/i.exec(m);
+      if (w) return t('rsWait', { n: w[1] });
+      if (/Signups not allowed|User not found|not found/i.test(m)) return t('rsNoAcct');
+      if (by === 'phone' && /sms|phone provider|twilio|messagebird|vonage|textlocal|unsupported/i.test(m)) { forgotByPhone($('#rp').value); return t('rsNoSms'); }
+      return SP.errText(x);
+    };
+    const send = async () => {
+      const err = $('#rserr'); err.textContent = ''; $('#rcerr').textContent = '';
+      if (by === 'phone') { const w = SP.waNum($('#rp').value, CFG.defaultCountry || 'LY'); if (!w) { err.textContent = t('badPhone'); $('#rp').focus(); return false; } to = { phone: '+' + w }; }
+      else { const e = $('#re').value.trim().toLowerCase(); if (!okMail(e)) { err.textContent = t('badEmail'); $('#re').focus(); return false; } to = { email: e }; }
+      try {
+        const d = await SP.auth.otpSend(to);
+        end = Date.now() + OTP_SECS * 1000; clearInterval(tick); tick = setInterval(clock, 1000);
+        $('#rsf').hidden = true; $('#rcf').hidden = false;
+        $('#rsto').innerHTML = esc(t('rsTo', { d: '\u0000' })).replace('\u0000', `<bdi dir="ltr">${esc(to.phone || to.email)}</bdi>`);
+        $('#rsdemo').hidden = !d.demo_code; if (d.demo_code) $('#rsdemo').textContent = t('rsDemo', { c: d.demo_code });
+        clock(); $('#rc').value = ''; $('#rc').focus();
+        return true;
+      } catch (x) { const msg = sendErr(x); if ($('#rcf').hidden) err.textContent = msg; else $('#rcerr').textContent = msg; return false; }
+    };
+    $('#rsf').onsubmit = async e => { e.preventDefault(); const b = $('#rsgo'); b.classList.add('busy'); await send(); b.classList.remove('busy'); };
+    $('#rsagain').onclick = async () => { const b = $('#rsagain'); b.classList.add('busy'); await send(); b.classList.remove('busy'); };
+    $('#rcf').onsubmit = async e => {
+      e.preventDefault();
+      const err = $('#rcerr'), code = SP.digits($('#rc').value).replace(/\D/g, ''), pw = $('#rn').value, b = $('#rcgo');
+      err.textContent = '';
+      if (Date.now() > end) { err.textContent = t('rsGone'); return; }
+      if (code.length !== 6) { err.textContent = t('rsNeedCode'); $('#rc').focus(); return; }
+      if (pw.length < 6) { err.textContent = t('shortPass'); $('#rn').focus(); return; }
+      b.classList.add('busy');
+      try {
+        const d = await SP.auth.otpCheck(to, code);
+        await SP.auth.setPassword(pw);
+        clearInterval(tick);
+        await SP.refreshUser(d.session);
+        if (to.phone) SP.sb.rpc('link_login_phone').then(() => {}, () => {});
+        S.resetLogin = '';
+        SP.toast(t('rsDone'));
+        SP.go(S.after || 'mine'); S.after = '';
+      } catch (x) {
+        err.textContent = /expired|invalid/i.test(String((x && x.message) || '')) ? (Date.now() > end ? t('rsGone') : t('rsWrong')) : SP.errText(x);
+        b.classList.remove('busy');
+      }
+    };
+    SP.done(n);
+  });
 
   /* ---------- customer account (company edition) ---------- */
   SP.customerView = (m, n) => {

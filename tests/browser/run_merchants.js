@@ -66,12 +66,27 @@ const log = s => console.log(`${++step}. ${s}`);
     await signIn('phone', '0912223344', 'nope000');
     await page.waitForTimeout(400);
     must(/رقم الهاتف أو كلمة السر غلط/.test(await text('#aerr')), 'a wrong password names the phone number');
-    await page.click('#afg'); await see('.sheet .btn-wa');
-    must(/wa\.me\/218912345678/.test(await page.getAttribute('.sheet .btn-wa', 'href')), 'the forgotten password: WhatsApp to the company');
-    await shot('03-forgot-phone');
-    await page.click('.sheet [data-close]'); await page.waitForTimeout(300);
-    await page.fill('#alp', '+218 91 222 3344'); await page.fill('#ap', 'secret777'); await page.click('#ago'); await page.waitForURL(/#mine/);
-    log('sign-in by phone (091… or +218…, the same account); a wrong password says so; «نسيت كلمة السر» sends him to the company on WhatsApp');
+    // the forgotten password: a code (by SMS on the server; shown on screen in the demo), 90 seconds, then a new password
+    await page.click('#afg'); await page.waitForURL(/#reset/); await see('#rp');
+    must(await page.inputValue('#rp') === '0912223344', 'the code page starts with his number');
+    await page.click('#rsgo'); await see('#rc');
+    const code = (await text('#rsdemo')).replace(/\D/g, '').slice(-6);
+    must(code.length === 6 && /\+218912223344/.test(await text('#rsto')) && /1:(29|30)/.test(await text('#rst')), 'a code to his number, 1:30 to use it: ' + await text('#rst'));
+    await page.fill('#rc', code === '111111' ? '222222' : '111111'); await page.fill('#rn', 'newpass9'); await page.click('#rcgo'); await page.waitForTimeout(400);
+    must(/الكود غلط/.test(await text('#rcerr')), 'a wrong code is refused');
+    await shot('03-reset-code');
+    // a minute and a half later (the page's clock moved on)
+    await db(() => { window.__realNow = Date.now; Date.now = () => window.__realNow() + 91000; });
+    await page.waitForTimeout(1200);
+    must(/خلص وقت الكود/.test(await text('#rst')) && await page.locator('#rsagain').isVisible(), 'the timer runs out and offers a new code');
+    await page.fill('#rc', code); await page.click('#rcgo'); await page.waitForTimeout(400);
+    must(/خلص وقت الكود/.test(await text('#rcerr')), 'after 90 seconds the code no longer works');
+    await page.click('#rsagain'); await page.waitForTimeout(400);
+    const code2 = (await text('#rsdemo')).replace(/\D/g, '').slice(-6);
+    await page.fill('#rc', code2); await page.fill('#rn', 'newpass9'); await page.click('#rcgo'); await page.waitForURL(/#mine/);
+    await db(() => { Date.now = window.__realNow; });
+    await signIn('phone', '+218 91 222 3344', 'newpass9'); await page.waitForURL(/#mine/);
+    log('sign-in by phone (091… or +218…, the same account); a wrong password says so; «نسيت كلمة السر»: a code for 1:30, a wrong or late code refused, a new code, a new password');
 
     // ----- the demo merchant: approved, an invoice sent to him -----
     await signIn('phone', '0925551234'); await page.waitForURL(/#mine/); await page.waitForTimeout(400);

@@ -444,7 +444,10 @@
     async signIn(email, password) { const r = await sb.auth.signInWithPassword({ email, password }); if (r.error) throw r.error; return r.data; },
     async signOut() { try { await sb.auth.signOut(); } catch (e) { /* offline: local session is cleared anyway */ } },
     async reset(email) { const r = await sb.auth.resetPasswordForEmail(email, { redirectTo: siteUrl() }); if (r.error) throw r.error; },
-    async setPassword(pw) { const r = await sb.auth.updateUser({ password: pw }); if (r.error) throw r.error; }
+    async setPassword(pw) { const r = await sb.auth.updateUser({ password: pw }); if (r.error) throw r.error; },
+    /* a forgotten password: a code by email or SMS for an account that exists (never a new one), then checked */
+    async otpSend(to) { const r = await sb.auth.signInWithOtp({ ...to, options: { shouldCreateUser: false } }); if (r.error) throw r.error; return r.data || {}; },
+    async otpCheck(to, token) { const r = await sb.auth.verifyOtp({ ...to, token, type: to.phone ? 'sms' : 'email' }); if (r.error) throw r.error; return r.data; }
   };
   async function refreshUser(session) {
     const u = session && session.user;
