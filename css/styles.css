@@ -1307,3 +1307,38 @@ body.ai-open{overflow:hidden}
 .paychips{margin:6px 0 0}
 @media (prefers-reduced-motion:no-preference){.osteps li.now .dot{animation:opulse 1.8s ease-in-out infinite}}
 @keyframes opulse{50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--st) 8%,transparent)}}
+/* ---------- the Stock page: running low and run out (js/books.js) ----------
+   Plan: the first thing on the page answers «what do I need to reorder?» — two big counts, then the items with the fewest
+   left, each with its number large and a short bar against the "running low" level. Amber = running low, red = run out. */
+.stk-alert{padding:14px}
+.sa-nums{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sa-num{display:grid;gap:2px;justify-items:start;padding:12px 14px;border-radius:14px;border:0;text-align:start;cursor:pointer;color:inherit;font:inherit}
+.sa-num b{font-family:var(--font-display);font-size:32px;line-height:1.05;font-weight:800}
+.sa-num span{font-size:13.5px;font-weight:700}
+.sa-num.low{background:rgba(255,163,26,.16)}
+.sa-num.low b{color:var(--warn,#9a5800)}
+.sa-num.out{background:rgba(217,48,37,.10)}
+.sa-num.out b{color:#c0392b}
+.sa-num.zero{background:var(--chip)}
+.sa-num.zero b{color:var(--muted)}
+.sa-num:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.sa-list{list-style:none;margin:12px 0 0;padding:0;display:grid}
+.sa-row{display:grid;grid-template-columns:58px 1fr auto;gap:12px;align-items:center;width:100%;padding:9px 2px;border:0;border-top:1px solid var(--line);background:none;color:inherit;font:inherit;text-align:start;cursor:pointer}
+.sa-list li:first-child .sa-row{border-top:0}
+.sa-row:disabled{cursor:default;opacity:1}
+.sa-left{display:grid;justify-items:center;align-content:center;height:54px;border-radius:12px;background:rgba(255,163,26,.16);color:var(--warn,#9a5800)}
+.sa-left small{font-size:11px;font-weight:700;line-height:1}
+.sa-left b{font-size:24px;line-height:1.1;font-weight:800}
+.sa-row .ar-main{display:grid;gap:2px;min-width:0}
+.sa-row .ar-main b{font-size:14.5px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-row .ar-main small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-bar{display:block;height:4px;margin-top:4px;border-radius:4px;background:var(--line);overflow:hidden}
+.sa-bar i{display:block;height:100%;border-radius:4px;background:var(--warn,#c47800)}
+.sa-add{width:20px;height:20px;color:var(--muted)}
+.sa-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin:8px 0 0;color:var(--muted);font-size:12.5px}
+.sa-out{display:flex;align-items:center;gap:8px;margin:10px 0 0;padding:10px 12px;border-radius:12px;background:rgba(217,48,37,.07);font-size:13.5px;line-height:1.55}
+.sa-out .ic{width:18px;height:18px;flex:none;color:#c0392b}
+.sa-out span{flex:1;min-width:0}
+.linkbtn{border:0;background:none;padding:2px 0;color:var(--royal,var(--ink));font:inherit;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap}
+.stk-good{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:12px 14px;border-radius:14px;background:rgba(31,157,85,.10);color:var(--good,#11744a);font-weight:600;font-size:14px}
+.stk-good .ic{width:18px;height:18px;flex:none}

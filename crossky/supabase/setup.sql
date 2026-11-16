@@ -1148,11 +1148,18 @@ begin
                   'value_price', coalesce(sum(qty * price) filter (where qty > 0 and price is not null), 0),
                   'value_cost', case when v_costs then coalesce(sum(qty * cost) filter (where qty > 0 and cost is not null), 0) end,
                   'cost_missing', case when v_costs then count(*) filter (where qty > 0 and cost is null) end) from base),
+    -- what is running low, the fewest left first, and what has run out (on the first page)
+    'low_items', case when coalesce(p_offset, 0) = 0 then coalesce((select jsonb_agg(l.x order by l.qty, l.title, l.id) from (
+               select jsonb_build_object('id', id, 'title', title, 'sku', sku, 'part_no', part_no, 'qty', qty, 'price', price, 'branch_name', branch_name) x, qty, title, id
+               from base where qty between 1 and v_low order by qty, title, id limit 10) l), '[]'::jsonb) end,
+    'out_items', case when coalesce(p_offset, 0) = 0 then coalesce((select jsonb_agg(o.x order by o.title, o.id) from (
+               select jsonb_build_object('id', id, 'title', title, 'sku', sku, 'part_no', part_no, 'branch_name', branch_name) x, title, id
+               from base where qty = 0 order by title, id limit 10) o), '[]'::jsonb) end,
     'total', (select count(*) from hit),
     'items', coalesce((select jsonb_agg(t.x order by t.rn) from (
-               select row_number() over (order by title, id) rn, jsonb_build_object('id', id, 'title', title, 'sku', sku, 'part_no', part_no, 'barcode', barcode,
+               select row_number() over (order by case when p_filter = 'low' then qty end nulls first, title, id) rn, jsonb_build_object('id', id, 'title', title, 'sku', sku, 'part_no', part_no, 'barcode', barcode,
                         'qty', qty, 'price', price, 'cost', case when v_costs then cost end, 'branch_name', branch_name) x
-               from hit order by title, id limit least(greatest(coalesce(p_limit, 50), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) t), '[]'::jsonb),
+               from hit order by case when p_filter = 'low' then qty end nulls first, title, id limit least(greatest(coalesce(p_limit, 50), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) t), '[]'::jsonb),
     'moves', case when public.has_perm('products') or public.has_perm('reports') then coalesce((select jsonb_agg(jsonb_build_object('id', m.id, 'title', m.title, 'qty', m.qty,
                'reason', m.reason, 'note', m.note, 'staff_name', m.staff_name, 'created_at', m.created_at, 'value', case when v_costs then m.qty * m.cost end) order by m.created_at desc, m.id desc)
                from (select * from public.stock_moves order by created_at desc, id desc limit 20) m), '[]'::jsonb) else '[]'::jsonb end

@@ -842,11 +842,15 @@
         const lv = DB.settings.low_stock == null ? 3 : DB.settings.low_stock;
         const sum = (l, fn) => l.reduce((k, x) => k + (Number(fn(x)) || 0), 0), low = p => p.qty != null && p.qty >= 1 && p.qty <= lv, full = L.filter(p => p.qty > 0);
         const hit = L.filter(p => (!q || norm(p.title).includes(nq) || String(p.sku || '').toUpperCase().includes(uq) || String(p.part_no || '').toUpperCase().includes(uq) || (p.barcode || '') === q)
-          && (f === 'low' ? low(p) : f === 'out' ? p.qty === 0 : true)).sort((x, y) => x.title.localeCompare(y.title, 'ar') || x.id.localeCompare(y.id));
+          && (f === 'low' ? low(p) : f === 'out' ? p.qty === 0 : true)).sort((x, y) => (f === 'low' ? x.qty - y.qty : 0) || x.title.localeCompare(y.title, 'ar') || x.id.localeCompare(y.id));
+        const byTitle = (x, y) => x.title.localeCompare(y.title, 'ar') || x.id.localeCompare(y.id), first = !a.p_offset, br = p => (shopOf(p.shop_id) || {}).name || null;
         return {
           summary: { parts: L.length, units: sum(L, p => p.qty), low: L.filter(low).length, low_level: lv, out: L.filter(p => p.qty === 0).length,
             value_price: sum(full.filter(p => p.price != null), p => p.qty * p.price),
             value_cost: costs ? sum(full.filter(p => p.cost != null), p => p.qty * p.cost) : null, cost_missing: costs ? full.filter(p => p.cost == null).length : null },
+          /* what is running low, the fewest left first, and what has run out (on the first page) */
+          low_items: first ? L.filter(low).sort((x, y) => x.qty - y.qty || byTitle(x, y)).slice(0, 10).map(p => ({ id: p.id, title: p.title, sku: p.sku || null, part_no: p.part_no || '', qty: p.qty, price: p.price == null ? null : p.price, branch_name: br(p) })) : null,
+          out_items: first ? L.filter(p => p.qty === 0).sort(byTitle).slice(0, 10).map(p => ({ id: p.id, title: p.title, sku: p.sku || null, part_no: p.part_no || '', branch_name: br(p) })) : null,
           total: hit.length,
           items: page(hit, a, 50).map(p => ({ id: p.id, title: p.title, sku: p.sku || null, part_no: p.part_no || '', barcode: p.barcode || null, qty: p.qty == null ? null : p.qty,
             price: p.price == null ? null : p.price, cost: costs && p.cost != null ? p.cost : null, branch_name: (shopOf(p.shop_id) || {}).name || null })),

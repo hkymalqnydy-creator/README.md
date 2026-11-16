@@ -25,7 +25,10 @@
     stkParts: ["قطعة في القائمة", "Parts listed"], stkUnits: ["حبة في المخزن", "Units in stock"], stkValueCost: ["قيمة المخزن بالتكلفة", "Stock value at cost"],
     stkValuePrice: ["قيمة المخزن بسعر البيع", "Stock value at selling price"], stkExpected: ["لو انباع المخزن كله بسعر البيع، الربح {m}", "Sold at the selling price, the whole stock would make {m}"],
     stkCostMissing: ["{n} قطعة بدون سعر تكلفة، فالقيمة تقريبية.", "{n} parts have no cost price, so the value is approximate."],
-    stkAll: ["الكل", "All"], stkLow: ["قرب يخلص", "Running low"], stkOut: ["خالص", "Out of stock"], stkEmpty: ["ما فيش قطع هني.", "No parts here."],
+    stkAll: ["الكل", "All"], stkLow: ["قرب يخلص", "Running low"], stkOut: ["خلصت", "Out of stock"],
+    stkLeft: ["باقي", "left"], stkLowSee: ["شوف الكل ({n})", "See all ({n})"], stkOutNames: ["خلصت: {l}", "Out of stock: {l}"], stkAndMore: ["و{n} غيرهم", "and {n} more"],
+    stkOutSee: ["شوف اللي خلصت", "See them"], stkAllGood: ["كل الأصناف متوفرة، وما فيش حاجة قرب تخلص.", "Everything is in stock; nothing is running low."],
+    stkLowWhat: ["«قرب يخلص» = {n} حبات أو أقل", "“Running low” = {n} units or fewer"], stkTapAdd: ["اضغط على الصنف باش تزيد كميته.", "Tap an item to add stock."], stkEmpty: ["ما فيش قطع هني.", "No parts here."],
     stkCostIs: ["التكلفة {m}", "Cost {m}"], stkTapHint: ["اضغط على أي قطعة باش تنقّص التالف أو تزيد أو تجرد.", "Tap a part to remove damaged stock, add, or count."],
     stkAdjT: ["تعديل الكمية", "Adjust quantity"], stkNow: ["الموجود توا: {n}", "In stock now: {n}"], stkMinus: ["نقّص", "Remove"], stkPlus: ["زيد", "Add"], stkCount: ["جرد", "Count"],
     stkHowMany: ["كم حبة؟", "How many?"], stkCounted: ["الكمية الصحيحة بعد العد", "Quantity counted"], stkReason: ["السبب", "Reason"],
@@ -118,11 +121,11 @@
   if (posEntry) SP.posEntry = () => posEntry() + SP.booksEntry();
 
   /* ---------- المخزن: what is in stock, what it is worth, and changes (damaged, lost, counted) ---------- */
-  function adjustSheet(p, done) {
+  function adjustSheet(p, done, start) {
     const now = p.qty || 0, showCost = SP.can('costs') && p.cost != null;
     const s = SP.openSheet(`<h2 class="sheet-title">${esc(p.title)}</h2><p class="muted-p sheet-sub">${esc(t('stkNow', { n: SP.fmtNum(now) }))}</p><form class="form" id="adj" novalidate>
       <div class="seg" role="radiogroup" aria-label="${esc(t('stkAdjT'))}">${[['out', 'stkMinus'], ['in', 'stkPlus'], ['count', 'stkCount']].map(([k, l], i) =>
-        `<input type="radio" name="am" id="am${i}" value="${k}"${i ? '' : ' checked'}><label for="am${i}">${esc(t(l))}</label>`).join('')}</div>
+        `<input type="radio" name="am" id="am${i}" value="${k}"${(start ? k === start : !i) ? ' checked' : ''}><label for="am${i}">${esc(t(l))}</label>`).join('')}</div>
       <div class="field"><label for="aq" id="aql">${esc(t('stkHowMany'))}</label><input id="aq" class="input num" dir="ltr" inputmode="numeric" maxlength="7" autocomplete="off"></div>
       <div class="field" id="arw"><label for="arn">${esc(t('stkReason'))}</label><select id="arn" class="input"></select></div>
       <div class="field"><label for="ant">${esc(t('posNote'))}</label><input id="ant" class="input" maxlength="300"></div>
@@ -165,6 +168,7 @@
     S.stkF = S.stkF || 'all';
     const costs = SP.can('costs'), edit = SP.can('products');
     shell(bar(t('stkT'), SP.can('purchases') ? `<a class="iconbtn" href="#receive" aria-label="${esc(t('rcvT'))}">${I('plus')}</a>` : '') + `<main class="wrap mine">
+      <div id="slow"><div class="sk sk-block"></div></div>
       ${SP.can('purchases') ? `<div class="rcv-actions stk-actions"><label class="rcv-big" id="sphoto">${I('receipt')}<b>${esc(t('stkPhoto'))}</b><small>${esc(t('stkPhotoSub'))}</small><input type="file" accept="image/*" class="sr" id="spf"></label>
         <button type="button" class="rcv-big" id="sscan">${I('scan')}<b>${esc(t('rcvScan'))}</b><small>${esc(t('stkScanSub'))}</small></button></div>` : ''}
       <div id="ssum"><div class="sk sk-block"></div></div>
@@ -186,6 +190,23 @@
         <span class="ar-main"><b>${esc(p.title)}</b><small>${[p.sku || p.part_no, p.branch_name].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small></span>
         <span class="stk-val">${p.price != null ? `<b class="num">${esc(money(p.price))}</b>` : ''}${costs && p.cost != null ? `<small class="num">${esc(t('stkCostIs', { m: money(p.cost) }))}</small>` : ''}</span></button>`;
     };
+    /* first on the page: what is running low (the fewest left first, how many are left) and how many have run out */
+    const drawLow = (s, L, O) => {
+      const nl = +s.low || 0, no = +s.out || 0;
+      if (!nl && !no) { $('#slow').innerHTML = `<p class="stk-good">${I('check')}<span>${esc(t('stkAllGood'))}</span></p>`; return; }
+      $('#slow').innerHTML = `<section class="mcard stk-alert"><div class="sa-nums">
+          <button type="button" class="sa-num low${nl ? '' : ' zero'}" data-goto="low"><b class="num">${esc(SP.fmtNum(nl))}</b><span>${esc(t('stkLow'))}</span></button>
+          <button type="button" class="sa-num out${no ? '' : ' zero'}" data-goto="out"><b class="num">${esc(SP.fmtNum(no))}</b><span>${esc(t('stkOut'))}</span></button></div>
+        ${L.length ? `<ul class="sa-list">${L.slice(0, 6).map(p => `<li><button type="button" class="sa-row" data-low="${esc(p.id)}"${edit ? '' : ' disabled'}>
+            <span class="sa-left"><small>${esc(t('stkLeft'))}</small><b class="num">${esc(SP.fmtNum(p.qty))}</b></span>
+            <span class="ar-main"><b>${esc(p.title)}</b><small>${[p.sku || p.part_no, p.branch_name].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small>
+              <span class="sa-bar" aria-hidden="true"><i style="width:${Math.max(8, Math.round(100 * p.qty / Math.max(1, low)))}%"></i></span></span>${edit ? I('plus', 'sa-add') : ''}</button></li>`).join('')}</ul>` : ''}
+        <p class="sa-foot"><span>${esc(t('stkLowWhat', { n: SP.fmtNum(low) }))}${edit && L.length ? ' · ' + esc(t('stkTapAdd')) : ''}</span>${nl > 6 ? `<button type="button" class="linkbtn" data-goto="low">${esc(t('stkLowSee', { n: SP.fmtNum(nl) }))}</button>` : ''}</p>
+        ${no ? `<p class="sa-out">${I('box')}<span>${esc(t('stkOutNames', { l: O.slice(0, 4).map(p => p.title).join('، ') + (no > 4 ? ' ' + t('stkAndMore', { n: SP.fmtNum(no - Math.min(4, O.length)) }) : '') }))}</span>
+          <button type="button" class="linkbtn" data-goto="out">${esc(t('stkOutSee'))}</button></p>` : ''}</section>`;
+      $$('[data-goto]', $('#slow')).forEach(b => b.onclick = () => { S.stkF = b.dataset.goto; S.stkJump = true; SP.render(); });
+      $$('[data-low]', $('#slow')).forEach(b => b.onclick = () => { const p = L.find(x => x.id === b.dataset.low); if (p && edit) adjustSheet(p, () => SP.render(), 'in'); });
+    };
     const drawSummary = s => {
       low = s.low_level != null ? +s.low_level : 3;
       $('#ssum').innerHTML = `<div class="astats">${stat('stkParts', SP.fmtNum(s.parts || 0))}${stat('stkUnits', SP.fmtNum(s.units || 0))}${costs ? stat('stkValueCost', money(s.value_cost)) : ''}${stat('stkValuePrice', money(s.value_price))}</div>
@@ -201,7 +222,11 @@
     };
     await SP.pager(n, $('#sll'), $('#more'), async off => {
       const r = await rpc('stock_report', { p_q: S.stkQ || null, p_filter: S.stkF, p_limit: 50, p_offset: off });
-      if (!off) { drawSummary(r.summary || {}); drawMoves(r.moves || []); }
+      if (!off) {
+        drawSummary(r.summary || {}); drawLow(r.summary || {}, r.low_items || [], r.out_items || []); drawMoves(r.moves || []);
+        /* a number tapped at the top: the list below, on that filter */
+        if (S.stkJump) { S.stkJump = false; setTimeout(() => { const c = $('[data-f="' + S.stkF + '"]'); if (c) c.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); }, 60); }
+      }
       items.push(...r.items);
       return { items: r.items, total: +r.total || 0 };
     }, list => list.map(row).join(''), (r, first) => { if (first && !r.total) $('#sll').innerHTML = empty('box', t('stkEmpty')); });
