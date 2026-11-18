@@ -97,7 +97,15 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('#lkreg'); await page.waitForTimeout(900); await see('.sysp:not(.masked)');
     must(await page.locator('#spe.shut').count() === 0, 'none on this phone yet: «فعّل Face ID» sets it up and shows the numbers');
     log('the closed eye on the owner\'s windows: a tap hides the numbers; the shut eye asks for Face ID (set up here when the phone has none) and shows them');
-    // ----- entering the System: Face ID once, straight from the tap on the tab -----
+    // ----- entering the System. A computer opens it straight away unless Face ID (Windows Hello…) is turned on for it there:
+    // asking a shop's PC with no passkey for this site stopped the System. A phone asks by default (checked at the end). -----
+    await page.reload(); await page.waitForTimeout(1200);
+    await go('pos'); await see('#pq');
+    must(await page.locator('.lock-card.entry').count() === 0, 'a computer: the System opens straight away');
+    await go('mine'); await see('#biosys', 8000);
+    must(await page.locator('#biosys:checked').count() === 0, 'a computer: off unless turned on there');
+    await page.click('.bio-sys'); await page.waitForTimeout(300);
+    log('a computer opens the System straight away; Face ID for it is turned on from the account page');
     await page.reload(); await page.waitForTimeout(1200);
     await go('pos'); await see('.lock-card.entry');
     must(/افتح المنظومة/.test(await text('.lock-card h2')) && await page.locator('#tabs').count() === 1, 'reopened: the System asks for Face ID, its pages too');
@@ -140,6 +148,10 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.reload(); await page.waitForTimeout(1200); await go('system'); await see('.sysp'); await page.waitForTimeout(300);
     must(await page.locator('.sysp.masked').count() === 0 && await page.locator('.lock-card').count() === 0, 'shown straight away');
     log('«خليها ظاهرة» in the account page: the numbers show straight away; and with Face ID for the System off, it opens without it');
+    must(await db(() => { localStorage.removeItem('sp_sys_entry_on'); localStorage.removeItem('sp_sys_entry_off'); const pc = window.SP.sysEntry.on();
+      Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
+      return !pc && window.SP.sysEntry.on(); }), 'left as it comes: a computer opens straight away, a phone asks for Face ID');
+    log('left as it comes: a computer opens the System straight away, a phone asks for Face ID');
     if (errors.length) throw new Error('page errors:\n' + errors.join('\n'));
     console.log('\nALL ' + step + ' SYSTEM CHECKS PASSED');
   } catch (e) {

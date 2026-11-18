@@ -33,14 +33,14 @@
     lkWrongPw: ["كلمة السر غلط.", "Wrong password."], lkCardT: ["أرقام المنظومة مخفية", "The system’s numbers hide"],
     lkCardOn: ["الأرباح والرصيد والحسابات تتخبى على التليفون هذا لين تفتحها بـ {b}.", "Profits, balances and accounts hide on this phone until you open them with {b}."],
     lkOff: ["خليها ظاهرة", "Keep them shown"], lkDone: ["تمام: تفتح الأرقام بـ {b}", "Done: you open the numbers with {b}"],
-    lkOffDone: ["الأرقام ظاهرة ديما", "The numbers always show"], lkReg: ["فعّل {b} للتليفون هذا", "Set up {b} on this phone"],
+    lkOffDone: ["الأرقام ظاهرة ديما", "The numbers always show"], lkReg: ["فعّل {b} للجهاز هذا", "Set up {b} on this device"],
     eyeHide: ["اخفي الأرقام", "Hide the numbers"], eyeShow: ["اظهر الأرقام", "Show the numbers"],
     eyeHidden: ["تخبّت الأرقام. تفتحها بـ {b} من العين.", "Numbers hidden. Open them with {b} from the eye."], eyeTap: ["اضغط على العين باش تشوف الأرقام", "Tap the eye to see the numbers"],
     /* entering the System */
     enT: ["افتح المنظومة", "Open the system"], enB: ["المنظومة تفتح بـ {b}، باش محد غيرك يدخلها من تليفونك.", "The system opens with {b}, so nobody else gets into it from your phone."],
     enPwT: ["افتح المنظومة بكلمة السر", "Open the system with the password"], enDone: ["تمام: المنظومة تفتح بـ {b}", "Done: the system opens with {b}"],
     enSw: ["اطلب {b} لما تفتح المنظومة", "Ask for {b} to open the system"], enSwH: ["مرة وحدة، وتقعد مفتوحة لين تطلع من التطبيق أكثر من دقيقة.", "Once; it stays open until you leave the app for over a minute."],
-    enSwOn: ["المنظومة تفتح بـ {b} على التليفون هذا", "The system opens with {b} on this phone"], enSwOff: ["المنظومة تفتح من غير {b} على التليفون هذا", "The system opens without {b} on this phone"]
+    enSwOn: ["المنظومة تفتح بـ {b} على الجهاز هذا", "The system opens with {b} on this device"], enSwOff: ["المنظومة تفتح من غير {b} على الجهاز هذا", "The system opens without {b} on this device"]
   });
 
   const BK = () => SP.bk;
@@ -166,11 +166,19 @@
     bioAsked = true;
     SP.passkeyReady().then(ok => { bio = !!ok; if (!ok) { if (staffer() && ENTRY.test(SP.here())) SP.render(); } else warm(); });
   }
-  const entryOff = () => { const l = SP.load(ENTRY_OFF, []); return !!(S.user && Array.isArray(l) && l.includes(S.user.id)); };
-  SP.sysLocked = () => staffer() && bio !== false && !entryOff() && !entryAt;
+  /* a phone or a tablet (Face ID, a fingerprint) asks unless turned off there; a computer only when turned on there: Windows
+     Hello with no passkey for this site stood in the way of a shop's PC. Kept per account on each device. */
+  const ENTRY_ON = 'sp_sys_entry_on';
+  const phone = () => { const ua = navigator.userAgent || ''; return /Android|iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); };
+  const listed = k => { const l = SP.load(k, []); return !!(S.user && Array.isArray(l) && l.includes(S.user.id)); };
+  const entryWanted = () => listed(ENTRY_ON) || (!listed(ENTRY_OFF) && phone());
+  SP.sysLocked = () => staffer() && bio !== false && entryWanted() && !entryAt;
   SP.sysEntry = {
-    on: () => !entryOff(),
-    set: on => { const l = (SP.load(ENTRY_OFF, []) || []).filter(x => x !== S.user.id); if (!on) l.push(S.user.id); SP.store(ENTRY_OFF, l.length ? l : null); }
+    on: () => entryWanted(),
+    set: on => {
+      const id = S.user.id, put = (k, yes) => { const l = (SP.load(k, []) || []).filter(x => x !== id); if (yes) l.push(id); SP.store(k, l.length ? l : null); };
+      put(ENTRY_ON, on); put(ENTRY_OFF, !on);
+    }
   };
   /* a sign-in (password, code, Face ID on the sign-in page) is the check itself; signing out closes it */
   ['signIn', 'signUp', 'otpCheck'].forEach(k => { const f = SP.auth && SP.auth[k]; if (typeof f === 'function') SP.auth[k] = async (...a) => { const r = await f.apply(SP.auth, a); entryAt = Date.now(); return r; }; });
