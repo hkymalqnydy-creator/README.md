@@ -1,0 +1,106 @@
+// Some of the parts back from a sale («رجّع قطع»: the stock, the invoice, the money), and an app order prepared with what is on
+// the shelf (the warehouse sets how many of each, the customer gets the rest and sees what was not found).
+const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
+const fs = require('fs'), path = require('path');
+fs.mkdirSync(path.join(__dirname, 'shots'), { recursive: true });
+const ROOT = path.resolve(__dirname, '../..'), SITE = process.env.SITE || ROOT, ORIGIN = 'https://crossky.test/';
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.jpg': 'image/jpeg' };
+const ADS = JSON.parse(fs.readFileSync(path.join(ROOT, 'branding/crossky/ads.json'), 'utf8')).map(a => Object.fromEntries(Object.entries(a).filter(([k]) => !k.startsWith('_'))));
+const EXTRA = JSON.parse(fs.readFileSync(path.join(ROOT, 'branding/crossky/demo.json'), 'utf8'));
+const CONFIG = `window.SPARAT_CONFIG={mode:'company',appName:'CROSSKY',demo:true,demoEmail:'owner@crossky.ly',defaultCountry:'LY',noServiceWorker:true,skin:'royal',siteUrl:'https://crossky.test/',demoAds:${JSON.stringify(ADS)},demoExtra:${JSON.stringify(EXTRA)}};`;
+const errors = []; let step = 0;
+const log = s => console.log(`${++step}. ${s}`);
+(async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--no-sandbox'] });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'ar-LY', serviceWorkers: 'block' });
+  await ctx.route('**/*', async route => {
+    const u = new URL(route.request().url());
+    if (u.origin + '/' !== ORIGIN) return route.abort();
+    const p = u.pathname === '/' ? '/index.html' : decodeURIComponent(u.pathname);
+    if (p === '/config.js' && !process.env.SITE) return route.fulfill({ contentType: 'text/javascript', body: CONFIG });
+    const f = path.join(SITE, p);
+    return fs.existsSync(f) ? route.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }) : route.fulfill({ status: 404, body: '' });
+  });
+  const page = await ctx.newPage();
+  page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+  page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource|net::ERR/.test(m.text())) errors.push('console: ' + m.text()); });
+  const shot = n => page.screenshot({ path: path.join(__dirname, 'shots', 'ret-' + n + '.png') });
+  const see = (sel, ms) => page.locator(sel).first().waitFor({ state: 'visible', timeout: ms || 6000 });
+  const text = async sel => (await page.locator(sel).first().innerText()).trim();
+  const must = (c, m) => { if (!c) throw new Error('assert: ' + m); };
+  const go = async h => { await page.evaluate(x => { location.hash = x; }, h); await page.waitForTimeout(450); };
+  const db = (f, a) => page.evaluate(f, a);
+  const out = async () => { await go('mine'); if (await page.locator('#lo').count()) { await page.click('#lo'); await page.waitForTimeout(400); } };
+  const signIn = async (by, who) => { await out(); await go('login'); await see('#ap'); await page.click(`[data-by="${by}"]`); await page.fill(by === 'phone' ? '#alp' : '#ae', who); await page.fill('#ap', '123456'); await page.click('#ago'); await page.waitForURL(/#mine/); };
+  const toast = async re => { for (let i = 0; i < 40; i++) { const tx = await page.locator('.toast').allInnerTexts().catch(() => []); if (tx.some(x => re.test(x))) return true; await page.waitForTimeout(100); } return false; };
+  const qty = sku => db(s => { const p = window.__mockdb.products.find(x => x.sku === s); return p && p.qty; }, sku);
+  try {
+    await page.goto(ORIGIN); await page.waitForTimeout(1200);
+    await signIn('email', 'owner@crossky.ly');
+    // a cash sale of two parts, 3 + 1, with something off
+    const ps = await db(() => window.__mockdb.products.filter(p => p.qty != null && p.qty >= 4 && p.price > 0 && p.sku).slice(0, 2).map(p => ({ id: p.id, sku: p.sku, price: p.price })));
+    must(ps.length === 2, 'two parts in stock');
+    const q0 = await qty(ps[0].sku);
+    const inv = await db(async x => (await window.SP.sb.rpc('create_invoice', { p: { payment: 'cash', discount: 2, customer_name: 'محل الريان', items: [{ id: x[0].id, qty: 3 }, { id: x[1].id, qty: 1 }] } })).data, ps);
+    await go('inv-' + inv.id); await see('#iretp');
+    await page.click('#iretp'); await see('.ir-line');
+    must(await page.locator('.ir-line').count() === 2 && await page.locator('#irgo').isDisabled(), 'the sheet: each part with its count, nothing picked yet');
+    await page.locator('.ir-line').first().locator('[data-d="1"]').click(); await page.waitForTimeout(150);
+    const sum = await text('#irs');
+    must(/ترجع/.test(sum) && /ترجّعله/.test(sum), 'what it is worth and what goes back: ' + sum);
+    await page.fill('#irr', 'تالفة'); await shot('01-sheet');
+    await page.click('#irgo'); must(await toast(/رجعت .* للمخزن/), 'returned');
+    await see('.inv-rets');
+    must((await text('.inv-items')).includes('رجعت 1') && (await text('.inv-rets')).includes('تالفة'), 'the invoice: the line says one came back, and the return with its reason');
+    must(await qty(ps[0].sku) === q0 - 2, 'one back in stock: ' + (await qty(ps[0].sku)) + ' vs ' + (q0 - 2));
+    const v1 = await db(id => window.__mockdb.invoices.find(v => v.id === id), inv.id);
+    must(v1.status === 'done' && Math.abs(v1.total - (ps[0].price * 2 + ps[1].price - Math.round(2 * (ps[0].price * 2 + ps[1].price) / (ps[0].price * 3 + ps[1].price) * 100) / 100)) < 0.011 && v1.paid === v1.total && v1.refunded > 0, 'the money: the discount shrinks with it, the rest given back');
+    await shot('02-invoice');
+    log('«رجّع قطع»: one of three back with a reason; the part in stock, the invoice says «رجعت 1», its discount and the money put right');
+    await go('invoices'); await page.waitForTimeout(700);
+    must((await page.locator('.inv-row').first().innerText()).includes('رجعت 1'), 'the invoices list says it');
+    await go('inv-' + inv.id); await see('#iretp'); await page.click('#iretp'); await see('#irall');
+    await page.click('#irall'); await page.waitForTimeout(150);
+    must(/ترجع كاملة/.test(await text('#irs')), 'all of what is left: the whole invoice');
+    await page.click('#irgo'); await see('.inv-stamp');
+    must(await qty(ps[0].sku) === q0 && await db(id => window.__mockdb.invoices.find(v => v.id === id).status, inv.id) === 'returned', 'returned whole, everything back');
+    log('the list says «رجعت 1»; «الكل» returns what is left: the whole invoice');
+    // an app order from the demo merchant, prepared with what is on the shelf
+    await signIn('phone', '0925551234');
+    const o = await db(async x => (await window.SP.sb.rpc('place_order', { p: { items: [{ id: x[0].id, qty: 2 }, { id: x[1].id, qty: 1 }] } })).data, ps);
+    must(o && o.status === 'preparing', 'the order is in');
+    await signIn('email', 'store@crossky.ly');
+    await go('pick-' + o.id); await see('.pk-av');
+    must(/التطبيق/.test(await text('.pk-head')) && await page.locator('.pk-av').count() === 2, 'an app order: «الموجود» on each line');
+    const L = page.locator('.pk-line');
+    const first = await db(id => { const its = window.__mockdb.invoice_items.filter(i => i.invoice_id === id); return its.find(i => i.qty === 2).id; }, o.id);
+    await page.locator(`[data-av="${first}"][data-d="-1"]`).click(); await page.waitForTimeout(150);
+    const second = await db(id => window.__mockdb.invoice_items.find(i => i.invoice_id === id && i.qty === 1).id, o.id);
+    await page.locator(`[data-av="${second}"][data-d="-1"]`).click(); await page.waitForTimeout(150);
+    must(/ناقصة 1/.test(await L.filter({ has: page.locator(`[data-av="${first}"]`) }).innerText()) && /مش موجودة/.test(await L.filter({ has: page.locator(`[data-av="${second}"]`) }).innerText()), 'one short, one not on the shelf');
+    await shot('03-shelf');
+    await page.click('#pkdone'); await see('[data-ok]');
+    must(/ناقص/.test(await text('.sheet')), 'it says what is short');
+    await page.click('[data-ok]'); must(await toast(/تبعت للزبون/), 'sent'); await page.waitForURL(/#picks$/);
+    const ov = await db(id => window.__mockdb.invoices.find(v => v.id === id), o.id);
+    must(ov.status === 'ready' && Math.abs(ov.total - ps[0].price) < 0.011, 'the order: ready, with what was found: ' + ov.status + ' ' + ov.total);
+    log('يوسف: «الموجود» on each line of the app order, one short and one not there; «جهّز وابعثه للزبون» sends it ready with what was found');
+    await signIn('phone', '0925551234');
+    await go('order-' + o.id); await see('.olines');
+    must(/جهزنالك الموجود/.test(await text('main')) && (await text('.olines')).includes('ما لقيناش 1'), 'the customer sees what was not found');
+    await shot('04-customer');
+    log('the customer: his order «قيد الاستلام» with «جهزنالك الموجود» and what was not found');
+    await signIn('email', 'owner@crossky.ly');
+    await go('admin-log'); await page.waitForTimeout(600);
+    const lg = await text('main');
+    must(lg.includes('رجّع 1 قطعة من الفاتورة ' + inv.no) && lg.includes('جهّز الفاتورة ' + o.no + ' · ناقصة 2'), 'the activity log has both');
+    log('the owner\'s activity log: «رجّع 1 قطعة من الفاتورة …» and «جهّز الفاتورة … · ناقصة 2»');
+    if (errors.length) throw new Error('page errors:\n' + errors.join('\n'));
+    console.log('\nALL ' + step + ' RETURNS CHECKS PASSED');
+  } catch (e) {
+    console.error('FAILED at step ' + (step + 1) + ': ' + e.message);
+    if (errors.length) console.error(errors.join('\n'));
+    await shot('zz-fail').catch(() => {});
+    process.exitCode = 1;
+  } finally { await browser.close(); }
+})();

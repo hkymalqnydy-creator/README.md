@@ -765,6 +765,17 @@ create table if not exists public.invoice_items (
 );
 create index if not exists invoice_items_inv_idx on public.invoice_items (invoice_id);
 alter table public.invoice_items add column if not exists maker text not null default '' check (char_length(maker) <= 60);
+-- some of the parts returned (return_items, below): the line keeps what stays sold in qty and counts what came back in returned;
+-- an app order's line counts in short what was not on the shelf (pick_done, section 18). A line may end at 0.
+alter table public.invoice_items add column if not exists returned integer not null default 0 check (returned >= 0);
+alter table public.invoice_items add column if not exists short    integer not null default 0 check (short >= 0);
+do $$ declare c text; begin
+  for c in select conname from pg_constraint where conrelid = 'public.invoice_items'::regclass and contype = 'c' and pg_get_constraintdef(oid) ~ 'qty > 0' loop
+    execute format('alter table public.invoice_items drop constraint %I', c);
+  end loop;
+end $$;
+alter table public.invoice_items drop constraint if exists invoice_items_qty_nonneg;
+alter table public.invoice_items add constraint invoice_items_qty_nonneg check (qty >= 0);
 -- customer orders from the app (section 15): an invoice «قيد التجهيز» → «قيد الاستلام» → «تم الاستلام», or «ملغي»
 alter table public.invoices drop constraint if exists invoices_status_check;
 alter table public.invoices add constraint invoices_status_check check (status in ('done', 'returned', 'preparing', 'ready', 'cancelled'));
@@ -783,6 +794,23 @@ alter table public.invoices add column if not exists sent_at timestamptz;
 create index if not exists invoices_orders_idx on public.invoices (status, ordered_at) where source = 'app';
 create index if not exists invoices_sent_idx on public.invoices (customer_id, sent_at desc) where sent_at is not null;
 create index if not exists invoices_customer_idx on public.invoices (customer_id, created_at desc) where customer_id is not null;
+-- the money given back for parts returned from a sale that stays a sale (paid is what the customer has paid net of it)
+alter table public.invoices add column if not exists refunded numeric(12,2) not null default 0;
+-- each time parts come back from a sale: what they were worth on the invoice, the money given back, and who did it
+create table if not exists public.invoice_returns (
+  id         bigserial primary key,
+  invoice_id uuid not null references public.invoices(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  staff_id   uuid references auth.users(id) on delete set null,
+  staff_name text not null default '',
+  amount     numeric(12,2) not null default 0,
+  refund     numeric(12,2) not null default 0,
+  reason     text not null default '' check (char_length(reason) <= 200),
+  lines      jsonb not null default '[]'::jsonb
+);
+create index if not exists invoice_returns_inv_idx on public.invoice_returns (invoice_id);
+create index if not exists invoice_returns_at_idx on public.invoice_returns (created_at);
+alter table public.invoice_returns enable row level security;
 alter table public.invoices enable row level security;
 alter table public.invoice_items enable row level security;
 drop policy if exists "sparat invoices read" on public.invoices;
@@ -799,7 +827,9 @@ language sql stable security definer set search_path = public as $$
     'merchant', (select jsonb_build_object('user_id', c.user_id, 'shop_name', c.shop_name, 'name', c.name, 'phone', c.phone, 'approved', c.approved)
                  from public.customers c where c.user_id = i.customer_id),
     'items', coalesce((select jsonb_agg((to_jsonb(it) - 'cost') || case when public.has_perm('costs') then jsonb_build_object('cost', it.cost) else '{}'::jsonb end order by it.id)
-                       from public.invoice_items it where it.invoice_id = i.id), '[]'::jsonb))
+                       from public.invoice_items it where it.invoice_id = i.id), '[]'::jsonb),
+    -- parts returned from it, each time (return_items)
+    'returns', coalesce((select jsonb_agg(to_jsonb(r) - 'staff_id' - 'invoice_id' order by r.created_at) from public.invoice_returns r where r.invoice_id = i.id), '[]'::jsonb))
   from public.invoices i
   where i.id = p_id and auth.uid() is not null and (public.has_perm('invoices') or i.staff_id = auth.uid() or (i.source = 'app' and public.has_perm('sales')));
 $$;
@@ -885,11 +915,58 @@ begin
   return public.get_invoice(p_id);
 end $$;
 
+-- some of the parts come back: [{id: line, qty}]. They go back to stock, the invoice keeps what stays sold, its discount shrinks
+-- with it, and the customer gets back what he paid over the new total (a sale on credit owes less instead). All of what is left
+-- coming back is the whole invoice returned (return_invoice).
+create or replace function public.return_items(p_invoice uuid, p_lines jsonb, p_reason text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v public.invoices; r record; v_it public.invoice_items; v_take jsonb; v_back jsonb := '[]'::jsonb; v_units integer := 0; v_left integer;
+        v_sub numeric; v_disc numeric; v_total numeric; v_refund numeric;
+begin
+  if not public.has_perm('returns') then raise exception 'not authorized' using errcode = '42501'; end if;
+  select * into v from public.invoices where id = p_invoice for update;
+  if v.id is null then raise exception 'invoice not found' using errcode = 'P0001'; end if;
+  if v.status = 'returned' then raise exception 'invoice already returned' using errcode = 'P0001'; end if;
+  if v.status <> 'done' then raise exception 'order not received yet' using errcode = 'P0001'; end if;
+  if jsonb_typeof(p_lines) is distinct from 'array' or jsonb_array_length(p_lines) > 200 then raise exception 'pick the parts to return' using errcode = '22023'; end if;
+  -- the lines asked for, each once with its count
+  v_take := coalesce((select jsonb_object_agg(k, n) from (select x->>'id' k, sum(floor(coalesce(public.try_num(x->>'qty'), 0)))::integer n
+                       from jsonb_array_elements(p_lines) x where x->>'id' ~ '^[0-9]{1,18}$' group by 1) a where n <> 0), '{}'::jsonb);
+  if v_take = '{}'::jsonb then raise exception 'pick the parts to return' using errcode = '22023'; end if;
+  for r in select a.key::bigint id, a.value::integer n, it.qty, it.title from jsonb_each_text(v_take) a
+           left join public.invoice_items it on it.id = a.key::bigint and it.invoice_id = v.id loop
+    if r.qty is null then raise exception 'line not on this invoice' using errcode = 'P0001'; end if;
+    if r.n < 1 or r.n > r.qty then raise exception 'bad quantity: % (on the invoice %)', r.title, r.qty using errcode = '22023'; end if;
+  end loop;
+  -- everything still on it: the whole invoice
+  select count(*) into v_left from public.invoice_items it where it.invoice_id = v.id and it.qty > coalesce((v_take->>(it.id::text))::integer, 0);
+  if v_left = 0 then return public.return_invoice(v.id); end if;
+  perform set_config('sparat.ctx', 'return', true);
+  for r in select a.key::bigint id, a.value::integer n from jsonb_each_text(v_take) a order by 1 loop
+    update public.invoice_items set qty = qty - r.n, returned = returned + r.n, line_total = price * (qty - r.n) where id = r.id returning * into v_it;
+    update public.products p set qty = p.qty + r.n, status = case when p.qty + r.n > 0 then 'active' else p.status end
+     where p.id = v_it.product_id and p.qty is not null;
+    v_back := v_back || jsonb_build_object('id', v_it.id, 'title', v_it.title, 'sku', v_it.sku, 'maker', v_it.maker, 'qty', r.n, 'price', v_it.price);
+    v_units := v_units + r.n;
+  end loop;
+  select coalesce(sum(line_total), 0) into v_sub from public.invoice_items where invoice_id = v.id;
+  v_disc := case when v.subtotal > 0 then round(v.discount * v_sub / v.subtotal, 2) else 0 end;
+  v_total := v_sub - v_disc;
+  v_refund := greatest(v.paid - v_total, 0);
+  update public.invoices set subtotal = v_sub, discount = v_disc, total = v_total, paid = v.paid - v_refund, refunded = refunded + v_refund where id = v.id;
+  insert into public.invoice_returns (invoice_id, staff_id, staff_name, amount, refund, reason, lines)
+  values (v.id, auth.uid(), coalesce(public.me_name(), ''), v.total - v_total, v_refund, left(btrim(coalesce(p_reason, '')), 200), v_back);
+  perform public.log_act('return_part', v.id::text, nullif(btrim(v.customer_name), ''), v.total - v_total,
+    jsonb_build_object('no', v.no, 'units', v_units, 'refund', v_refund, 'lines', v_back, 'reason', left(btrim(coalesce(p_reason, '')), 200)));
+  return public.get_invoice(v.id);
+end $$;
+
 create or replace function public.list_invoices(p_from timestamptz default null, p_to timestamptz default null, p_branch uuid default null,
                                                 p_q text default null, p_limit integer default 30, p_offset integer default 0)
 returns setof jsonb language sql stable security definer set search_path = public as $$
   select to_jsonb(i) || jsonb_build_object('branch_name', s.name,
-           'items_count', (select coalesce(sum(qty), 0) from public.invoice_items where invoice_id = i.id), 'total_count', count(*) over ())
+           'items_count', (select coalesce(sum(qty), 0) from public.invoice_items where invoice_id = i.id),
+           'returned_units', (select coalesce(sum(returned), 0) from public.invoice_items where invoice_id = i.id), 'total_count', count(*) over ())
   from public.invoices i left join public.shops s on s.id = i.branch_id
   where auth.uid() is not null and (public.has_perm('invoices') or i.staff_id = auth.uid())
     and (p_from is null or i.created_at >= p_from) and (p_to is null or i.created_at < p_to)
@@ -911,14 +988,15 @@ begin
     'total', coalesce((select sum(total) from inv), 0),
     'discount', coalesce((select sum(discount) from inv), 0),
     'credit', coalesce((select sum(total - paid) from inv where payment = 'credit'), 0),
-    'returned', (select count(*) from public.invoices i where i.status = 'returned' and i.returned_at >= p_from and i.returned_at < p_to and (p_branch is null or i.branch_id = p_branch)),
+    'returned', (select count(*) from public.invoices i where i.status = 'returned' and i.returned_at >= p_from and i.returned_at < p_to and (p_branch is null or i.branch_id = p_branch))
+              + (select count(*) from public.invoice_returns r join public.invoices i on i.id = r.invoice_id where r.created_at >= p_from and r.created_at < p_to and (p_branch is null or i.branch_id = p_branch)),
     'by_payment', coalesce((select jsonb_object_agg(payment, s) from (select payment, sum(total) as s from inv group by payment) t), '{}'::jsonb),
     'by_staff', coalesce((select jsonb_agg(jsonb_build_object('name', staff_name, 'count', c, 'total', s) order by s desc) from (select staff_name, count(*) as c, sum(total) as s from inv group by staff_name) t), '[]'::jsonb),
     'by_branch', coalesce((select jsonb_agg(jsonb_build_object('name', coalesce(sh.name, '—'), 'count', t.c, 'total', t.s) order by t.s desc)
                            from (select branch_id, count(*) as c, sum(total) as s from inv group by branch_id) t left join public.shops sh on sh.id = t.branch_id), '[]'::jsonb),
     'by_day', coalesce((select jsonb_agg(jsonb_build_object('day', d, 'total', s) order by d) from (select (created_at at time zone p_tz)::date as d, sum(total) as s from inv group by 1) t), '[]'::jsonb),
     'top', coalesce((select jsonb_agg(jsonb_build_object('title', title, 'qty', q, 'total', s) order by q desc)
-                     from (select title, sum(qty) as q, sum(line_total) as s from items group by title order by sum(qty) desc limit 10) t), '[]'::jsonb),
+                     from (select title, sum(qty) as q, sum(line_total) as s from items group by title having sum(qty) > 0 order by sum(qty) desc limit 10) t), '[]'::jsonb),
     'profit', case when v_costs then coalesce((select sum(line_total - coalesce(cost, 0) * qty) from items), 0) - coalesce((select sum(discount) from inv), 0) end,
     'cost_missing', case when v_costs then (select count(*) from items where cost is null) end
   ) into r;
@@ -931,6 +1009,7 @@ grant execute on function public.delete_staff(uuid) to authenticated;
 grant execute on function public.get_invoice(uuid) to authenticated;
 grant execute on function public.create_invoice(jsonb) to authenticated;
 grant execute on function public.return_invoice(uuid) to authenticated;
+grant execute on function public.return_items(uuid, jsonb, text) to authenticated;
 grant execute on function public.list_invoices(timestamptz, timestamptz, uuid, text, integer, integer) to authenticated;
 grant execute on function public.sales_report(timestamptz, timestamptz, uuid, text) to authenticated;
 grant select on public.staff, public.invoices, public.invoice_items to authenticated;
@@ -1410,6 +1489,11 @@ begin
        ex as (select * from public.expenses e where e.spent_on >= v_d0 and e.spent_on < v_d1 and (p_branch is null or e.branch_id = p_branch)),
        mv as (select * from public.stock_moves m where m.created_at >= p_from and m.created_at < p_to and (p_branch is null or m.branch_id = p_branch)),
        ret as (select * from public.invoices i where i.status = 'returned' and i.returned_at >= p_from and i.returned_at < p_to and (p_branch is null or i.branch_id = p_branch)),
+       -- parts returned from sales that stay sales (return_items)
+       rp as (select r.* from public.invoice_returns r join public.invoices i on i.id = r.invoice_id
+              where r.created_at >= p_from and r.created_at < p_to and (p_branch is null or i.branch_id = p_branch)),
+       -- what customers paid at the sales of the period, the ones returned since too: the money did come in then
+       sold as (select * from public.invoices i where i.status in ('done', 'returned') and i.created_at >= p_from and i.created_at < p_to and (p_branch is null or i.branch_id = p_branch)),
        -- the money that came in and went out in the period (the System tab's «الرصيد الكلي»)
        pu as (select * from public.purchases p where p.created_at >= p_from and p.created_at < p_to and (p_branch is null or p.branch_id = p_branch)),
        cpay as (select * from public.customer_payments c where c.created_at >= p_from and c.created_at < p_to),
@@ -1430,16 +1514,16 @@ begin
     'by_cat', coalesce((select jsonb_object_agg(cat, s) from (select cat, sum(amount) as s from ex group by cat) t), '{}'::jsonb),
     'stock_adj', coalesce((select sum(qty * coalesce(cost, 0)) from mv), 0),
     'stock_by_reason', coalesce((select jsonb_object_agg(reason, s) from (select reason, sum(qty * coalesce(cost, 0)) as s from mv group by reason) t), '{}'::jsonb),
-    'returned_count', (select count(*) from ret), 'returned_total', coalesce((select sum(total) from ret), 0),
+    'returned_count', (select count(*) from ret) + (select count(*) from rp), 'returned_total', coalesce((select sum(total) from ret), 0) + coalesce((select sum(amount) from rp), 0),
     'by_staff', coalesce((select jsonb_agg(jsonb_build_object('name', name, 'count', n, 'total', s, 'profit', s - c) order by s desc, name)
                  from (select coalesce(nullif(inv.staff_name, ''), '—') as name, count(*) as n, sum(inv.total) as s, sum(coalesce(ci.c, 0)) as c
                        from inv left join ci on ci.invoice_id = inv.id group by 1) t), '[]'::jsonb),
     'receivable', coalesce((select sum(bal) from cb where bal > 0), 0),
     'payable', coalesce((select sum(bal) from sb where bal > 0), 0),
     -- in: what was paid at the sale and the customers' payments; out: purchases paid, payments to suppliers, expenses, refunds
-    'cash_in', coalesce((select sum(paid) from inv), 0) + coalesce((select sum(amount) from cpay), 0),
+    'cash_in', coalesce((select sum(paid + refunded) from sold), 0) + coalesce((select sum(amount) from cpay), 0),
     'cash_out', coalesce((select sum(coalesce(paid, total)) from pu), 0) + coalesce((select sum(amount) from spay), 0)
-                + coalesce((select sum(amount) from ex), 0) + coalesce((select sum(paid) from ret), 0)
+                + coalesce((select sum(amount) from ex), 0) + coalesce((select sum(paid) from ret), 0) + coalesce((select sum(refund) from rp), 0)
   ) into r;
   return r || jsonb_build_object('gross', (r->>'sales')::numeric - (r->>'cogs')::numeric,
                                  'net', (r->>'sales')::numeric - (r->>'cogs')::numeric - (r->>'expenses')::numeric + (r->>'stock_adj')::numeric);
@@ -1586,7 +1670,7 @@ begin
       and (p_actor is null or a.actor_id = p_actor)
       and (v_q is null or public.norm_ar(a.title) like '%' || public.norm_ar(v_q) || '%' or a.detail->>'no' = v_q or public.norm_ar(a.actor_name) like '%' || public.norm_ar(v_q) || '%')
       and (p_group is null or case p_group
-            when 'sales'  then a.kind in ('sale', 'return', 'order', 'order_ready', 'order_done', 'order_cancelled')
+            when 'sales'  then a.kind in ('sale', 'return', 'return_part', 'order', 'order_ready', 'order_done', 'order_cancelled', 'picked')
             when 'stock'  then a.kind in ('receive', 'receipt_undo', 'stock', 'product_add', 'product_del', 'sync', 'import')
                                or (a.kind = 'product_edit' and (a.detail ? 'qty' or a.detail ? 'title' or a.detail ? 'status'))
             when 'prices' then a.kind in ('bulk_price', 'bulk_undo') or (a.kind = 'product_edit' and (a.detail ? 'price' or a.detail ? 'cost' or a.detail ? 'hide_price'))
@@ -1881,7 +1965,7 @@ language sql stable security definer set search_path = public as $$
            'total', case when v.ok and not exists (select 1 from public.invoice_items it join public.products p on p.id = it.product_id where it.invoice_id = o.id and p.hide_price)
                          or public.is_staff() then o.total end,
            'branch', (select jsonb_build_object('id', s.id, 'name', s.name, 'city', s.city, 'area', s.area, 'phone', s.phone, 'whatsapp', s.whatsapp) from public.shops s where s.id = o.branch_id),
-           'items', coalesce((select jsonb_agg(jsonb_build_object('product_id', it.product_id, 'title', it.title, 'sku', it.sku, 'qty', it.qty,
+           'items', coalesce((select jsonb_agg(jsonb_build_object('product_id', it.product_id, 'title', it.title, 'sku', it.sku, 'qty', it.qty, 'short', it.short, 'returned', it.returned,
                        'price', case when public.is_staff() or (v.ok and not coalesce(p.hide_price, false)) then it.price end,
                        'line_total', case when public.is_staff() or (v.ok and not coalesce(p.hide_price, false)) then it.line_total end) order by it.id)
                      from public.invoice_items it left join public.products p on p.id = it.product_id where it.invoice_id = o.id), '[]'::jsonb))
@@ -2001,7 +2085,8 @@ begin
                  'done_at', case when status in ('done', 'returned') then created_at end, 'customer_name', customer_name, 'customer_phone', customer_phone,
                  'delivery', delivery, 'address', address, 'note', note, 'total', total, 'currency', currency, 'payment', payment, 'staff_name', staff_name,
                  'units', (select coalesce(sum(qty), 0) from public.invoice_items where invoice_id = pick.id),
-                 'lines', (select count(*) from public.invoice_items where invoice_id = pick.id)) j
+                 'lines', (select count(*) from public.invoice_items where invoice_id = pick.id and qty > 0),
+                 'short', (select coalesce(sum(short), 0) from public.invoice_items where invoice_id = pick.id)) j
         from pick order by 1 limit least(greatest(coalesce(p_limit, 30), 1), 100) offset greatest(coalesce(p_offset, 0), 0)) x), '[]'::jsonb)
   ) into r;
   return r;
@@ -2367,11 +2452,12 @@ begin
     select i.id, i.no, i.created_at, i.customer_name, i.staff_name, i.source, i.status, i.note, i.picked_at, i.picked_name, sh.name as branch_name,
            count(*) over () as total_count,
            (select coalesce(sum(it.qty), 0) from public.invoice_items it where it.invoice_id = i.id) as units,
-           (select count(*) from public.invoice_items it where it.invoice_id = i.id and it.picked) as picked_n,
-           (select jsonb_agg(jsonb_build_object('id', it.id, 'title', it.title, 'sku', it.sku, 'maker', it.maker, 'qty', it.qty, 'picked', it.picked,
+           (select count(*) from public.invoice_items it where it.invoice_id = i.id and it.picked and it.qty > 0) as picked_n,
+           (i.source = 'app' and i.status in ('preparing', 'ready')) as can_short,
+           (select jsonb_agg(jsonb_build_object('id', it.id, 'title', it.title, 'sku', it.sku, 'maker', it.maker, 'qty', it.qty, 'short', it.short, 'picked', it.picked,
                    'part_no', p.part_no, 'barcode', p.barcode, 'make', p.make, 'model', p.model, 'location', coalesce(p.location, ''),
                    'img', p.imgs[1], 'stock', p.qty) order by coalesce(nullif(p.location, ''), 'ي'), it.id)
-              from public.invoice_items it left join public.products p on p.id = it.product_id where it.invoice_id = i.id) as lines
+              from public.invoice_items it left join public.products p on p.id = it.product_id where it.invoice_id = i.id and (it.qty > 0 or it.short > 0)) as lines
     from public.invoices i left join public.shops sh on sh.id = i.branch_id
     where i.pick_state = case when v_done then 'done' else 'waiting' end and i.status in ('done', 'preparing', 'ready')
       and (v_b is null or i.branch_id = v_b)
@@ -2389,19 +2475,54 @@ begin
   update public.invoice_items set picked = coalesce(p_on, true) where id = p_item;
   return jsonb_build_object('picked', coalesce(p_on, true), 'left', (select count(*) from public.invoice_items where invoice_id = v_inv and not picked));
 end $$;
-create or replace function public.pick_done(p_invoice uuid) returns jsonb
+-- «تم التجهيز». For an order from the app (not yet received) p_avail = [{id: line, qty: on the shelf}]: what is missing comes off
+-- the order and back to stock, and the order goes to its customer «قيد الاستلام» with what was found; nothing found cancels it.
+drop function if exists public.pick_done(uuid);
+create or replace function public.pick_done(p_invoice uuid, p_avail jsonb default null) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v public.invoices; v_b uuid := public.pick_branch(); v_name text;
+declare v public.invoices; v_b uuid := public.pick_branch(); v_name text; r record; v_short integer := 0; v_sub numeric; v_disc numeric; v_out text := '';
 begin
   if not public.pick_ok() then raise exception 'not authorized' using errcode = '42501'; end if;
   select * into v from public.invoices where id = p_invoice and (v_b is null or branch_id = v_b) for update;
   if v.id is null then raise exception 'invoice not found' using errcode = 'P0001'; end if;
   if v.pick_state is distinct from 'waiting' then raise exception 'invoice not waiting' using errcode = 'P0001'; end if;
   v_name := coalesce(nullif((select name from public.staff where user_id = auth.uid()), ''), (select email from auth.users where id = auth.uid()), '');
-  update public.invoice_items set picked = true where invoice_id = v.id;
+  if v.source = 'app' and v.status in ('preparing', 'ready') then
+    if jsonb_typeof(p_avail) = 'array' then
+      perform set_config('sparat.ctx', 'order', true);
+      for r in select a.id, a.n, it.qty, it.title, it.product_id from (
+                 select (x->>'id')::bigint id, min(floor(coalesce(public.try_num(x->>'qty'), -1)))::integer n
+                 from jsonb_array_elements(p_avail) x where x->>'id' ~ '^[0-9]{1,18}$' group by 1) a
+               left join public.invoice_items it on it.id = a.id and it.invoice_id = v.id loop
+        if r.qty is null then raise exception 'line not on this invoice' using errcode = 'P0001'; end if;
+        if r.n < 0 or r.n > r.qty then raise exception 'bad quantity: % (ordered %)', r.title, r.qty using errcode = '22023'; end if;
+        if r.n < r.qty then
+          update public.invoice_items set short = short + (qty - r.n), qty = r.n, line_total = price * r.n where id = r.id;
+          update public.products p set qty = p.qty + (r.qty - r.n), status = case when p.qty + (r.qty - r.n) > 0 then 'active' else p.status end
+           where p.id = r.product_id and p.qty is not null;
+          v_short := v_short + (r.qty - r.n);
+        end if;
+      end loop;
+      if v_short > 0 then
+        select coalesce(sum(line_total), 0) into v_sub from public.invoice_items where invoice_id = v.id;
+        v_disc := case when v.subtotal > 0 then round(v.discount * v_sub / v.subtotal, 2) else 0 end;
+        update public.invoices set subtotal = v_sub, discount = v_disc, total = v_sub - v_disc where id = v.id;
+      end if;
+    end if;
+    if not exists (select 1 from public.invoice_items where invoice_id = v.id and qty > 0) then
+      update public.invoices set status = 'cancelled', cancelled_at = now(), cancel_reason = 'القطع مش موجودة في المخزن' where id = v.id;
+      v_out := 'cancelled';
+    elsif v.status = 'preparing' then
+      update public.invoices set status = 'ready', ready_at = now() where id = v.id;
+      v_out := 'ready';
+    end if;
+  end if;
+  update public.invoice_items set picked = true where invoice_id = v.id and qty > 0;
   update public.invoices set pick_state = 'done', picked_at = now(), picked_name = left(v_name, 80) where id = v.id;
-  perform public.log_act('picked', v.id::text, nullif(v.customer_name, ''), v.total, jsonb_build_object('no', v.no));
-  return jsonb_build_object('no', v.no);
+  perform public.log_act('picked', v.id::text, nullif(v.customer_name, ''), (select total from public.invoices where id = v.id),
+    jsonb_build_object('no', v.no) || case when v_short > 0 then jsonb_build_object('short', v_short) else '{}'::jsonb end
+      || case when v_out <> '' then jsonb_build_object('order', v_out) else '{}'::jsonb end);
+  return jsonb_build_object('no', v.no, 'short', v_short, 'order', nullif(v_out, ''));
 end $$;
 create or replace function public.pick_waiting() returns integer language sql stable security definer set search_path = public as $$
   select case when public.pick_ok() then (select count(*)::integer from public.invoices i where i.pick_state = 'waiting'
@@ -2410,5 +2531,5 @@ $$;
 revoke execute on function public.pick_branch() from public, anon;
 revoke execute on function public.pick_ok() from public, anon;
 grant execute on function public.pick_branch(), public.pick_ok() to authenticated;
-revoke execute on function public.pick_list(text, integer, integer), public.pick_line(bigint, boolean), public.pick_done(uuid), public.pick_waiting() from public, anon;
-grant execute on function public.pick_list(text, integer, integer), public.pick_line(bigint, boolean), public.pick_done(uuid), public.pick_waiting() to authenticated;
+revoke execute on function public.pick_list(text, integer, integer), public.pick_line(bigint, boolean), public.pick_done(uuid, jsonb), public.pick_waiting() from public, anon;
+grant execute on function public.pick_list(text, integer, integer), public.pick_line(bigint, boolean), public.pick_done(uuid, jsonb), public.pick_waiting() to authenticated;

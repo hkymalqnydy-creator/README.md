@@ -19,7 +19,15 @@
     posNoPrice: ["القطعة بدون سعر: {t}", "This part has no price: {t}"], posBranch: ["الفرع", "Branch"], posClear: ["فاتورة جديدة", "New invoice"], posInStock: ["متوفر {n}", "{n} in stock"],
     posNote: ["ملاحظة", "Note"], posRemove: ["احذف", "Remove"],
     invT: ["فاتورة رقم {n}", "Invoice {n}"], invDate: ["التاريخ", "Date"], invStaff: ["البائع", "Seller"], invPrint: ["طباعة", "Print"], invShare: ["إرسال للزبون", "Send to customer"],
-    invReturn: ["مرتجع", "Return"], invReturned: ["مرتجعة", "Returned"], invReturnQ: ["ترجيع الفاتورة كاملة للمخزون؟", "Return the whole invoice to stock?"],
+    invReturn: ["رجّعها كاملة", "Return it all"], invReturned: ["مرتجعة", "Returned"], invReturnQ: ["ترجيع الفاتورة كاملة للمخزون؟", "Return the whole invoice to stock?"],
+    /* some of the parts back (return_items) */
+    invRetPart: ["رجّع قطع", "Return parts"], irT: ["رجّع قطع من الفاتورة {n}", "Return parts of invoice {n}"],
+    irHint: ["حدد كم ترجع من كل صنف. اللي يرجع يدخل للمخزن، والفاتورة وحسابها يتصلحو وحدهم.", "Pick how many of each come back. They go back to stock, and the invoice and its money are put right."],
+    irAll: ["الكل", "All"], irOn: ["عليها {n}", "{n} on it"], irReason: ["السبب (اختياري)", "Reason (optional)"], irReasonPh: ["مثلاً: تالفة، مش مناسبة للسيارة", "e.g. damaged, wrong for the car"],
+    irPick: ["اختار القطع اللي ترجع", "Pick the parts coming back"], irSum: ["ترجع {u} بـ {m}", "{u} back, worth {m}"], irRefund: ["ترجّعله {m}", "give back {m}"],
+    irOwes: ["ينقص من دينه {m}", "{m} off what he owes"], irAllNote: ["هذي كل القطع: الفاتورة ترجع كاملة.", "That is every part: the whole invoice comes back."],
+    irGo: ["رجّعها", "Return them"], irDone: ["رجعت {u} للمخزن", "{u} back in stock"], irBackN: ["رجعت {n}", "{n} returned"], irShortN: ["ما لقيناش {n}", "{n} not found"],
+    irList: ["المرتجع", "Returned"], irWorth: ["بـ {m}", "worth {m}"], irRefunded: ["رجعله {m}", "{m} given back"], irWhy: ["السبب: {t}", "Reason: {t}"],
     invReturnDone: ["تم المرتجع ورجعت الكميات للمخزون", "Returned; quantities are back in stock"], invList: ["فواتير البيع", "Sales invoices"], invEmpty: ["لا توجد فواتير في هذه الفترة", "No invoices in this period"],
     rangeToday: ["اليوم", "Today"], range7: ["آخر 7 أيام", "Last 7 days"], rangeMonth: ["هذا الشهر", "This month"], rangeAll: ["الكل", "All"],
     invSearchPh: ["رقم الفاتورة أو اسم الزبون", "Invoice number or customer"], invExport: ["تصدير Excel", "Export to Excel"], invItem: ["الصنف", "Item"],
@@ -60,6 +68,7 @@
   const P = {
     create: async v => chk(await sb().rpc('create_invoice', { p: v })),
     ret: async id => chk(await sb().rpc('return_invoice', { p_id: id })),
+    retItems: async (id, lines, reason) => chk(await sb().rpc('return_items', { p_invoice: id, p_lines: lines, p_reason: reason || null })),
     get: async id => chk(await sb().rpc('get_invoice', { p_id: id })),
     list: async a => { const rows = chk(await sb().rpc('list_invoices', a)) || []; return { items: rows, total: rows.length ? +rows[0].total_count : 0 }; },
     report: async a => chk(await sb().rpc('sales_report', a)) || {},
@@ -371,12 +380,56 @@
           <dl class="inv-meta"><div><dt>${esc(t('invDate'))}</dt><dd>${esc(when(v.created_at))}</dd></div><div><dt>${esc(t('invStaff'))}</dt><dd>${esc(v.staff_name || '—')}</dd></div>
             ${v.customer_name || v.customer_phone ? `<div><dt>${esc(t('custName'))}</dt><dd>${esc([v.customer_name, v.customer_phone].filter(Boolean).join(' · '))}</dd></div>` : ''}<div><dt>${esc(t('posPay'))}</dt><dd>${esc(t('pay_' + v.payment))}</dd></div></dl>
           <table class="inv-items"><thead><tr><th>${esc(t('invItem'))}</th><th>${esc(t('posQty'))}</th><th>${esc(t('posPrice'))}</th><th>${esc(t('posTotal'))}</th></tr></thead>
-            <tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.sku ? `<small class="mono">${esc(it.sku)}</small>` : ''}${it.maker ? `<small class="inv-mk">${esc(it.maker)}</small>` : ''}</td><td class="num">${it.qty}</td><td class="num">${esc(money(it.price, cur))}</td><td class="num">${esc(money(it.line_total, cur))}</td></tr>`).join('')}</tbody></table>
+            <tbody>${(v.items || []).map(it => `<tr${+it.qty ? '' : ' class="gone"'}><td>${esc(it.title)}${it.sku ? `<small class="mono">${esc(it.sku)}</small>` : ''}${it.maker ? `<small class="inv-mk">${esc(it.maker)}</small>` : ''}</td><td class="num">${it.qty}${+it.returned ? `<small class="inv-ret">${esc(t('irBackN', { n: it.returned }))}</small>` : ''}${+it.short ? `<small class="inv-ret">${esc(t('irShortN', { n: it.short }))}</small>` : ''}</td><td class="num">${esc(money(it.price, cur))}</td><td class="num">${esc(money(it.line_total, cur))}</td></tr>`).join('')}</tbody></table>
           <dl class="inv-tot">${+v.discount ? `<div><dt>${esc(t('posSubtotal'))}</dt><dd class="num">${esc(money(v.subtotal, cur))}</dd></div><div><dt>${esc(t('posDiscount'))}</dt><dd class="num">− ${esc(money(v.discount, cur))}</dd></div>` : ''}
             <div class="big"><dt>${esc(t('posTotal'))}</dt><dd class="num">${esc(money(v.total, cur))}</dd></div>
             ${v.payment === 'credit' ? `<div><dt>${esc(t('posPaid'))}</dt><dd class="num">${esc(money(v.paid, cur))}</dd></div><div><dt>${esc(t('posRemain'))}</dt><dd class="num">${esc(money(v.total - v.paid, cur))}</dd></div>` : ''}</dl>
+          ${(v.returns || []).length ? `<div class="inv-rets"><b>${esc(t('irList'))}</b>${v.returns.map(r => `<p><span>${esc([when(r.created_at), r.staff_name].filter(Boolean).join(' · '))}</span>
+            <span>${esc((r.lines || []).map(l => l.qty + ' × ' + l.title).join('، '))}</span>
+            <span class="num">${esc([t('irWorth', { m: money(r.amount, cur) }), +r.refund ? t('irRefunded', { m: money(r.refund, cur) }) : ''].filter(Boolean).join(' · '))}</span>${r.reason ? `<small>${esc(t('irWhy', { t: r.reason }))}</small>` : ''}</p>`).join('')}</div>` : ''}
           ${v.note ? `<p class="inv-note">${esc(v.note)}</p>` : ''}${st.invoice_footer ? `<p class="inv-foot">${esc(st.invoice_footer)}</p>` : ''}</article>`;
   };
+  /* «رجّع قطع»: how many of each line come back, what that is worth, and what goes back to the customer (or off his debt) */
+  function retSheet(v, draw) {
+    const cur = v.currency, lines = (v.items || []).filter(it => +it.qty > 0), n = {};
+    const s = SP.openSheet(`<h2 class="sheet-title">${esc(t('irT', { n: v.no }))}</h2><p class="hint">${esc(t('irHint'))}</p>
+      <div class="ir-top"><button type="button" class="chip" id="irall">${esc(t('irAll'))}</button></div>
+      <div class="ir-lines">${lines.map(it => `<div class="ir-line" data-l="${esc(it.id)}"><span class="ir-main"><b>${esc(it.title)}</b>
+          <small>${esc([it.sku, t('irOn', { n: it.qty }), money(it.price, cur)].filter(Boolean).join(' · '))}</small></span>
+        <span class="stepper"><button type="button" data-d="-1" aria-label="−">−</button><b class="num">0</b><button type="button" data-d="1" aria-label="+">+</button></span></div>`).join('')}</div>
+      <div class="field"><label for="irr">${esc(t('irReason'))}</label><input id="irr" class="input" maxlength="200" placeholder="${esc(t('irReasonPh'))}"></div>
+      <p class="ir-sum" id="irs" aria-live="polite"></p><p class="form-err" id="ire" role="alert"></p>
+      <div class="sheet-actions"><button type="button" class="btn btn-danger" id="irgo" disabled>${I('back', 'dirx')} ${esc(t('irGo'))}</button></div>`, { label: t('irT', { n: v.no }) });
+    const units = () => Object.values(n).reduce((k, x) => k + x, 0);
+    const sum = () => {
+      const sub = lines.reduce((k, it) => k + it.price * (it.qty - (n[it.id] || 0)), 0);
+      const total = sub - (+v.subtotal > 0 ? Math.round(v.discount * sub / v.subtotal * 100) / 100 : 0);
+      const amount = v.total - total, refund = Math.max(v.paid - total, 0);
+      return { amount, refund, owes: v.payment === 'credit' ? amount - refund : 0, all: lines.every(it => (n[it.id] || 0) === +it.qty) };
+    };
+    const paint = () => {
+      $$('.ir-line', s.el).forEach(row => { const k = row.dataset.l; $('.stepper b', row).textContent = SP.fmtNum(n[k] || 0); row.classList.toggle('on', !!n[k]); });
+      const u = units(), x = sum();
+      $('#irs', s.el).textContent = !u ? t('irPick') : [t('irSum', { u: SP.count(u, 'parts'), m: money(x.amount, cur) }), x.refund > 0.004 ? t('irRefund', { m: money(x.refund, cur) }) : '',
+        x.owes > 0.004 ? t('irOwes', { m: money(x.owes, cur) }) : '', x.all ? t('irAllNote') : ''].filter(Boolean).join(' · ');
+      $('#irgo', s.el).disabled = !u;
+    };
+    $$('.ir-line', s.el).forEach(row => {
+      const it = lines.find(x => String(x.id) === row.dataset.l);
+      $$('[data-d]', row).forEach(b => b.onclick = () => { n[it.id] = Math.min(Math.max((n[it.id] || 0) + +b.dataset.d, 0), +it.qty); paint(); });
+    });
+    $('#irall', s.el).onclick = () => { const all = lines.every(it => (n[it.id] || 0) === +it.qty); lines.forEach(it => { n[it.id] = all ? 0 : +it.qty; }); paint(); };
+    $('#irgo', s.el).onclick = async () => {
+      const b = $('#irgo', s.el), u = units(), x = sum(); b.classList.add('busy'); $('#ire', s.el).textContent = '';
+      try {
+        const r = await P.retItems(v.id, lines.filter(it => n[it.id]).map(it => ({ id: it.id, qty: n[it.id] })), $('#irr', s.el).value.trim());
+        s.close();
+        SP.toast(r.status === 'returned' ? t('invReturnDone') : [t('irDone', { u: SP.count(u, 'parts') }), x.refund > 0.004 ? t('irRefund', { m: money(x.refund, cur) }) : ''].filter(Boolean).join(' · '), 5000);
+        draw(r);
+      } catch (e) { b.classList.remove('busy'); $('#ire', s.el).textContent = posErr(e); }
+    };
+    paint();
+  }
   SP.route(/^inv-([0-9a-f-]{36})$/, async (m, n) => {
     if (gate(n) || !guard(n)) return;
     shell(bar(t('invList')) + `<main class="wrap"><div class="sk sk-block"></div></main>`);
@@ -400,13 +453,15 @@
         ${SP.sendPanel ? SP.sendPanel(v) : ''}
         <div class="form-actions noprint">${canPrint ? `<button type="button" class="btn btn-ink" onclick="window.print()">${I('copy')} ${esc(t('invPrint'))}</button>` : ''}
           <a class="btn btn-wa" id="ish" href="${esc(waHref(v))}" target="_blank" rel="noopener">${I('chat')} ${esc(t('invShare'))}</a>
-          ${SP.can('returns') && v.status === 'done' ? `<button type="button" class="btn btn-danger" id="iret">${I('back', 'dirx')} ${esc(t('invReturn'))}</button>` : ''}
+          ${SP.can('returns') && v.status === 'done' ? `<button type="button" class="btn btn-ghost" id="iretp">${I('back', 'dirx')} ${esc(t('invRetPart'))}</button>
+            <button type="button" class="btn btn-danger" id="iret">${I('back', 'dirx')} ${esc(t('invReturn'))}</button>` : ''}
           ${SP.can('sales') ? `<a class="btn btn-ghost" href="#pos">${I('plus')} ${esc(t('posClear'))}</a>` : ''}</div></main>`);
       if (SP.wireSend) SP.wireSend(v, draw);
       if ($('#iret')) $('#iret').onclick = async () => {
         if (!await SP.confirmSheet({ title: t('invReturn'), body: t('invReturnQ'), ok: t('invReturn'), danger: true })) return;
         try { const r = await P.ret(v.id); SP.toast(t('invReturnDone')); draw(r); } catch (e) { SP.toast(posErr(e)); }
       };
+      if ($('#iretp')) $('#iretp').onclick = () => retSheet(v, draw);
     };
     draw(inv);
     SP.done(n);
@@ -434,7 +489,7 @@
     $('#iq').onsubmit = e => { e.preventDefault(); S.invQ = $('#iq input').value.trim(); SP.render(); };
     const [from, to] = range(S.invRange);
     const args = off => ({ p_from: from ? from.toISOString() : null, p_to: to ? to.toISOString() : null, p_q: S.invQ || null, p_limit: 30, p_offset: off });
-    const row = v => `<a class="arow inv-row${v.status === 'returned' || v.status === 'cancelled' ? ' ret' : ''}" href="#inv-${v.id}"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${v.source === 'app' ? I('bag', 'inv-app') + ' ' : ''}${esc(v.customer_name || t('pay_' + v.payment))}${v.status === 'returned' ? ` <span class="pill demo">${esc(t('invReturned'))}</span>` : v.status !== 'done' && SP.ordPill ? ' ' + SP.ordPill(v.status) : ''}</b>
+    const row = v => `<a class="arow inv-row${v.status === 'returned' || v.status === 'cancelled' ? ' ret' : ''}" href="#inv-${v.id}"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${v.source === 'app' ? I('bag', 'inv-app') + ' ' : ''}${esc(v.customer_name || t('pay_' + v.payment))}${v.status === 'returned' ? ` <span class="pill demo">${esc(t('invReturned'))}</span>` : v.status !== 'done' && SP.ordPill ? ' ' + SP.ordPill(v.status) : +v.returned_units ? ` <span class="pill demo">${esc(t('irBackN', { n: v.returned_units }))}</span>` : ''}</b>
       <small>${esc(when(v.created_at))} · ${esc(v.staff_name || '')} · ${esc(SP.count(+v.items_count || 0, 'parts'))}</small></span><b class="num">${esc(money(v.total, v.currency))}</b></a>`;
     await SP.pager(n, $('#il'), $('#more'), off => P.list(args(off)), items => items.map(row).join(''), (r, first) => {
       if (!first) return;

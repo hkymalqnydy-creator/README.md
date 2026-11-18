@@ -48,7 +48,7 @@
     lk_order_cancelled: ["لغى الطلب {no}", "Cancelled order {no}"], lk_order_cancelled_c: ["الزبون لغى طلبه {no}", "The customer cancelled order {no}"],
     lk_invoice_sent: ["بعث الفاتورة {no} لـ {t}", "Sent invoice {no} to {t}"], lk_invoice_sent_again: ["بعث الفاتورة {no} مرة ثانية لـ {t}", "Sent invoice {no} again to {t}"],
     lk_invoice_unsent: ["رجّع الفاتورة {no} من حساب {t}", "Took invoice {no} back from {t}"], lk_customer_password: ["عطا كلمة سر جديدة لـ {t}", "Gave {t} a new password"],
-    lk_sale: ["باع فاتورة {no}", "Sold invoice {no}"], lk_saleTo: ["باع فاتورة {no} لـ {t}", "Sold invoice {no} to {t}"], lk_return: ["رجّع فاتورة {no}", "Returned invoice {no}"],
+    lk_sale: ["باع فاتورة {no}", "Sold invoice {no}"], lk_saleTo: ["باع فاتورة {no} لـ {t}", "Sold invoice {no} to {t}"], lk_return_part: ["رجّع {n} قطعة من الفاتورة {no}", "Returned {n} parts of invoice {no}"], lk_return: ["رجّع فاتورة {no}", "Returned invoice {no}"],
     lk_receive: ["دخّل فاتورة شراء ({no})", "Entered purchase invoice {no}"], lk_receiveFrom: ["دخّل فاتورة شراء من {t} ({no})", "Entered purchase invoice {no} from {t}"],
     lk_receipt_undo: ["ألغى فاتورة الشراء {no}", "Cancelled purchase invoice {no}"], lk_stockOut: ["نقّص {n} من «{t}»", "Took {n} out of “{t}”"], lk_stockIn: ["زاد {n} على «{t}»", "Added {n} to “{t}”"],
     lk_stockCount: ["جرد «{t}»: من {a} لـ {b}", "Counted “{t}”: {a} to {b}"], lk_product_add: ["أضاف قطعة «{t}»", "Added the part “{t}”"], lk_product_del: ["حذف القطعة «{t}»", "Deleted the part “{t}”"],
@@ -151,7 +151,8 @@
       case 'order_cancelled': return t(d.by === 'customer' ? 'lk_order_cancelled_c' : 'lk_order_cancelled', { no: d.no }) + (tt && d.by !== 'customer' ? ' · ' + tt : '');
       case 'invoice_sent': return t(d.again ? 'lk_invoice_sent_again' : 'lk_invoice_sent', { no: d.no, t: tt });
       case 'invoice_unsent': return t('lk_invoice_unsent', { no: d.no, t: tt || '—' });
-      case 'picked': return t('lk_picked', { no: d.no }) + (tt ? ' · ' + tt : '');
+      case 'picked': return (+d.short ? t('lk_picked_short', { no: d.no, n: d.short }) : t('lk_picked', { no: d.no })) + (tt ? ' · ' + tt : '');
+      case 'return_part': return t('lk_return_part', { no: d.no, n: d.units || '' }) + (tt ? ' · ' + tt : '') + (d.reason ? ' · ' + d.reason : '');
       default: return SP.L.T['lk_' + x.kind] ? t('lk_' + x.kind, { t: tt }) : x.kind;
     }
   }

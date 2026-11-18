@@ -271,6 +271,8 @@
     else if (!DB.mcards) DB.mcards = 1;
     if (!DB.picks && opts.seed && CONF.mode === 'company' && DB.users.length > 0) demoPicks(DB);
     else if (!DB.picks) DB.picks = 1;
+    /* some of the parts back from a sale, and what an app order did not find on the shelf (supabase/setup.sql return_items, pick_done) */
+    if (!DB.invoice_returns) DB.invoice_returns = [];
     /* every car brand in the world now: a demo saved with only the Korean and Japanese ones shows them all */
     if (!DB.allBrands) {
       DB.allBrands = 1;
@@ -713,7 +715,7 @@
         if (!isAdmin()) fail('not authorized', '42501');
         const email = String(a.p_email || '').trim().toLowerCase();
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail('invalid email', '22023');
-        const ok = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'customers', 'reports', 'costs', 'settings', 'purchases', 'expenses'];
+        const ok = ['sales', 'invoices', 'returns', 'discounts', 'prices', 'products', 'customers', 'reports', 'costs', 'settings', 'purchases', 'expenses', 'warehouse'];
         const lim = a.p_max_discount == null || a.p_max_discount === '' ? null : Number(a.p_max_discount);
         if (lim != null && !(lim >= 0 && lim <= 100)) fail('bad discount limit', '22023');
         let r = DB.staff.find(x => x.email === email); const isNew = !r, was = r ? { perms: r.perms, active: r.active, max_discount: r.max_discount == null ? null : r.max_discount, ai_on: !!r.ai_on, ai_perms: r.ai_perms || [] } : null;
@@ -741,7 +743,8 @@
         const mc = v.customer_id && DB.customers.find(c => c.user_id === v.customer_id);
         return { ...v, branch: s ? { id: s.id, name: s.name, city: s.city, area: s.area, phone: s.phone, whatsapp: s.whatsapp } : null,
           merchant: mc ? { user_id: mc.user_id, shop_name: mc.shop_name || '', name: mc.name, phone: mc.phone, approved: !!mc.approved } : null,
-          items: DB.invoice_items.filter(i => i.invoice_id === v.id).map(i => { const o = { ...i }; if (!hasPerm('costs')) delete o.cost; return o; }) };
+          items: DB.invoice_items.filter(i => i.invoice_id === v.id).map(i => { const o = { returned: 0, short: 0, ...i }; if (!hasPerm('costs')) delete o.cost; return o; }),
+          refunded: v.refunded || 0, returns: (DB.invoice_returns || []).filter(r => r.invoice_id === v.id).map(r => { const o = { ...r }; delete o.staff_id; delete o.invoice_id; return o; }) };
       },
       create_invoice(a) {
         const p = a.p || {};
@@ -794,6 +797,35 @@
         logAct('return', v.id, v.customer_name.trim() || null, v.total, { no: v.no }); save();
         return RPC.get_invoice({ p_id: v.id });
       },
+      /* some of the parts back: the invoice keeps what stays sold, its discount shrinks with it, what was paid over the new total
+         goes back (a sale on credit owes less instead); all of what is left coming back is the whole invoice returned */
+      return_items(a) {
+        if (!hasPerm('returns')) fail('not authorized', '42501');
+        const v = DB.invoices.find(x => x.id === a.p_invoice);
+        if (!v) fail('invoice not found'); if (v.status === 'returned') fail('invoice already returned');
+        if (v.status && v.status !== 'done') fail('order not received yet');
+        if (!Array.isArray(a.p_lines) || a.p_lines.length > 200) fail('pick the parts to return', '22023');
+        const want = {}; a.p_lines.forEach(x => { if (/^[0-9]{1,18}$/.test(String(x && x.id))) want[x.id] = (want[x.id] || 0) + Math.floor(Number(x.qty) || 0); });
+        Object.keys(want).forEach(k => { if (!want[k]) delete want[k]; });
+        if (!Object.keys(want).length) fail('pick the parts to return', '22023');
+        const its = DB.invoice_items.filter(i => i.invoice_id === v.id);
+        Object.entries(want).forEach(([k, n]) => { const it = its.find(i => String(i.id) === k); if (!it) fail('line not on this invoice');
+          if (n < 1 || n > it.qty) fail('bad quantity: ' + it.title + ' (on the invoice ' + it.qty + ')', '22023'); });
+        if (!its.some(i => i.qty > (want[i.id] || 0))) return RPC.return_invoice({ p_id: v.id });
+        const back = []; let units = 0;
+        its.forEach(it => { const n = want[it.id]; if (!n) return;
+          it.qty -= n; it.returned = (it.returned || 0) + n; it.line_total = money2(it.price * it.qty);
+          const pr = DB.products.find(x => x.id === it.product_id); if (pr && pr.qty != null) { pr.qty += n; if (pr.qty > 0) pr.status = 'active'; }
+          back.push({ id: it.id, title: it.title, sku: it.sku || null, maker: it.maker || '', qty: n, price: it.price }); units += n; });
+        const sub = money2(its.reduce((k, i) => k + i.line_total, 0)), disc = v.subtotal > 0 ? money2(v.discount * sub / v.subtotal) : 0, total = money2(sub - disc);
+        const refund = money2(Math.max(v.paid - total, 0)), amount = money2(v.total - total), reason = String(a.p_reason || '').trim().slice(0, 200);
+        Object.assign(v, { subtotal: sub, discount: disc, total, paid: money2(v.paid - refund), refunded: money2((v.refunded || 0) + refund) });
+        DB.invoice_returns.push({ id: (DB.invoice_returns.reduce((k, r) => Math.max(k, r.id), 0) || 0) + 1, invoice_id: v.id, created_at: now(), staff_id: uid(), staff_name: meName(),
+          amount, refund, reason, lines: back });
+        logAct('return_part', v.id, v.customer_name.trim() || null, amount, { no: v.no, units, refund, lines: back, reason });
+        save();
+        return RPC.get_invoice({ p_id: v.id });
+      },
       list_invoices(a) {
         if (!uid()) return [];
         const q = String(a.p_q || '').trim();
@@ -801,7 +833,9 @@
           (!a.p_branch || v.branch_id === a.p_branch) && (!q || String(v.no) === q || v.customer_name.includes(q) || v.customer_phone.includes(q)))
           .sort((x, y) => y.created_at.localeCompare(x.created_at) || y.no - x.no);
         const total = L.length, off = a.p_offset || 0, lim = Math.min(Math.max(a.p_limit || 30, 1), 100);
-        return L.slice(off, off + lim).map(v => ({ ...v, branch_name: (shopOf(v.branch_id) || {}).name || null, items_count: DB.invoice_items.filter(i => i.invoice_id === v.id).reduce((k, i) => k + i.qty, 0), total_count: total }));
+        return L.slice(off, off + lim).map(v => { const its = DB.invoice_items.filter(i => i.invoice_id === v.id);
+          return { ...v, refunded: v.refunded || 0, branch_name: (shopOf(v.branch_id) || {}).name || null, items_count: its.reduce((k, i) => k + i.qty, 0),
+            returned_units: its.reduce((k, i) => k + (i.returned || 0), 0), total_count: total }; });
       },
       /* ---------- customer orders from the app (supabase/setup.sql section 15): «قيد التجهيز» → «قيد الاستلام» → «تم الاستلام», or «ملغي» ---------- */
       prices_shown() {
@@ -818,7 +852,8 @@
           cancelled_at: o.cancelled_at || null, cancel_reason: o.cancel_reason || '', delivery: o.delivery || '', address: o.address || '', note: o.note || '',
           customer_name: o.customer_name, customer_phone: o.customer_phone, currency: o.currency, payment: done ? o.payment : null, total: all ? o.total : null,
           sent_at: o.sent_at || null, branch: s ? { id: s.id, name: s.name, city: s.city, area: s.area, phone: s.phone, whatsapp: s.whatsapp } : null,
-          items: items.map(i => ({ product_id: i.product_id, title: i.title, sku: i.sku, qty: i.qty, price: shows(i) ? i.price : null, line_total: shows(i) ? i.line_total : null })) };
+          items: items.map(i => ({ product_id: i.product_id, title: i.title, sku: i.sku, qty: i.qty, short: i.short || 0, returned: i.returned || 0,
+            price: shows(i) ? i.price : null, line_total: shows(i) ? i.line_total : null })) };
       },
       place_order(a) {
         const p = a.p || {}, me = uid(), st = DB.settings;
@@ -887,7 +922,7 @@
             return { id: x.id, no: x.no, status: x.status, ordered_at: x.ordered_at, ready_at: x.ready_at || null, cancelled_at: x.cancelled_at || null,
               done_at: ['done', 'returned'].includes(x.status) ? x.created_at : null, customer_name: x.customer_name, customer_phone: x.customer_phone, delivery: x.delivery || '',
               address: x.address || '', note: x.note || '', total: x.total, currency: x.currency, payment: x.payment, staff_name: x.staff_name,
-              units: its.reduce((k, i) => k + i.qty, 0), lines: its.length }; }) };
+              units: its.reduce((k, i) => k + i.qty, 0), lines: its.filter(i => i.qty > 0).length, short: its.reduce((k, i) => k + (i.short || 0), 0) }; }) };
       },
       order_set(a) {
         if (!uid() || !hasPerm('sales')) fail('not authorized', '42501');
@@ -918,11 +953,12 @@
         const bp = {}; Object.entries(group(inv, v => v.payment, v => v.total)).forEach(([k, x]) => { bp[k] = x.s; });
         const top = {}; items.forEach(i => { top[i.title] = top[i.title] || { title: i.title, qty: 0, total: 0 }; top[i.title].qty += i.qty; top[i.title].total += i.line_total; });
         return { count: inv.length, total: sum(inv, v => v.total), discount: sum(inv, v => v.discount), credit: sum(inv.filter(v => v.payment === 'credit'), v => v.total - v.paid),
-          returned: DB.invoices.filter(v => v.status === 'returned' && v.returned_at >= a.p_from && v.returned_at < a.p_to).length, by_payment: bp,
+          returned: DB.invoices.filter(v => v.status === 'returned' && v.returned_at >= a.p_from && v.returned_at < a.p_to && (!a.p_branch || v.branch_id === a.p_branch)).length
+            + (DB.invoice_returns || []).filter(r => r.created_at >= a.p_from && r.created_at < a.p_to && (!a.p_branch || (DB.invoices.find(v => v.id === r.invoice_id) || {}).branch_id === a.p_branch)).length, by_payment: bp,
           by_staff: Object.entries(group(inv, v => v.staff_name, v => v.total)).map(([name, x]) => ({ name, count: x.c, total: x.s })).sort((x, y) => y.total - x.total),
           by_branch: Object.entries(group(inv, v => v.branch_id, v => v.total)).map(([id, x]) => ({ name: (shopOf(id) || {}).name || '—', count: x.c, total: x.s })).sort((x, y) => y.total - x.total),
           by_day: Object.entries(group(inv, v => v.created_at.slice(0, 10), v => v.total)).map(([day, x]) => ({ day, total: x.s })).sort((x, y) => x.day.localeCompare(y.day)),
-          top: Object.values(top).sort((x, y) => y.qty - x.qty).slice(0, 10),
+          top: Object.values(top).filter(x => x.qty > 0).sort((x, y) => y.qty - x.qty).slice(0, 10),
           profit: hasPerm('costs') ? sum(items, i => i.line_total - (i.cost || 0) * i.qty) - sum(inv, v => v.discount) : null,
           cost_missing: hasPerm('costs') ? items.filter(i => i.cost == null).length : null };
       },
@@ -1165,13 +1201,13 @@
           .sort((x, y) => done ? String(y.picked_at || '').localeCompare(String(x.picked_at || '')) : x.created_at.localeCompare(y.created_at) || x.no - y.no);
         return L.slice(off, off + lim).map(v => {
           const its = DB.invoice_items.filter(i => i.invoice_id === v.id);
-          const lines = its.map(i => { const p = DB.products.find(x => x.id === i.product_id) || {};
-            return { id: i.id, title: i.title, sku: i.sku || null, maker: i.maker || '', qty: i.qty, picked: !!i.picked, part_no: p.part_no || null, barcode: p.barcode || null,
+          const lines = its.filter(i => i.qty > 0 || (i.short || 0) > 0).map(i => { const p = DB.products.find(x => x.id === i.product_id) || {};
+            return { id: i.id, title: i.title, sku: i.sku || null, maker: i.maker || '', qty: i.qty, short: i.short || 0, picked: !!i.picked, part_no: p.part_no || null, barcode: p.barcode || null,
               make: p.make || null, model: p.model || null, location: p.location || '', img: (p.imgs || [])[0] || null, stock: p.qty == null ? null : p.qty }; })
             .sort((x, y) => (x.location || 'ي').localeCompare(y.location || 'ي', 'ar') || x.id - y.id);
           return { id: v.id, no: v.no, created_at: v.created_at, customer_name: v.customer_name, staff_name: v.staff_name, source: v.source || 'pos', status: v.status, note: v.note || '',
             picked_at: v.picked_at || null, picked_name: v.picked_name || '', branch_name: (shopOf(v.branch_id) || {}).name || null, total_count: L.length,
-            units: its.reduce((k, i) => k + i.qty, 0), picked_n: its.filter(i => i.picked).length, lines };
+            units: its.reduce((k, i) => k + i.qty, 0), picked_n: its.filter(i => i.picked && i.qty > 0).length, can_short: v.source === 'app' && ['preparing', 'ready'].includes(v.status), lines };
         });
       },
       pick_line(a) {
@@ -1186,12 +1222,29 @@
         const b = pickBranch(), v = DB.invoices.find(x => x.id === a.p_invoice && (!b || x.branch_id === b));
         if (!v) fail('invoice not found', 'P0001');
         if (v.pick_state !== 'waiting') fail('invoice not waiting', 'P0001');
-        const st = staffRow(), me = DB.users.find(u => u.id === uid());
-        DB.invoice_items.forEach(i => { if (i.invoice_id === v.id) i.picked = true; });
+        const st = staffRow(), me = DB.users.find(u => u.id === uid()), its = DB.invoice_items.filter(i => i.invoice_id === v.id);
+        let short = 0, out = '';
+        /* an order from the app not yet received: what is not on the shelf comes off it and back to stock, the order goes to its
+           customer «قيد الاستلام» with what was found; nothing found cancels it */
+        if (v.source === 'app' && ['preparing', 'ready'].includes(v.status)) {
+          if (Array.isArray(a.p_avail)) {
+            const got = {}; a.p_avail.forEach(x => { if (/^[0-9]{1,18}$/.test(String(x && x.id))) { const n = Math.floor(x.qty == null || x.qty === '' ? -1 : Number(x.qty)); got[x.id] = got[x.id] == null ? n : Math.min(got[x.id], n); } });
+            Object.entries(got).forEach(([k, n]) => { const it = its.find(i => String(i.id) === k); if (!it) fail('line not on this invoice');
+              if (!(n >= 0) || n > it.qty) fail('bad quantity: ' + it.title + ' (ordered ' + it.qty + ')', '22023'); });
+            Object.entries(got).forEach(([k, n]) => { const it = its.find(i => String(i.id) === k); if (n >= it.qty) return;
+              const d = it.qty - n; it.short = (it.short || 0) + d; it.qty = n; it.line_total = money2(it.price * n); short += d;
+              const pr = DB.products.find(x => x.id === it.product_id); if (pr && pr.qty != null) { pr.qty += d; if (pr.qty > 0) pr.status = 'active'; } });
+            if (short) { const sub = money2(its.reduce((k, i) => k + i.line_total, 0)), disc = v.subtotal > 0 ? money2(v.discount * sub / v.subtotal) : 0;
+              Object.assign(v, { subtotal: sub, discount: disc, total: money2(sub - disc) }); }
+          }
+          if (!its.some(i => i.qty > 0)) { Object.assign(v, { status: 'cancelled', cancelled_at: now(), cancel_reason: 'القطع مش موجودة في المخزن' }); out = 'cancelled'; }
+          else if (v.status === 'preparing') { Object.assign(v, { status: 'ready', ready_at: now() }); out = 'ready'; }
+        }
+        its.forEach(i => { if (i.qty > 0) i.picked = true; });
         Object.assign(v, { pick_state: 'done', picked_at: now(), picked_name: String((st && st.name) || (me && me.email) || '').slice(0, 80) });
-        logAct('picked', v.id, v.customer_name || null, v.total, { no: v.no });
+        logAct('picked', v.id, v.customer_name || null, v.total, { no: v.no, ...(short ? { short } : {}), ...(out ? { order: out } : {}) });
         save();
-        return { no: v.no };
+        return { no: v.no, short, order: out || null };
       },
       pick_waiting() { if (!pickOk()) return 0; const b = pickBranch(); return DB.invoices.filter(v => v.pick_state === 'waiting' && ['done', 'preparing', 'ready'].includes(v.status) && (!b || v.branch_id === b)).length; },
       set_customer_password(a) {
@@ -1274,19 +1327,22 @@
         const d0 = dayOf(new Date(a.p_from)), d1 = dayOf(new Date(a.p_to));
         const ex = DB.expenses.filter(e => e.spent_on >= d0 && e.spent_on < d1 && br(e.branch_id)), mv = DB.stock_moves.filter(m => span(m.created_at) && br(m.branch_id));
         const ret = DB.invoices.filter(v => v.status === 'returned' && span(v.returned_at) && br(v.branch_id));
+        /* parts returned from sales that stay sales, and what the period's sales brought in (the ones returned since too) */
+        const rp = (DB.invoice_returns || []).filter(r => span(r.created_at) && br((DB.invoices.find(v => v.id === r.invoice_id) || {}).branch_id));
+        const sold = DB.invoices.filter(v => ['done', 'returned'].includes(v.status) && span(v.created_at) && br(v.branch_id));
         const byCat = {}, byReason = {}, st = {};
         ex.forEach(e => { byCat[e.cat] = money2((byCat[e.cat] || 0) + e.amount); });
         mv.forEach(m => { byReason[m.reason] = money2((byReason[m.reason] || 0) + m.qty * (m.cost || 0)); });
         inv.forEach(v => { const k = v.staff_name || '—'; st[k] = st[k] || { name: k, count: 0, total: 0, c: 0 }; st[k].count++; st[k].total += v.total; st[k].c += ci[v.id] || 0; });
         const sales = sum(inv, v => v.total), cogs = sum(Object.values(ci), x => x), expenses = sum(ex, e => e.amount), stockAdj = sum(mv, m => m.qty * (m.cost || 0));
         return { count: inv.length, sales, discount: sum(inv, v => v.discount), cogs: money2(cogs), cost_missing: items.filter(i => i.cost == null).length, expenses: money2(expenses), by_cat: byCat,
-          stock_adj: money2(stockAdj), stock_by_reason: byReason, returned_count: ret.length, returned_total: sum(ret, v => v.total),
+          stock_adj: money2(stockAdj), stock_by_reason: byReason, returned_count: ret.length + rp.length, returned_total: money2(sum(ret, v => v.total) + sum(rp, r => r.amount)),
           by_staff: Object.values(st).map(x => ({ name: x.name, count: x.count, total: x.total, profit: money2(x.total - x.c) })).sort((x, y) => y.total - x.total || x.name.localeCompare(y.name)),
           receivable: money2(sum(buyers().filter(b => b.balance > 0), b => b.balance)), payable: money2(sum(suppliers().filter(r => r.balance > 0), r => r.balance)),
           /* the money that came in and went out in the period (the System tab's «الرصيد الكلي») */
-          cash_in: money2(sum(inv, v => v.paid) + sum(DB.customer_payments.filter(p => span(p.created_at)), p => p.amount)),
+          cash_in: money2(sum(sold, v => v.paid + (v.refunded || 0)) + sum(DB.customer_payments.filter(p => span(p.created_at)), p => p.amount)),
           cash_out: money2(sum(DB.purchases.filter(p => span(p.created_at) && br(p.branch_id)), p => p.paid == null ? p.total : p.paid) + sum(DB.supplier_payments.filter(p => span(p.created_at)), p => p.amount)
-            + expenses + sum(ret, v => v.paid)),
+            + expenses + sum(ret, v => v.paid) + sum(rp, r => r.refund)),
           gross: money2(sales - cogs), net: money2(sales - cogs - expenses + stockAdj) };
       },
 
@@ -1323,7 +1379,7 @@
       list_activity(a) {
         if (!uid() || !isAdmin()) fail('not authorized', '42501');
         const q = String(a.p_q || '').trim(), nq = norm(q), g = a.p_group || null, has = (x, k) => !!x.detail && Object.prototype.hasOwnProperty.call(x.detail, k);
-        const inGroup = x => !g || (g === 'sales' ? ['sale', 'return', 'order', 'order_ready', 'order_done', 'order_cancelled'].includes(x.kind)
+        const inGroup = x => !g || (g === 'sales' ? ['sale', 'return', 'return_part', 'order', 'order_ready', 'order_done', 'order_cancelled', 'picked'].includes(x.kind)
           : g === 'stock' ? ['receive', 'receipt_undo', 'stock', 'product_add', 'product_del', 'sync', 'import'].includes(x.kind) || (x.kind === 'product_edit' && (has(x, 'qty') || has(x, 'title') || has(x, 'status')))
           : g === 'prices' ? ['bulk_price', 'bulk_undo'].includes(x.kind) || (x.kind === 'product_edit' && (has(x, 'price') || has(x, 'cost') || has(x, 'hide_price')))
           : g === 'money' ? ['pay_in', 'pay_in_del', 'pay_out', 'pay_out_del', 'expense', 'expense_del'].includes(x.kind)

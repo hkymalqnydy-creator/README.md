@@ -178,8 +178,9 @@ reset role;
 
 -- the System tab's «الرصيد الكلي»: the money in and out in the profit report (pnl_report cash_in / cash_out)
 set role authenticated; select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+-- (a sale returned since still brought its money in on the day it was sold; the refund goes out on the day of the return)
 select 'MC51 money in = paid at the sale + customers'' payments; out = purchases paid + supplier payments + expenses + refunds (expect t, t)' t,
-  (r->>'cash_in')::numeric = (select coalesce(sum(paid), 0) from public.invoices where status = 'done' and created_at >= now() - interval '1 day')
+  (r->>'cash_in')::numeric = (select coalesce(sum(paid + refunded), 0) from public.invoices where status in ('done', 'returned') and created_at >= now() - interval '1 day')
                            + (select coalesce(sum(amount), 0) from public.customer_payments where created_at >= now() - interval '1 day') in_ok,
   (r->>'cash_out')::numeric = (select coalesce(sum(coalesce(paid, total)), 0) from public.purchases where created_at >= now() - interval '1 day')
                             + (select coalesce(sum(amount), 0) from public.supplier_payments where created_at >= now() - interval '1 day')

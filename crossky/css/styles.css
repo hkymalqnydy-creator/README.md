@@ -1608,3 +1608,27 @@ body.ai-open{overflow:hidden}
 .switch .bs-t::after{content:none}
 .bs-t b{font-size:15px}
 .bs-t small{color:var(--muted);font-weight:500;font-size:12.5px;line-height:1.45}
+/* some of the parts back: the sheet, the printed invoice, and an order sent without what was not found */
+.ir-top{display:flex;justify-content:flex-end;margin:4px 0 8px}
+.ir-lines{display:grid;gap:8px;margin-bottom:12px}
+.ir-line{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.ir-line.on{border-color:var(--danger,#c62828);background:color-mix(in srgb,var(--danger,#c62828) 6%,var(--surface))}
+.ir-main{flex:1;min-width:0;display:grid;gap:2px}
+.ir-main b{font-size:14.5px;line-height:1.35}
+.ir-main small{color:var(--muted);font-size:12.5px}
+.ir-sum{font-weight:700;margin:4px 0 0;min-height:1.4em}
+.inv-items tr.gone td{color:var(--muted)}
+.inv-ret{display:block;color:var(--danger,#c62828);font-size:11.5px;font-weight:700;text-decoration:none}
+.inv-rets{margin-top:12px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px;display:grid;gap:8px}
+.inv-rets>b{font-size:14px}
+.inv-rets p{margin:0;display:grid;gap:2px;font-size:13px}
+.inv-rets p span:first-child,.inv-rets small{color:var(--muted);font-size:12px}
+.olines li.gone .ol-t,.olines li.gone .ol-q,.olines li.gone .ol-t a{color:var(--muted)}
+.ol-short{display:block;color:var(--danger,#c62828);font-weight:700;text-decoration:none}
+/* the warehouse: what is on the shelf for an app order */
+.pk-av{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:4px;font-size:13px;font-weight:700}
+.pk-av .stepper button{width:34px;height:34px}
+.pk-av em,.pk-sh{font-style:normal;color:var(--danger,#c62828);font-weight:800;font-size:12.5px}
+.pk-line.short{border-color:color-mix(in srgb,var(--danger,#c62828) 45%,var(--line))}
+.pk-line.none .pk-main b,.pk-line.none .pk-qty{color:var(--muted)}
+.pk-tick:disabled{opacity:.35;cursor:not-allowed}

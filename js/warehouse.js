@@ -23,7 +23,14 @@
     pkScanMiss: ["القطعة هذي مش في الفاتورة: {c}", "This part is not on the invoice: {c}"], pkNew: ["فاتورة جديدة للتجهيز رقم {n}", "A new invoice to prepare: {n}"],
     pkPrint: ["اطبع", "Print"], pkStock: ["في المخزن: {n}", "In stock: {n}"], pkNote: ["ملاحظة: {t}", "Note: {t}"], pkErrGone: ["الفاتورة هذي تجهزت أو تلغت.", "This invoice was prepared or cancelled."],
     pkInv_waiting: ["في المخزن: تستنى التجهيز", "In the warehouse: waiting"], pkInv_done: ["تجهزت في المخزن: {p}", "Prepared in the warehouse: {p}"],
-    perm_warehouse: ["تجهيز الفواتير في المخزن", "Prepare invoices in the warehouse"], lk_picked: ["جهّز الفاتورة {no}", "Prepared invoice {no}"]
+    perm_warehouse: ["تجهيز الفواتير في المخزن", "Prepare invoices in the warehouse"], lk_picked: ["جهّز الفاتورة {no}", "Prepared invoice {no}"],
+    /* an order from the app: what is on the shelf goes to the customer */
+    pkAppHint: ["طلب من التطبيق: حدد كم موجود من كل صنف، والزبون يوصله الموجود.", "An order from the app: set how many of each are on the shelf; the customer gets what there is."],
+    pkAvail: ["الموجود", "On the shelf"], pkShortD: ["ناقصة {n}", "{n} short"], pkNoneLine: ["مش موجودة", "Not on the shelf"], pkSend: ["جهّز وابعثه للزبون", "Prepare and send"],
+    pkShortQ: ["ناقص: {l}. الطلب يمشي للزبون بالموجود، واللي ناقص يتشال منه.", "Short: {l}. The order goes to the customer with what there is; the rest comes off it."],
+    pkNoneQ: ["ما فيش ولا قطعة من الطلب موجودة: الطلب يتلغى والزبون يشوف إن القطع مش موجودة.", "None of the order is on the shelf: it is cancelled and the customer is told."],
+    pkSent: ["تجهز الطلب {n} وتبعت للزبون", "Order {n} prepared and sent to the customer"], pkCancelled: ["تلغى الطلب {n}: القطع مش موجودة", "Order {n} cancelled: the parts are not on the shelf"],
+    pkShortDone: ["ما لقيناش {n}", "{n} not found"], lk_picked_short: ["جهّز الفاتورة {no} · ناقصة {n}", "Prepared invoice {no} · {n} short"]
   });
 
   const can = () => !!(S.user && (S.admin || (SP.can && SP.can('warehouse'))));
@@ -69,45 +76,58 @@
     } catch (e) { if (SP.alive(n)) $('main').innerHTML = SP.errBox(e); return; }
     if (!SP.alive(n)) return;
     if (!v) { shell(bar(t('pkT')) + `<main class="wrap">${empty('box', t('pkErrGone'), '', `<a class="btn btn-ink" href="#picks">${esc(t('pkT'))}</a>`)}</main>`); return SP.done(n); }
-    const open = !v.picked_at;
-    const line = l => `<div class="pk-line${l.picked ? ' got' : ''}" data-l="${esc(l.id)}">
+    const open = !v.picked_at, shelf = open && !!v.can_short;
+    /* how many of each line are on the shelf (an app order only), kept while he goes back and forth */
+    const AV = S.pkAv = S.pkAv || {}, av = AV[v.id] = AV[v.id] || {};
+    const has = l => av[l.id] == null ? +l.qty : av[l.id];
+    const line = l => `<div class="pk-line${l.picked && has(l) ? ' got' : ''}${shelf && has(l) < +l.qty ? ' short' : ''}${!open && !+l.qty ? ' none' : ''}" data-l="${esc(l.id)}">
         ${l.img ? `<span class="pk-img">${SP.imgTag(l.img, '', l.title, true)}</span>` : ''}
         <span class="pk-main"><b>${esc(l.title)}</b>
           <span class="pk-loc${l.location ? '' : ' none'}">${I('pin')} ${esc(l.location || t('pkNoWhere'))}</span>
           <small>${[l.sku, l.part_no && l.part_no !== l.sku ? l.part_no : '', l.barcode].filter(Boolean).map(x => `<bdi class="mono">${esc(x)}</bdi>`).join(' · ')}</small>
-          ${mm(l) ? `<small>${esc(mm(l))}</small>` : ''}${l.stock != null ? `<small>${esc(t('pkStock', { n: SP.fmtNum(l.stock) }))}</small>` : ''}</span>
+          ${mm(l) ? `<small>${esc(mm(l))}</small>` : ''}${l.stock != null ? `<small>${esc(t('pkStock', { n: SP.fmtNum(l.stock) }))}</small>` : ''}
+          ${shelf ? `<span class="pk-av"><span>${esc(t('pkAvail'))}</span><span class="stepper"><button type="button" data-av="${esc(l.id)}" data-d="-1" aria-label="−">−</button><b class="num">${esc(SP.fmtNum(has(l)))}</b><button type="button" data-av="${esc(l.id)}" data-d="1" aria-label="+">+</button></span>${has(l) < +l.qty ? `<em>${esc(has(l) ? t('pkShortD', { n: SP.fmtNum(+l.qty - has(l)) }) : t('pkNoneLine'))}</em>` : ''}</span>` : ''}
+          ${!open && +l.short ? `<em class="pk-sh">${esc(t('pkShortDone', { n: SP.fmtNum(l.short) }))}</em>` : ''}</span>
         <span class="pk-qty num">× ${esc(l.qty)}</span>
-        ${open ? `<button type="button" class="pk-tick" data-tick="${esc(l.id)}" aria-pressed="${!!l.picked}" aria-label="${esc(t('pkGot'))}">${I('check')}</button>` : (l.picked ? `<span class="pk-tick on" aria-hidden="true">${I('check')}</span>` : '')}</div>`;
+        ${open ? `<button type="button" class="pk-tick" data-tick="${esc(l.id)}" aria-pressed="${!!l.picked && !!has(l)}" aria-label="${esc(t('pkGot'))}"${has(l) ? '' : ' disabled'}>${I('check')}</button>` : (l.picked && +l.qty ? `<span class="pk-tick on" aria-hidden="true">${I('check')}</span>` : '')}</div>`;
     const draw = () => {
-      const got = v.lines.filter(l => l.picked).length;
+      const got = v.lines.filter(l => l.picked && has(l)).length, want = v.lines.filter(l => has(l)).length;
       shell(bar(t('pkNo', { n: v.no }), `<button type="button" class="iconbtn" id="pkpr" aria-label="${esc(t('pkPrint'))}">${I('print')}</button>`) + `<main class="wrap pk-page">
         <section class="mcard pk-head"><div class="pk-top"><b>${esc(v.customer_name || t('pkWalk'))}</b><span class="pill ${v.source === 'app' ? 'demo' : 'ok'}">${esc(t(v.source === 'app' ? 'pkApp' : 'pkSale'))}</span></div>
           <small>${esc([when(v.created_at), v.staff_name, v.branch_name].filter(Boolean).join(' · '))}</small>
-          ${v.note ? `<p class="pk-note">${esc(t('pkNote', { t: v.note }))}</p>` : ''}
+          ${v.note ? `<p class="pk-note">${esc(t('pkNote', { t: v.note }))}</p>` : ''}${shelf ? `<p class="pk-note">${esc(t('pkAppHint'))}</p>` : ''}
           ${v.picked_at ? `<p class="banner note">${I('check')}<span>${esc(t('pkBy', { p: v.picked_name || '' }))} · ${esc(when(v.picked_at))}</span></p>` : ''}</section>
         <div class="pk-lines">${v.lines.map(line).join('')}</div>
-        ${open ? `<div class="pk-foot"><span class="pk-prog num">${esc(t('pkProg', { a: SP.fmtNum(got), b: SP.fmtNum(v.lines.length) }))}</span>
+        ${open ? `<div class="pk-foot"><span class="pk-prog num">${esc(t('pkProg', { a: SP.fmtNum(got), b: SP.fmtNum(want) }))}</span>
           <button type="button" class="btn btn-ghost" id="pkscan">${I('scan')} ${esc(t('pkScan'))}</button>
-          <button type="button" class="btn btn-signal" id="pkdone">${I('check')} ${esc(t('pkDone'))}</button></div>` : ''}</main>`);
+          <button type="button" class="btn btn-signal" id="pkdone">${I('check')} ${esc(t(shelf ? 'pkSend' : 'pkDone'))}</button></div>` : ''}</main>`);
       $('#pkpr').onclick = () => window.print();
       if (!open) return;
       $$('[data-tick]').forEach(b => b.onclick = () => tick(+b.dataset.tick));
+      $$('[data-av]').forEach(b => b.onclick = () => { const l = v.lines.find(x => String(x.id) === b.dataset.av); av[l.id] = Math.min(Math.max(has(l) + +b.dataset.d, 0), +l.qty); draw(); });
       $('#pkscan').onclick = () => SP.scanCode({
         title: t('pkScan'),
         onCode: async code => {
           const k = String(code).replace(/[\s\-./]/g, '').toUpperCase();
-          const l = v.lines.find(x => !x.picked && [x.barcode, x.sku, x.part_no].some(c => c && String(c).replace(/[\s\-./]/g, '').toUpperCase() === k));
+          const l = v.lines.find(x => !x.picked && has(x) && [x.barcode, x.sku, x.part_no].some(c => c && String(c).replace(/[\s\-./]/g, '').toUpperCase() === k));
           if (!l) return t('pkScanMiss', { c: code });
           await tick(l.id, true);
           return t('pkScanHit', { t: l.title });
         }
       });
       $('#pkdone').onclick = async () => {
-        const left = v.lines.filter(l => !l.picked).length;
-        if (left && !await SP.confirmSheet({ title: t('pkDone'), body: t('pkDoneQ', { n: SP.fmtNum(left) }), ok: t('pkDone') })) return;
+        const left = v.lines.filter(l => !l.picked && has(l)).length, short = shelf ? v.lines.filter(l => has(l) < +l.qty) : [];
+        const lbl = t(shelf ? 'pkSend' : 'pkDone');
+        if (shelf && short.length && !v.lines.some(l => has(l))) { if (!await SP.confirmSheet({ title: lbl, body: t('pkNoneQ'), ok: lbl, danger: true })) return; }
+        else if (short.length) { if (!await SP.confirmSheet({ title: lbl, body: t('pkShortQ', { l: short.map(l => SP.fmtNum(+l.qty - has(l)) + ' × ' + l.title).join('، ') }), ok: lbl })) return; }
+        else if (left && !await SP.confirmSheet({ title: lbl, body: t('pkDoneQ', { n: SP.fmtNum(left) }), ok: lbl })) return;
         const b = $('#pkdone'); b.classList.add('busy');
-        try { const r = await rpc('pick_done', { p_invoice: v.id }); SP.toast(t('pkDoneOk', { n: r.no })); S.pkTab = 'waiting'; watchSoon(); SP.go('picks'); }
-        catch (e) { b.classList.remove('busy'); SP.toast(errOf(e), 5000); }
+        try {
+          const r = await rpc('pick_done', { p_invoice: v.id, p_avail: shelf ? v.lines.map(l => ({ id: l.id, qty: has(l) })) : null });
+          delete AV[v.id];
+          SP.toast(t(r.order === 'cancelled' ? 'pkCancelled' : r.order === 'ready' ? 'pkSent' : 'pkDoneOk', { n: r.no }), 5000);
+          S.pkTab = 'waiting'; watchSoon(); SP.go('picks');
+        } catch (e) { b.classList.remove('busy'); SP.toast(errOf(e), 5000); }
       };
     };
     async function tick(id, on) {

@@ -44,7 +44,8 @@
     ordSingleReadyD: ["طلبك جاهز وبيوصلك على عنوانك.", "Your order is ready and on its way to you."],
     ordSingleDone: ["استلمت طلبك. شكراً لتعاملك معانا!", "You received your order. Thank you!"], ordSingleCancelled: ["الطلب تلغى.", "This order was cancelled."],
     ordByCustomer: ["لغيته انت", "You cancelled it"], ordReason: ["السبب: {r}", "Reason: {r}"],
-    ordStepAt: ["{d}", "{d}"], ordItems: ["القطع", "Parts"], ordTotal: ["المجموع", "Total"], ordTotalHidden: ["السعر يأكدهولك المحل", "The shop confirms the price"],
+    ordStepAt: ["{d}", "{d}"], ordItems: ["القطع", "Parts"], ordShortT: ["المخزن ما لقاش كل القطع: تبعت الموجود", "The warehouse did not find every part: what was found went out"],
+    ordShortMine: ["جهزنالك الموجود. اللي ما لقيناهوش:", "We prepared what we had. Not found:"], ordShortN: ["طلبت {q} · ما لقيناش {n}", "{q} ordered · {n} not found"], ordTotal: ["المجموع", "Total"], ordTotalHidden: ["السعر يأكدهولك المحل", "The shop confirms the price"],
     ordWhere: ["الاستلام", "Getting it"], ordCustomer: ["الزبون", "Customer"], ordNote: ["ملاحظة", "Note"],
     ordCancelMine: ["إلغاء الطلب", "Cancel order"], ordCancelMineQ: ["تلغي الطلب رقم {n}؟", "Cancel order {n}?"], ordCancelledToast: ["تلغى الطلب", "Order cancelled"],
     ordCall: ["اتصل بالفرع", "Call the branch"], ordReadyNote: ["طلبك رقم {n} جاهز", "Order {n} is ready"],
@@ -200,8 +201,9 @@
         ${staff && (o.status === 'done' || o.status === 'returned') ? `<div class="ord-acts"><a class="btn btn-ink" href="#inv-${esc(o.id)}">${I('copy')} ${esc(t('ordOpenInv'))}</a></div>` : ''}
         ${staff && SP.sendPanel && o.status !== 'cancelled' ? SP.sendPanel({ ...o, source: 'app' }) : ''}
         ${!staff && (o.sent_at || o.status === 'done' || o.status === 'returned') ? `<div class="ord-acts"><a class="btn btn-ink" href="#bill-${esc(o.id)}">${I('copy')} ${esc(t('ordOpenInv'))}</a></div>` : ''}
-        <section class="mcard"><h2 class="lbl">${esc(t('ordItems'))}</h2><ul class="olines">${(o.items || []).map(it => `<li><span class="ol-q num">${esc(SP.fmtNum(it.qty))}×</span>
-            <span class="ol-t">${it.product_id ? `<a href="#p-${esc(it.product_id)}">${esc(it.title)}</a>` : esc(it.title)}${it.sku ? `<small dir="ltr">${esc(it.sku)}</small>` : ''}</span>
+        ${(o.items || []).some(it => +it.short) ? `<div class="banner warn">${I('box')}<span><b>${esc(t(staff ? 'ordShortT' : 'ordShortMine'))}</b><small>${esc((o.items || []).filter(it => +it.short).map(it => it.short + ' × ' + it.title).join('، '))}</small></span></div>` : ''}
+        <section class="mcard"><h2 class="lbl">${esc(t('ordItems'))}</h2><ul class="olines">${(o.items || []).map(it => `<li${+it.qty ? '' : ' class="gone"'}><span class="ol-q num">${esc(SP.fmtNum(it.qty))}×</span>
+            <span class="ol-t">${it.product_id ? `<a href="#p-${esc(it.product_id)}">${esc(it.title)}</a>` : esc(it.title)}${it.sku ? `<small dir="ltr">${esc(it.sku)}</small>` : ''}${+it.short ? `<small class="ol-short">${esc(t('ordShortN', { n: it.short, q: +it.qty + +it.short }))}</small>` : ''}</span>
             <span class="num">${it.line_total != null ? esc(money(it.line_total, cur)) : ''}</span></li>`).join('')}</ul>
           <p class="ol-tot"><span>${esc(t('ordTotal'))}</span><b class="num">${priced ? esc(money(o.total, cur)) : esc(t('ordTotalHidden'))}</b></p>
           ${o.payment && !OPEN(o.status) ? `<p class="hint">${esc(t('posPay'))}: ${esc(t('pay_' + o.payment))}</p>` : ''}</section>
