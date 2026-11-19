@@ -145,6 +145,19 @@
     const PART_IMG = { 'HY-58101': 'brake-pads', 'TY-04465': 'brake-pads', 'NS-40206': 'brake-pads', 'HO-45022': 'brake-pads', 'HY-25310': 'radiator',
       'KI-55300': 'rear-shocks', 'KI-SPT-SH': 'front-strut', 'KI-26300': 'oil-filter', 'NS-15208': 'oil-filter', 'TY-81110': 'headlight', 'HY-ELN-LED': 'tail-lamp',
       'TY-88320': 'ac-compressor', 'MT-MR968': 'clutch-kit', 'MZ-PE01': 'spark-plugs', 'GEN-OIL-5W30': 'engine-oil', 'GEN-BAT-70': 'battery' };
+    /* an edition that starts empty (config demoEmpty): the accounts, branches, merchants and settings, no goods and nothing sold */
+    if (C.demoEmpty) {
+      const domain = email.split('@')[1] || 'demo.app', seller = { id: uuid(), email: 'seller@' + domain, password: '123456' };
+      DB.users.push(seller);
+      DB.staff.push({ id: uuid(), email: seller.email, user_id: seller.id, name: 'أحمد (بائع)', perms: ['sales', 'returns', 'discounts'], branch_id: s1.id, active: true, max_discount: 10, created_at: ago(5000) });
+      const cu = (name, shop, phone, city, approved, m, login) => { const id = uuid(); DB.users.push({ id, email: login || 'c' + DB.users.length + '@demo.app', password: login ? '123456' : uuid() });
+        DB.customers.push({ user_id: id, name, shop_name: shop, phone, city, approved, created_at: ago(m) }); return id; };
+      cu('علي النوري', 'ورشة النور للصيانة', '0925551234', 'طرابلس', true, 3000, DEMO_MERCHANT);
+      cu('محمد سالم', 'محل سالم لقطع الغيار', '0947778899', 'بنغازي', false, 200);
+      demoShops(DB); demoPicks(DB);
+      DB.merchants = 1; DB.makers = 1; DB.emptied = 1;
+      return;
+    }
     const imgBase = C.demoImgBase == null ? 'img/parts/' : C.demoImgBase;
     const DESCR = 'القطعة جديدة في الكرتونة، وعليها ضمان من الشركة. التوصيل متاح لكل المدن.';
     P.forEach(([s, sku, title, cat, cond, price, qty, make, model, yf, yt, pn], i) => DB.products.push({
@@ -273,6 +286,18 @@
     else if (!DB.picks) DB.picks = 1;
     /* some of the parts back from a sale, and what an app order did not find on the shelf (supabase/setup.sql return_items, pick_done) */
     if (!DB.invoice_returns) DB.invoice_returns = [];
+    /* an edition that starts empty (config demoEmpty): a phone that had the sample goods loses them once, with every sale, purchase,
+       return, payment, expense and stock change and the log of them; the accounts, Face ID, branches, merchants and settings stay */
+    let emptied = false;
+    if (CONF.demoEmpty && !DB.emptied && opts.seed && CONF.mode === 'company') {
+      const b = blank();
+      ['products', 'invoices', 'invoice_items', 'purchases', 'purchase_items', 'stock_moves', 'customer_payments', 'supplier_payments', 'expenses', 'activity', 'price_changes', 'ai_turns']
+        .forEach(k => { DB[k] = []; });
+      DB.invoice_returns = [];
+      Object.assign(DB, { inv_seq: b.inv_seq, pur_seq: b.pur_seq, move_seq: b.move_seq, pay_seq: b.pay_seq, exp_seq: b.exp_seq, act_seq: b.act_seq, batch_seq: b.batch_seq, emptied: 1 });
+      try { localStorage.removeItem('sp_cart'); localStorage.removeItem('sp_favs'); sessionStorage.removeItem('sp_pos'); sessionStorage.removeItem('sp_rcv'); } catch (e) { /* no storage */ }
+      emptied = true;
+    }
     /* every car brand in the world now: a demo saved with only the Korean and Japanese ones shows them all */
     if (!DB.allBrands) {
       DB.allBrands = 1;
@@ -286,7 +311,7 @@
       if (!opts.persist) return;
       try { localStorage.setItem(KEY, JSON.stringify(DB)); localStorage.setItem(KEY + '_session', JSON.stringify(session)); } catch (e) { /* storage full: keep working in memory */ }
     }
-    if (migrate || merch) save();
+    if (migrate || merch || emptied) save();
     const later = v => new Promise(r => setTimeout(() => r(v), 15));
     const uid = () => session && session.user.id;
     const isAdmin = () => !!uid() && DB.admins.includes(uid());
@@ -1493,5 +1518,5 @@
     }; } };
     return { auth, from, rpc, storage, __db: DB };
   }
-  window.SPARAT_DEMO = { create, realPhoto, reset() { try { localStorage.removeItem(KEY); localStorage.removeItem(KEY + '_session'); } catch (e) { /* ignore */ } } };
+  window.SPARAT_DEMO = { create, realPhoto, key: KEY, reset() { try { localStorage.removeItem(KEY); localStorage.removeItem(KEY + '_session'); } catch (e) { /* ignore */ } } };
 })();

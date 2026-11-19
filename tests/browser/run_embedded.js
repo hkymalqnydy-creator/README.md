@@ -4,6 +4,7 @@
 //   python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand branding/crossky/png --out crossky --skin royal \
 //     --logo branding/crossky/svg/wordmark-white.svg --logo-ink branding/crossky/svg/wordmark-ink.svg   (the full line is in README.md)
 //   SITE=crossky CHROME=/path/to/chrome node tests/browser/run_embedded.js
+// A folder built with --empty-stock gets the short run: the empty store, then the first parts from a supplier invoice read by Claude.
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 const fs = require('fs'), os = require('os'), path = require('path'), { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '../..'), SITE = path.resolve(process.env.SITE || path.join(ROOT, 'crossky'));
@@ -64,7 +65,7 @@ const log = (() => { let n = 0; return s => console.log(`${++n}. ${s}`); })();
   const db = f => page.evaluate(f);
   fs.mkdirSync(path.join(__dirname, 'shots'), { recursive: true });
   try {
-    await page.goto(ORIGIN); await see('#gnew .card', 15000);
+    await page.goto(ORIGIN); await see('#gnew .card, #gnew .empty', 15000);
     const brandName = (await text('.topbar .brand')) || (await page.getAttribute('.topbar .brand img', 'alt')) || '';
     must(brandName.includes('CROSSKY'), 'brand ' + brandName);
     must(await page.evaluate(() => [...document.querySelectorAll('.topbar .brand img')].every(i => i.complete && i.naturalWidth > 0)), 'the logo in the bar loads');
@@ -77,6 +78,21 @@ const log = (() => { let n = 0; return s => console.log(`${++n}. ${s}`); })();
     must(cfg.embedded && cfg.noServiceWorker && cfg.demo && !cfg.supabaseUrl, 'page config'); log('opens as a page with the demo, fonts unreachable, no install banner, the Patrol ad on the brand gradient');
     await go('login'); await see('#ap'); if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]'); await see('#ae'); await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago');
     await page.waitForURL(/#mine/); await page.waitForTimeout(400);
+    if (cfg.demoEmpty) {
+      // the edition that starts empty (--empty-stock): nothing in stock, and the first parts come in from a supplier invoice read by Claude
+      must(await db(() => window.__mockdb.products.length + window.__mockdb.invoices.length) === 0, 'an empty store');
+      await go('receive'); await see('#rscan');
+      await page.setInputFiles('#rpf', path.join(__dirname, 'part1.jpg'));
+      await see('.readcard.done', 10000);
+      const got = await db(() => { const D = window.__mockdb; return { n: D.products.length, pur: D.purchases.map(v => v.no), qty: D.products.map(p => p.qty).sort((a, b) => a - b) }; });
+      must(got.n === 3 && got.pur.join() === '1' && got.qty.join() === '2,4,10', 'the first parts from the photo: ' + JSON.stringify(got));
+      log('the empty store: a supplier invoice read by Claude brings in the first three parts (purchase 1)');
+      const csp = await db(() => window.__csp), own = csp.filter(v => /page\.test|inline|eval/.test(v));
+      must(!own.length, 'the page policy blocked the app itself: ' + own.join(' | '));
+      must(!errors.length, errors.join(' | '));
+      console.log('\nPAGE EDITION PASSED (empty store)');
+      return;
+    }
     // barcode: no camera in the page frame, straight to photo or typing
     await go('pos'); await see('#pscan'); await page.click('#pscan'); await see('#scm');
     await page.waitForFunction(() => /الكاميرا مش متاحة/.test(document.querySelector('#scm').textContent), null, { timeout: 4000 });

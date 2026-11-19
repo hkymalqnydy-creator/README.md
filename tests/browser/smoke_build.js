@@ -15,7 +15,8 @@ const URL0 = process.env.URL0 || 'http://localhost:8765/';
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource|net::ERR/.test(m.text())) errors.push('console: ' + m.text()); });
   await page.goto(URL0);
-  await page.locator('#gnew .card').first().waitFor({ timeout: 15000 });
+  // the home's new arrivals: the sample parts, or the empty store when the edition starts empty (--empty-stock)
+  await page.locator('#gnew .card, #gnew .empty').first().waitFor({ timeout: 15000 });
   const title = await page.title(), brand = (await page.locator('.topbar .brand').first().innerText()).trim() || (await page.getAttribute('.topbar .brand img', 'alt')) || '';
   must(title.startsWith('CROSSKY') && brand.includes('CROSSKY'), 'name: ' + title + ' / ' + brand);
   must(await page.evaluate(() => [...document.querySelectorAll('.topbar .brand img')].every(i => i.complete && i.naturalWidth > 0)), 'the logo in the bar loads');
@@ -23,6 +24,18 @@ const URL0 = process.env.URL0 || 'http://localhost:8765/';
   must(man.name === 'CROSSKY' && man.shortcuts.some(s => s.url === './#receive'), 'manifest');
   const cfg = await page.evaluate(() => window.SPARAT_CONFIG);
   must(cfg.mode === 'company' && cfg.demo === true && cfg.brands.length === 0, 'config (every brand)');
+  let empty = '';
+  if (cfg.demoEmpty) {
+    const d = await page.evaluate(() => { const D = window.__mockdb; return { p: D.products.length, i: D.invoices.length, b: D.purchases.length, a: D.activity.length, st: D.staff.length, c: D.customers.length, sh: D.shops.length }; });
+    must(!d.p && !d.i && !d.b && !d.a && d.st >= 2 && d.c >= 2 && d.sh === 3 && await page.locator('#gnew .empty').count() === 1, 'an empty store, the accounts and branches kept: ' + JSON.stringify(d));
+    // a phone that still had the sample goods is emptied once
+    await page.evaluate(() => { const k = window.SPARAT_DEMO.key, D = JSON.parse(JSON.stringify(window.__mockdb));
+      D.products.push({ id: 'old-part', shop_id: D.shops[0].id, owner_id: D.admins[0], sku: 'OLD-1', title: 'قطعة قديمة', cat: 'other', cond: 'original', price: 10, qty: 3, status: 'active', imgs: [], make: 'any' });
+      D.invoices.push({ id: 'old-inv', no: 1001, status: 'done', total: 10, paid: 10, created_at: new Date().toISOString() }); delete D.emptied; localStorage.setItem(k, JSON.stringify(D)); });
+    await page.reload(); await page.locator('#gnew .empty').first().waitFor({ timeout: 15000 });
+    must(await page.evaluate(() => window.__mockdb.products.length + window.__mockdb.invoices.length) === 0, 'the old sample goods are gone after the update');
+    empty = ' | empty store, old goods cleared once';
+  }
   const sw = await page.evaluate(async () => { await navigator.serviceWorker.register('sw.js'); const r = await navigator.serviceWorker.ready; await new Promise(s => setTimeout(s, 1500)); return { active: !!r.active, caches: await caches.keys() }; });
   must(sw.active && sw.caches.some(k => k.startsWith('crossky-')) && !sw.caches.some(k => k.startsWith('sparat-')), 'service worker caches: ' + sw.caches.join(','));
   // owner login (demo)
@@ -37,6 +50,6 @@ const URL0 = process.env.URL0 || 'http://localhost:8765/';
   await ctx.setOffline(true); await page.reload({ waitUntil: 'commit' });
   await page.locator('#pscan').waitFor({ timeout: 10000 }); await page.evaluate(() => { location.hash = ''; }); await page.locator('.topbar .brand').first().waitFor({ timeout: 10000 }); await ctx.setOffline(false);
   must(!errors.length, errors.join(' | '));
-  console.log('BUILD SMOKE OK:', title, '| brands', cfg.brands.length, '| caches', sw.caches.join(','), '| owner reached #receive and #pos | offline reload OK');
+  console.log('BUILD SMOKE OK:', title, '| brands', cfg.brands.length, '| caches', sw.caches.join(','), '| owner reached #receive and #pos | offline reload OK' + empty);
   await browser.close();
 })().catch(e => { console.error('FAIL', e.message); process.exit(1); });

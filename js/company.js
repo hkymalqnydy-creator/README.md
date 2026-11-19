@@ -8,6 +8,11 @@
   const CFG = SP.CFG, arr = SP.arr;
   /* a single company has no shops to verify: its admin card and hints speak about the company */
   if (CFG.mode === 'company') Object.assign(SP.L.T, {
+    /* the store with no parts yet */
+    coEmptyT: ["ما فيش قطع بعد", "No parts yet"], coEmptyB: ["القطع جاية قريب. لو تحتاج قطعة اسألنا عليها.", "Parts are coming soon. Need a part? Ask us."],
+    coEmptyWa: ["اسألنا على واتساب", "Ask us on WhatsApp"], coEmptyWaMsg: ["السلام عليكم، نبي قطعة: ", "Hello, I need a part: "],
+    coEmptyStaff: ["دخّل بضاعتك بفاتورة شراء (يدوي، بالباركود، أو بتصوير فاتورة المورّد) أو من ملف إكسل، وتظهر هنا.", "Bring your stock in with a purchase invoice (by hand, barcode or a photo of the supplier's invoice) or an Excel file, and it shows here."],
+    coEmptyGo: ["فاتورة شراء", "Purchase invoice"],
     adminB: ["الإعدادات، إخفاء الأسعار، الزبائن، الرد الآلي، والربط مع منظومتك.", "Settings, price visibility, customers, auto-reply and the link to your system."],
     noticePh: ["مثلاً: تخفيضات على الفحمات هذا الأسبوع", "e.g. Brake pads on sale this week"]
   });

@@ -16,7 +16,8 @@ CHROME=/path/to/chrome node tests/browser/run_returns.js # «رجّع قطع»: 
 CHROME=/path/to/chrome node tests/browser/run_warehouse.js # the warehouse: where a part is kept (part page, lookup, purchase), a sale waits for يوسف with the shelf and bin of each part, he ticks it and «تم التجهيز», a word for a new one, the owner sees who prepared it
 CHROME=/path/to/chrome node tests/browser/run_voice.js     # talking to the assistant (stand-ins for speech and voice): «بيع زوز فلتر زيت باترول كاش» goes by itself, is read out, «نفّذ» said back makes the invoice
 CHROME=/path/to/chrome node tests/browser/run_ai.js        # the AI assistant: the manager, an invoice from its photo line by line, giving it to a seller for selling only, customers, the server and Claude-app engines with stand-ins, English, a wide screen (23 checks)
-SITE=crossky node tests/browser/run_company.js             # the same checks on a built company folder
+CHROME=/path/to/chrome node tests/browser/run_empty.js     # the edition that starts empty (--empty-stock): customers see the parts are coming and ask on WhatsApp, staff are sent to a purchase invoice, every System page opens empty, the first purchase (1) and sale (1001)
+SITE=crossky node tests/browser/run_company.js             # the same checks on a built company folder (built without --empty-stock: they use the sample parts; run_empty.js takes one built with it)
 SITE=crossky node tests/browser/run_embedded.js            # in-app page edition (tools/build_artifact.py) under the page's security policy
 python3 -m http.server 8765 --directory crossky &          # then: the built folder with its own config and offline cache
 PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1 node tests/browser/smoke_build.js

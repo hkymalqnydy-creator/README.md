@@ -604,8 +604,9 @@
     S.country = COUNTRY.has(load('sp_country', '')) ? load('sp_country', '') : (CFG.defaultCountry || 'LY');
     S.city = load('sp_city', '') || '';
     S.car = load('sp_car', null);
-    S.favs = new Set(arr(load('sp_favs', [])));
     S.err = await initBackend();
+    /* after the backend: a demo that starts empty clears the saved favourites of the parts it removed (js/demo.js demoEmpty) */
+    S.favs = new Set(arr(load('sp_favs', [])));
     window.addEventListener('hashchange', render);
     if (!S.err) {
       try { const r = await sb.auth.getSession(); await refreshUser(r && r.data && r.data.session); } catch (e) { /* signed out */ }

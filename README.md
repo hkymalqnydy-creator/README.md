@@ -37,8 +37,10 @@
 python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand branding/crossky/png --out crossky \
   --skin royal --color '#2F54E6' --logo branding/crossky/svg/wordmark-white.svg --logo-ink branding/crossky/svg/wordmark-ink.svg \
   --hero-car branding/crossky/svg/hero-car.svg --demo-extra branding/crossky/demo.json --demo-ads branding/crossky/ads.json \
-  --site-url https://hkymalqnydy-creator.github.io/README.md/crossky/
+  --site-url https://hkymalqnydy-creator.github.io/README.md/crossky/ --brands all --empty-stock
 ```
+
+`--empty-stock` يخلّي النسخة تبدا فاضية: ما فيهاش قطع ولا مبيعات ولا مشتريات ولا مصروفات (الحسابات والفروع والتجار والإعلان يقعدوا)، والهاتف اللي كان فيه البضاعة التجريبية تنمسح منه مرة وحدة. من غيره تبدا النسخة بقطع وفواتير للتجربة.
 
 الماركات المعروضة من البداية كورية ويابانية (`--brands KR,JP`)، وتقدر تحط ماركات معينة (`--brands toyota,kia`) أو `--brands all`. صاحب الشركة يغيّرها بعدين من التطبيق.
 

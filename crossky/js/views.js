@@ -409,11 +409,19 @@
       if (SP.company && SP.homeShopsFill) SP.homeShopsFill(n);
       const [r, sh] = await Promise.all([api.search(SP.searchArgs(FDEF, { limit: newN })), api.shops({ p_country: cc, p_city: S.city || null, p_limit: 12 })]);
       if (!SP.alive(n)) return;
-      $('#gnew').innerHTML = r.items.length ? cards(r.items) : empty('store', t('emptyStoreT'), t('emptyStoreB', { c: SP.countryName(cc) }), `<a class="btn btn-signal" href="#mine">${esc(t('firstShop'))}</a>`);
+      $('#gnew').innerHTML = r.items.length ? cards(r.items)
+        : SP.company ? (SP.isStaff && SP.isStaff() ? empty('store', t('coEmptyT'), t('coEmptyStaff'), `<a class="btn btn-signal" href="#receive">${esc(t('coEmptyGo'))}</a>`) : coEmpty())
+        : empty('store', t('emptyStoreT'), t('emptyStoreB', { c: SP.countryName(cc) }), `<a class="btn btn-signal" href="#mine">${esc(t('firstShop'))}</a>`);
       if (sh.items.length) $('#hshops').innerHTML = sh.items.map(shopTile).join(''); else $('#secshops').remove();
     } catch (e) { if (SP.alive(n)) $('#gnew').innerHTML = errBox(e); }
     SP.done(n);
   }, { tab: 'home' });
+
+  /* the company's store with no parts yet: a customer asks for the part he needs on WhatsApp */
+  function coEmpty() {
+    const w = SP.contactNumber && SP.waLink(SP.contactNumber(), t('coEmptyWaMsg'), S.country);
+    return empty('store', t('coEmptyT'), t('coEmptyB'), w ? `<a class="btn btn-wa" href="${esc(w)}" target="_blank" rel="noopener">${I('chat')} ${esc(t('coEmptyWa'))}</a>` : '');
+  }
 
   /* ---------- categories ---------- */
   const catRow = (c, k) => `<a class="catrow" ${sf({ cat: c.id })}><span class="hex">${I(c.icon)}</span><span class="cr-name">${esc(SP.catName(c.id))}</span><span class="cr-n num">${k == null ? '' : esc(SP.fmtNum(k))}</span>${I('chevL', 'dirx')}</a>`;
