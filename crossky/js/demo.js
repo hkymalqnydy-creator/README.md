@@ -1035,7 +1035,8 @@
           if (paid != null) { paid = Math.min(Math.max(paid, 0), total); if (paid < total && !supKey(p.supplier)) fail('supplier needed for credit', '22023'); }
         } catch (e) { DB.products = snap; throw e; }
         const me = DB.users.find(u => u.id === uid()), v = { id: uuid(), no: ++DB.pur_seq, branch_id: branch.id, staff_id: uid(), staff_name: (st && st.name) || (me && me.email) || '',
-          supplier: String(p.supplier || '').slice(0, 120), note: String(p.note || '').slice(0, 500), total, paid: paid == null ? null : paid, items_count: lines.length, created_at: now() };
+          supplier: String(p.supplier || '').slice(0, 120), note: String(p.note || '').slice(0, 500), supplier_no: String(p.supplier_no || '').trim().slice(0, 60),
+          total, paid: paid == null ? null : paid, items_count: lines.length, created_at: now() };
         DB.purchases.push(v);
         const base = DB.purchase_items.reduce((k, i) => Math.max(k, i.id || 0), 0);
         lines.forEach((l, i) => DB.purchase_items.push({ id: base + i + 1, purchase_id: v.id, ...l }));
@@ -1049,11 +1050,26 @@
         if (!uid() || !(hasPerm('purchases') || hasPerm('reports'))) return [];
         const q = String(a.p_q || '').trim(), nq = norm(q), bare = v => String(v || '').replace(/[\s\-./]/g, '').toUpperCase();
         const prod = i => DB.products.find(x => x.id === i.product_id);
-        const hit = v => !q || String(v.no) === q || norm(v.supplier).includes(nq) || DB.purchase_items.some(i => i.purchase_id === v.id
+        const hit = v => !q || String(v.no) === q || (v.supplier_no && bare(v.supplier_no) === bare(q)) || norm(v.supplier).includes(nq) || DB.purchase_items.some(i => i.purchase_id === v.id
           && (norm([i.title, i.code, i.maker].filter(Boolean).join(' ')).includes(nq) || (i.code && bare(i.code) === bare(q)) || (prod(i) && text(prod(i)).includes(nq))));
         const L = DB.purchases.filter(hit).sort((x, y) => y.created_at.localeCompare(x.created_at)), off = a.p_offset || 0, lim = Math.min(Math.max(a.p_limit || 30, 1), 100), costs = hasPerm('costs');
         return L.slice(off, off + lim).map(v => ({ ...v, total: costs ? v.total : null, paid: costs ? (v.paid == null ? v.total : v.paid) : null, branch_name: (shopOf(v.branch_id) || {}).name || null, total_count: L.length,
           items: DB.purchase_items.filter(i => i.purchase_id === v.id).map(i => { const pr = prod(i); return { title: i.title, code: i.code, qty: i.qty, maker: i.maker || '', make: pr ? pr.make : null, model: pr ? pr.model : null, cost: costs ? i.cost : null }; }) }));
+      },
+      /* one purchase invoice for its page (supplier invoice number, lines, how it was paid, what the supplier is owed now) */
+      get_purchase(a) {
+        if (!uid() || !(hasPerm('purchases') || hasPerm('reports'))) return null;
+        const v = DB.purchases.find(x => x.id === a.p_id);
+        if (!v) return null;
+        const costs = hasPerm('costs'), k = supKey(v.supplier), sh = shopOf(v.branch_id) || {}, paid = v.paid == null ? v.total : v.paid;
+        const owed = k == null ? null : DB.purchases.filter(x => supKey(x.supplier) === k).reduce((n, x) => n + x.total - (x.paid == null ? x.total : x.paid), 0)
+          - DB.supplier_payments.filter(y => supKey(y.supplier) === k).reduce((n, y) => n + y.amount, 0);
+        return { ...v, supplier_no: v.supplier_no || '', total: costs ? v.total : null, paid: costs ? paid : null,
+          pay: costs ? (v.paid == null || v.paid >= v.total ? 'full' : v.paid === 0 ? 'credit' : 'part') : null,
+          branch: { name: sh.name || null, city: sh.city || null, phone: sh.phone || null }, sup_key: k, sup_balance: costs && k != null ? owed : null,
+          can_undo: hasPerm('purchases') && (isAdmin() || (v.staff_id === uid() && Date.now() - Date.parse(v.created_at) < 864e5)),
+          items: DB.purchase_items.filter(i => i.purchase_id === v.id).sort((x, y) => x.id - y.id).map(i => { const pr = DB.products.find(x => x.id === i.product_id);
+            return { id: i.id, title: i.title, code: i.code || (pr && (pr.sku || pr.part_no)) || null, qty: i.qty, maker: i.maker || '', make: pr ? pr.make : null, model: pr ? pr.model : null, created: !!i.created, cost: costs ? i.cost : null }; }) };
       }
 ,
 

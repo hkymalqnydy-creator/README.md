@@ -57,7 +57,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('#radd'); await page.waitForTimeout(200); await page.keyboard.type('حساس أكسجين خلفي');
     const nl = page.locator('#rlines .rline.new').first();
     await nl.locator('[data-f="cost"]').fill('50'); await nl.locator('[data-f="location"]').fill('رف E1 · خانة 3');
-    await page.fill('#rsup', 'شركة الوفاء لقطع الغيار'); await page.click('#rsave'); await page.waitForURL(/#purchases/);
+    await page.fill('#rsup', 'شركة الوفاء لقطع الغيار'); await page.click('#rsave'); await page.waitForURL(/#pur-/);
     must(await db(() => (window.__mockdb.products.find(p => p.title === 'حساس أكسجين خلفي') || {}).location) === 'رف E1 · خانة 3', 'the new part was made with its place');
     log('a purchase: the part already in stock says where it goes; a new part entered by hand gets its place');
     // a sale at the till goes to the warehouse

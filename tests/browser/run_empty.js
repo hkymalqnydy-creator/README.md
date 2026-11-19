@@ -60,7 +60,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.click('#radd'); await page.waitForTimeout(200); await page.keyboard.type('فلتر هواء أكسنت');
     const nl = page.locator('#rlines .rline.new').first();
     await nl.locator('[data-f="cost"]').fill('30'); await nl.locator('[data-f="price"]').fill('45'); await nl.locator('[data-f="qty"]').first().fill('10');
-    await page.fill('#rsup', 'الشركة الكورية للتوريد'); await page.click('#rsave'); await page.waitForURL(/#purchases/);
+    await page.fill('#rsup', 'الشركة الكورية للتوريد'); await page.click('#rsave'); await page.waitForURL(/#pur-/);
     const p1 = await db(() => { const D = window.__mockdb, p = D.products[0]; return { n: D.products.length, title: p && p.title, qty: p && p.qty, price: p && p.price, pur: D.purchases.map(v => v.no) }; });
     must(p1.n === 1 && p1.title === 'فلتر هواء أكسنت' && p1.qty === 10 && p1.price === 45 && p1.pur.join() === '1', 'the first part and purchase 1: ' + JSON.stringify(p1));
     await go(''); await see('#gnew .card');

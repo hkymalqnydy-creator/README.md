@@ -34,7 +34,7 @@
     aiDStock: ["الكمية توا {n}", "Stock is now {n}"], aiDPrice: ["السعر توا {m}", "The price is now {m}"], aiDBulk: ["تغير سعر {n} قطعة. تقدر ترجعها من «الأسعار»", "{n} prices changed. You can undo it in Prices"],
     aiDRecv: ["تحفظت فاتورة الشراء رقم {n}: {u} قطعة زادت و{a} جديدة", "Purchase invoice {n}: {u} updated, {a} new"], aiDPay: ["تسجلت الدفعة", "Payment recorded"],
     aiDExp: ["تسجل المصروف", "Expense recorded"], aiDShop: ["تحفظت الإعدادات", "Settings saved"], aiDAd: ["الإعلان طلع في الرئيسية", "The ad is on the home screen"],
-    aiLOpenInv: ["افتح الفاتورة", "Open the invoice"], aiLOpenPart: ["افتح القطعة", "Open the part"], aiLOpenCust: ["افتح حساب الزبون", "Open the customer"], aiLOpenRecv: ["افتح المشتريات", "Open purchases"],
+    aiLOpenInv: ["افتح الفاتورة", "Open the invoice"], aiLOpenPart: ["افتح القطعة", "Open the part"], aiLOpenCust: ["افتح حساب الزبون", "Open the customer"], aiLOpenRecv: ["افتح فاتورة الشراء", "Open the purchase invoice"],
     aiLHome: ["شوف الرئيسية", "See the home screen"], aiLCart: ["افتح السلة", "Open the cart"], aiLPrices: ["افتح الأسعار", "Open Prices"],
     aiSRep: ["المبيعات: {p}", "Sales: {p}"], aiSInv: ["فواتير", "Invoices"], aiSSum: ["المبيعات", "Sales"], aiSCredit: ["دين", "On credit"], aiSRet: ["مرجّعة", "Returned"],
     aiSProfit: ["الربح", "Profit"], aiSTop: ["الأكثر بيعاً", "Best sellers"], aiSPnl: ["الأرباح والخسائر: {p}", "Profit and loss: {p}"], aiSCogs: ["تكلفة البضاعة", "Cost of goods"],
@@ -211,13 +211,14 @@
   };
   tool({
     name: 'open_page', perm: null,
-    desc: 'Open a page of the app for the person (the chat stays one tap away). page: ' + Object.keys(PAGES).join(', ') + ', part (with id), invoice (with id), brand (with id like toyota), customer (with key). For search, give query.',
-    props: { page: str('which page'), id: str('for part, invoice, brand or customer'), query: str('for search: the words') }, req: ['page'],
+    desc: 'Open a page of the app for the person (the chat stays one tap away). page: ' + Object.keys(PAGES).join(', ') + ', part (with id), invoice (with id), purchase (a purchase invoice, with id), brand (with id like toyota), customer (with key). For search, give query.',
+    props: { page: str('which page'), id: str('for part, invoice, purchase, brand or customer'), query: str('for search: the words') }, req: ['page'],
     async run(a, ctx) {
       const pg = String(a.page || ''), id = clip(a.id, 120);
       let hash = null;
       if (pg === 'part' && /^[0-9a-f-]{36}$/i.test(id)) hash = 'p-' + id;
       else if (pg === 'invoice' && /^[0-9a-f-]{36}$/i.test(id) && SP.aiAllowed(['sales', 'invoices'])) hash = 'inv-' + id;
+      else if (pg === 'purchase' && /^[0-9a-f-]{36}$/i.test(id) && SP.aiAllowed(['purchases', 'reports'])) hash = 'pur-' + id;
       else if (pg === 'brand' && SP.BRAND.has(id)) hash = 'b-' + id;
       else if (pg === 'customer' && id && SP.aiAllowed(['invoices', 'reports'])) hash = 'buyer-' + encodeURIComponent(id);
       else if (pg === 'search') { S.f = { ...SP.FDEF, q: clip(a.query, 80) }; hash = 'search'; }
@@ -548,7 +549,7 @@
         async run() {
           const r = await rpc('receive_stock', { p: { branch: (S.perms && S.perms.branch) || null, supplier, note, ...(paid != null ? { paid } : {}), source: 'manual',
             items: lines.map(l => l.product_id ? { product_id: l.product_id, qty: l.qty, cost: l.cost } : { part_no: l.part_no, barcode: '', title: l.title, qty: l.qty, cost: l.cost, price: null, cat: l.cat }) } });
-          return { text: t('aiDRecv', { n: r.no, u: num(r.updated), a: num(r.new) }), links: [{ href: '#purchases', label: t('aiLOpenRecv') }], what: t('aiLogRecv', { n: r.no }), ref: String(r.no) };
+          return { text: t('aiDRecv', { n: r.no, u: num(r.updated), a: num(r.new) }), links: [{ href: r.id ? '#pur-' + r.id : '#purchases', label: t('aiLOpenRecv') }], what: t('aiLogRecv', { n: r.no }), ref: String(r.no) };
         }
       });
       return { prepared: true, waiting_for_confirmation: true, lines: lines.length };
@@ -625,11 +626,11 @@
             [t('aiRLines'), t('aiRLinesV', { l: num(read.length), u: num(read.reduce((k, l) => k + l.qty, 0)), a: num(fresh) })],
             ...(paid != null ? [[t('aiRPaid'), money(paid)]] : [])],
           total: [t('aiRTotal'), money(total)],
-          alt: { label: t('aiEditRecv'), run: () => { SP.rcvLoad(read, { supplier, note }); return '#receive'; } },
+          alt: { label: t('aiEditRecv'), run: () => { SP.rcvLoad(read, { supplier, supplier_no: invNo, note }); return '#receive'; } },
           async run() {
-            const res = await rpc('receive_stock', { p: { branch: (S.perms && S.perms.branch) || null, supplier, note, ...(paid != null ? { paid } : {}), source: 'photo',
+            const res = await rpc('receive_stock', { p: { branch: (S.perms && S.perms.branch) || null, supplier, supplier_no: invNo, note, ...(paid != null ? { paid } : {}), source: 'photo',
               items: read.map(l => l.p ? { product_id: l.p.id, qty: l.qty, cost: l.cost } : { part_no: l.code, barcode: l.barcode, title: l.title || l.code || l.barcode, qty: l.qty, cost: l.cost, price: null, cat: 'other' }) } });
-            return { text: t('aiDRecvPhoto', { n: res.no, l: num(read.length), a: num(res.new) }), links: [{ href: '#purchases', label: t('aiLOpenRecv') }],
+            return { text: t('aiDRecvPhoto', { n: res.no, l: num(read.length), a: num(res.new) }), links: [{ href: res.id ? '#pur-' + res.id : '#purchases', label: t('aiLOpenRecv') }],
               what: t('aiLogRecvPhoto', { n: res.no, s: supplier || '—' }), ref: String(res.no) };
           }
         });
@@ -736,7 +737,7 @@
     ['invoices', ['sales', 'invoices'], 'فواتير فاتورة طباعة اطبع فواتير البيع', 'فواتير البيع (#invoices): كل فواتير البيع، تدوّر برقمها أو اسم الزبون أو رقمه، وتفتح أي واحدة تطبعها أو تبعتها.', 'Invoices (#invoices): every sale; search by number, customer name or phone; open one to print or send it.'],
     ['returns', 'returns', 'ترجيع ترجع مرتجع رجع', 'ترجيع فاتورة: افتحها من «الفواتير» واضغط «ترجيع»؛ القطع ترجع للمخزن والفاتورة تتعلّم مرجّعة.', 'Returns: open the invoice and tap Return; the parts go back to stock.'],
     ['invphoto', ['purchases', 'sales'], 'صورة صوره فاتورة فاتوره نزل نزّل دخل سجل طبق الاصل', 'فاتورة من صورة: في المساعد اضغط زر الكاميرا وصوّر الفاتورة وقول «نزّل الفاتورة». يقراها سطر سطر (الأصناف والأرقام والعدد والأسعار والمورّد ورقم الفاتورة) ويوريك بطاقة طبق الأصل ويقارن المجموع بالمكتوب في الورقة؛ تضغط «نفّذ» وتدخل للمخزن، واللي مش موجود يتزاد قطعة جديدة. ولو هي فاتورة بيع قول «فاتورة بيع».', 'An invoice from its photo: in the assistant tap the camera, photograph the invoice and say “enter this invoice”. It reads it line by line (items, codes, quantities, prices, supplier, invoice number), shows a card just like the paper and checks the total; tap Do it and it goes into stock, new items as new parts. For a sales invoice say “sales invoice”.'],
-    ['receive', 'purchases', 'استلام بضاعة مورد فاتورة شراء صور مشتريات يدوي', 'فاتورة شراء (#receive، الزر الثاني في تبويب المنظومة): دخّل المشتريات يدوي (دوّر على الصنف بالاسم أو رقم الصنف أو الباركود أو الشركة، أو «أضف صنف يدوي» للصنف الجديد)، أو صوّر فاتورة المورّد وتدخل الأصناف للمخزن وحدها، أو امسح الباركود. حدد المورّد والدفع (كاش، دين، جزء). لو فيه غلط تلغي الفاتورة من «فواتير الشراء».', 'Purchase invoice (#receive, the second button on the System tab): enter purchases by hand (find the part by name, item code, barcode or maker, or «Add an item by hand» for a new one), or photograph the supplier invoice and the lines go into stock by themselves, or scan barcodes; set the supplier and payment. Cancel one from Purchase invoices.'],
+    ['receive', 'purchases', 'استلام بضاعة مورد فاتورة شراء صور مشتريات يدوي', 'فاتورة شراء (#receive، الزر الثاني في تبويب المنظومة): دخّل المشتريات يدوي (دوّر على الصنف بالاسم أو رقم الصنف أو الباركود أو الشركة، أو «صنف جديد» للصنف الجديد)، أو صوّر فاتورة المورّد وتدخل الأصناف للمخزن وحدها، أو امسح الباركود. حدد المورّد ورقم فاتورته والدفع (كاش، دين، جزء). بعد الحفظ تفتح الفاتورة في صفحتها (#pur-…): المورّد ورقم فاتورته، ختم «وارد» (أزرق مدفوعة، أحمر لو باقي)، الأصناف والإجمالي والمدفوع والباقي، وحساب المورّد، وتطبعها أو تشاركها أو تلغيها من نفس الصفحة. كل الفواتير في «فواتير الشراء»، وتلقى وحدة برقمها أو رقم فاتورة المورّد أو اسمه أو أي قطعة فيها.', 'Purchase invoice (#receive, the second button on the System tab): enter purchases by hand (find the part by name, item code, barcode or maker, or «New item» for a new one), or photograph the supplier invoice and the lines go into stock by themselves, or scan barcodes; set the supplier, his invoice number and payment. Once saved it opens on its own page (#pur-…): supplier and his number, a «Received» stamp (blue when paid, red while something is owed), the lines, total, paid and owed, the supplier account; print, share or cancel it there. All of them are in Purchase invoices, found by number, the supplier invoice number, the supplier or any part on them.'],
     ['stock', ['products', 'purchases', 'reports'], 'مخزن كمية جرد تالف ضايع ناقص خالص', 'المخزن (#stock): الكميات وقيمتها، الناقص والخالص، وتعديل الكمية (جرد، تالف، ضايع) من زر التعديل جنب القطعة.', 'Stock (#stock): quantities and value, low and out of stock; change a quantity (count, damaged, lost) with the edit button.'],
     ['addpart', 'products', 'اضيف قطعة جديدة صنف', 'قطعة جديدة: من «حسابي» افتح الفرع واضغط «أضف قطعة» (الاسم، الرقم، السيارة، السعر، الكمية، الصور)، أو تتزاد وحدها لما تستلم بضاعة جديدة.', 'New part: in Account open the branch and tap Add part, or it is created when you receive new goods.'],
     ['buyers', ['invoices', 'reports'], 'زبائن ديون دين عليه حساب دفعة', 'الزبائن والديون (#buyers): كل زبون وفواتيره وكم عليه، وتسجل دفعة من صفحته.', 'Customers (#buyers): each customer, their invoices and what they owe; record a payment on their page.'],

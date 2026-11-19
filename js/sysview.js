@@ -156,7 +156,7 @@
      For the owner and the staff on a phone with Face ID, a fingerprint or Windows Hello (each can turn it off for his phone in
      the Face ID card of «حسابي»). A tap that leads into the System asks for Face ID right then (Safari opens it only from a
      tap, so its challenge is fetched ahead), with the lock page underneath. Signing in just now counts: no second ask. */
-  const ENTRY = /^(system|pos|receive|lookup|invoices|inv-|purchases|orders|order-|picks|pick-|reports|staff|stock|merchants|merchant-|buyers|buyer-|suppliers|supplier-|expenses|pnl|admin|new-item|edit-item|new-shop|edit-shop)/;
+  const ENTRY = /^(system|pos|receive|lookup|invoices|inv-|purchases|pur-|orders|order-|picks|pick-|reports|staff|stock|merchants|merchant-|buyers|buyer-|suppliers|supplier-|expenses|pnl|admin|new-item|edit-item|new-shop|edit-shop)/;
   const ENTRY_OFF = 'sp_sys_entry_off';
   const CFG = SP.CFG || window.SPARAT_CONFIG || {};
   let bio = CFG.embedded || !window.isSecureContext || !window.PublicKeyCredential || !SP.passkeyReady ? false : null, bioAsked = false, entryAt = 0, asking = false, warmT = 0;

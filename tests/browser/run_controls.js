@@ -63,16 +63,16 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.waitForFunction(() => document.querySelectorAll('.rline').length === 3 && !document.querySelector('.rl-state:not(.ok):not(.new)'));
     must(await page.locator('.rline.ok').count() === 2 && await page.locator('.rline.new').count() === 1, 'the lines are back on screen to fix');
     log('taken back: quantities and cost as before, the new part removed, the 3 lines back on screen to fix');
-    await page.locator('.rline.ok [data-f="qty"]').first().fill('5'); await page.click('#rsave'); await page.waitForURL(/#purchases/); await see('details.pur');
+    await page.locator('.rline.ok [data-f="qty"]').first().fill('5'); await page.click('#rsave'); await page.waitForURL(/#pur-/); await see('#pur-doc');
     must(await db(() => window.__mockdb.products.find(p => p.sku === 'KI-26300').qty) === k0.a + 5, 'fixed and entered by the button');
     log('fixed one quantity and entered it with the button');
 
-    // ----- taking a receipt back from the list -----
-    await page.click('details.pur summary'); await see('details.pur [data-undo]');
+    // ----- taking a receipt back from its page -----
+    await see('#pundo');
     const pu1 = await db(() => window.__mockdb.purchases.length);
-    await page.click('details.pur [data-undo]'); await confirm(); await page.waitForTimeout(400);
-    must(await db(() => window.__mockdb.purchases.length) === pu1 - 1 && await db(() => window.__mockdb.products.find(p => p.sku === 'KI-26300').qty) === k0.a, 'receipt taken back from the list');
-    log('receipt taken back from the receipts list: stock as before'); await shot('02-receipts');
+    await page.click('#pundo'); await confirm(); await page.waitForURL(/#purchases$/); await page.waitForTimeout(400);
+    must(await db(() => window.__mockdb.purchases.length) === pu1 - 1 && await db(() => window.__mockdb.products.find(p => p.sku === 'KI-26300').qty) === k0.a, 'receipt taken back from its page');
+    log('receipt taken back from its page: stock as before, back to the list'); await shot('02-receipts');
 
     // ----- not by itself: read on the device with an unknown part, or on credit without a supplier -----
     await go('receive'); await see('#rauto');
@@ -85,7 +85,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.evaluate(() => { const f = window.SP_SCAN_ENGINE; window.SP_SCAN_ENGINE = async (x, s) => ({ ...(await f(x, s)), supplier: '' }); });
     await page.setInputFiles('#rpf', PHOTO); await see('#rwait:not([hidden])', 8000);
     must((await text('#rwait')).includes('المورّد'), 'credit without a supplier waits: ' + await text('#rwait'));
-    await page.fill('#rsup', 'مورد آجل'); await page.click('#rsave'); await page.waitForURL(/#purchases/);
+    await page.fill('#rsup', 'مورد آجل'); await page.click('#rsave'); await page.waitForURL(/#pur-/);
     log('on credit with no supplier name on the invoice: it waits for the name, then enters');
     // switched off on this device: the lines wait for the button
     await go('receive'); await page.click('label.rcv-auto'); must(!(await page.isChecked('#rauto')), 'switched off');

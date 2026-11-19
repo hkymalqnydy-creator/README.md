@@ -48,7 +48,7 @@
     rcvUndone: ["لغينا فاتورة الشراء {n}. السطور قدامك تصلحها وتدخلها.", "Purchase invoice {n} cancelled. The lines are here to fix and enter again."],
     rcvUndoneList: ["لغينا فاتورة الشراء {n}", "Purchase invoice {n} cancelled"], rcvUndoSold: ["ما نقدروش نرجّعوه: انباع من «{t}»", "Can’t take it back: some of “{t}” was already sold"],
     rcvUndoOld: ["الموظف يقدر يلغي فاتورة الشراء متاعه بس، وفي نفس اليوم.", "Staff can cancel only their own purchase invoices, within a day."],
-    rcvAnother: ["صوّر فاتورة ثانية", "Photograph another invoice"], rcvSeeList: ["شوف فواتير الشراء", "See purchase invoices"],
+    rcvAnother: ["صوّر فاتورة ثانية", "Photograph another invoice"], rcvSeeList: ["شوف فواتير الشراء", "See purchase invoices"], rcvOpenInv: ["افتح الفاتورة", "Open the invoice"],
     rcvWaitFix: ["ما دخلتش بروحها: {n} سطر يحتاج تكمّله (الاسم أو الكمية). صلّحه واضغط «أدخلها للمخزون».", "Not entered: {n} lines need a name or quantity. Fix them and tap Add to stock."],
     rcvWaitDevice: ["ما دخلتش بروحها: القراية على الجهاز وفيه قطع مش معروفة عندنا. راجعها واضغط «أدخلها للمخزون».", "Not entered: it was read on this device and has parts we don’t know. Check them and tap Add to stock."],
     rcvWaitPaid: ["ما دخلتش بروحها: اكتب كم دفعت للمورّد، واضغط «أدخلها للمخزون».", "Not entered: enter what you paid the supplier, then tap Add to stock."],
@@ -58,7 +58,18 @@
     rcvNeedLines: ["ما فيش أصناف للإدخال", "There are no lines to save"], rcvMany: ["الحد 300 صنف في الفاتورة الواحدة", "An invoice can have up to 300 lines"],
     purT: ["فواتير الشراء", "Purchase invoices"], purEmpty: ["ما فيش فواتير شراء بعد.", "No purchase invoices yet."],
     purSearchPh: ["المورّد، اسم القطعة، رقم الصنف أو الشركة…", "Supplier, part name, item code or maker…"], purNoHit: ["ما فيش فاتورة شراء فيها «{q}».", "No purchase invoice has «{q}»."], purNo: ["فاتورة شراء {n}", "Purchase {n}"],
-    perm_purchases: ["فواتير الشراء (إدخال المشتريات)", "Purchase invoices (entering purchases)"]
+    perm_purchases: ["فواتير الشراء (إدخال المشتريات)", "Purchase invoices (entering purchases)"],
+    /* the purchase invoice: the new one being written, and one already in stock (its own page, printed like the sale) */
+    rcvNewT: ["فاتورة شراء جديدة", "New purchase invoice"], rcvHdrT: ["بيانات الفاتورة", "Invoice details"],
+    rcvSupNo: ["رقم فاتورة المورّد", "Supplier's invoice no."], rcvSupPh: ["اسم الشركة", "Company name"],
+    rcvSupNoPh: ["مثلاً 4471", "e.g. 4471"], rcvLines0: ["الأصناف", "Items"], rcvAddShort: ["صنف جديد", "New item"], rcvLineTot: ["إجمالي السطر", "Line total"],
+    rcvItemsK: ["الأصناف", "Items"], purOwedT: ["الباقي للمورّد", "Owed to the supplier"], purBy: ["استلمها", "Received by"],
+    purStampIn: ["وارد", "Received"], purSt_full: ["مدفوعة", "Paid"], purSt_credit: ["آجل", "On credit"], purSt_part: ["دفع جزء", "Part paid"],
+    purSignBy: ["توقيع المستلم", "Received by (signature)"], purSignSup: ["توقيع المورّد", "Supplier (signature)"],
+    purBalOwe: ["حساب {s}: عليك {m}", "{s}: you owe {m}"], purBal0: ["حساب {s}: خالص", "{s}: nothing owed"], purBalCr: ["حساب {s}: ليك عنده {m}", "{s} owes you {m}"],
+    purBalSub: ["كل فواتيره والدفعات اللي دفعتها له", "All the supplier's invoices and your payments"],
+    purShare: ["شارك على واتساب", "Share on WhatsApp"], purGone: ["فاتورة الشراء هذي مش موجودة. يمكن تلغت.", "This purchase invoice isn't here. It may have been cancelled."],
+    purSupNoShort: ["فاتورته {n}", "His no. {n}"], purMsgT: ["فاتورة شراء رقم {n}", "Purchase invoice {n}"]
   });
 
   /* ---------- shared helpers ---------- */
@@ -351,13 +362,15 @@
   const saveR = v => { try { sessionStorage.setItem(RCV, JSON.stringify(v)); } catch (e) { /* private mode */ } };
   const lid = () => Math.random().toString(36).slice(2, 10);
   const money = (v, cur) => SP.priceText(Number(v || 0), cur || SP.currencyOf(S.country));
-  const matchOf = p => ({ id: p.id, title: p.title, qty: p.qty, sku: p.sku || '', part_no: p.part_no || '', barcode: p.barcode || '', price: p.price, cost: p.cost, cur: p.shop && p.shop.currency, mm: SP.makerModel(p), loc: p.location || '' });
+  const matchOf = p => ({ id: p.id, title: p.title, qty: p.qty, sku: p.sku || '', part_no: p.part_no || '', barcode: p.barcode || '', price: p.price, cost: p.cost, cur: p.shop && p.shop.currency, mm: SP.makerModel(p), loc: p.location || '',
+    img: (Array.isArray(p.imgs) && p.imgs[0]) || '', cat: p.cat || '' });
   /* the assistant's «edit in Receive»: an invoice it read, opened in this page to change before entering (lines: {code, barcode, title, qty, cost, p}) */
   SP.rcvLoad = (lines, o) => {
     const st = loadR();
     st.lines = (lines || []).slice(0, 300).map(l => ({ k: lid(), code: l.code || '', barcode: l.barcode || '', title: l.title || '', qty: l.qty || 1, cost: l.cost == null ? null : l.cost,
       price: null, cat: 'other', src: 'photo', match: l.p ? matchOf(l.p) : null, state: l.p ? 'ok' : 'new' }));
     if (o && o.supplier) st.supplier = o.supplier;
+    if (o && o.supplier_no) st.supplier_no = String(o.supplier_no).slice(0, 60);
     if (o && o.note) st.note = o.note;
     saveR(st);
   };
@@ -388,19 +401,25 @@
   SP.route(/^receive$/, async (m, n) => {
     if (gate(n) || !guard(['purchases'], t('rcvT'))) return;
     const st = loadR(), fixedBranch = S.perms && S.perms.branch, canPrice = SP.can('products');
+    /* the invoice being written: the ways in on the blue band (a photo of the supplier's invoice, barcodes), its details, its lines, its total */
+    let today = ''; try { today = new Intl.DateTimeFormat(SP.LANG + '-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()); } catch (e) { /* old browser */ }
     shell(bar(t('rcvT'), `<a class="iconbtn" href="#purchases" aria-label="${esc(t('purT'))}">${I('copy')}</a>`) + `<main class="wrap pos rcv">
-      <div class="rcv-actions"><label class="rcv-big" id="rphoto">${I('receipt')}<b>${esc(t('rcvPhoto'))}</b><small>${esc(t('rcvPhotoSub'))}</small><input type="file" accept="image/*" class="sr" id="rpf"></label>
-        <button type="button" class="rcv-big" id="rscan">${I('scan')}<b>${esc(t('rcvScan'))}</b><small>${esc(t('rcvScanSub'))}</small></button></div>
-      <label class="switch rcv-auto"><input type="checkbox" id="rauto"${autoOn() ? ' checked' : ''}><span></span>${esc(t('rcvAuto'))}</label><span class="hint">${esc(t('rcvAutoHint'))}</span>
+      <section class="rcv-band"><div class="rcv-band-h"><span class="rcv-band-ic">${I('receipt')}</span><div><b>${esc(t('rcvNewT'))}</b><small>${esc(today)}</small></div></div>
+        <div class="rcv-actions"><label class="rcv-big" id="rphoto">${I('camera')}<b>${esc(t('rcvPhoto'))}</b><small>${esc(t('rcvPhotoSub'))}</small><input type="file" accept="image/*" class="sr" id="rpf"></label>
+          <button type="button" class="rcv-big" id="rscan">${I('scan')}<b>${esc(t('rcvScan'))}</b><small>${esc(t('rcvScanSub'))}</small></button></div>
+        <label class="switch rcv-auto"><input type="checkbox" id="rauto"${autoOn() ? ' checked' : ''}><span></span>${esc(t('rcvAuto'))}</label><span class="hint">${esc(t('rcvAutoHint'))}</span></section>
       <div id="rread"></div>
-      <h2 class="lbl rcv-man"><label for="rq">${esc(t('rcvManT'))}</label></h2>
-      <form class="field" id="rsf" role="search"><div class="inrow"><input id="rq" class="input" autocomplete="off" placeholder="${esc(t('rcvSearchPh'))}" enterkeyhint="search"></div></form>
-      <div id="rres" class="pres"></div>
-      <button type="button" class="btn btn-ghost sm rcv-add" id="radd">${I('plus')} ${esc(t('rcvAddMan'))}</button>
-      <div class="row2"><div class="field"><label for="rsup">${esc(t('rcvSupplier'))}</label><input id="rsup" class="input" maxlength="120" value="${esc(st.supplier || '')}"></div>
-        <div class="field"><label for="rbr">${esc(t('posBranch'))}</label><select id="rbr" class="input"${fixedBranch ? ' disabled' : ''}></select></div></div>
-      <div id="rpayb"></div>
-      <h2 class="lbl" id="rhead"></h2><div id="rlines" class="plines"></div><div id="rsum"></div></main>`);
+      <section class="rcv-card" aria-labelledby="rhdrT"><h2 class="rcv-h" id="rhdrT">${I('truck')} ${esc(t('rcvHdrT'))}</h2>
+        <div class="row2 rcv-sup"><div class="field"><label for="rsup">${esc(t('rcvSupplier'))}</label><input id="rsup" class="input" maxlength="120" list="rsupl" autocomplete="off" placeholder="${esc(t('rcvSupPh'))}" value="${esc(st.supplier || '')}"></div>
+          <div class="field"><label for="rsno">${esc(t('rcvSupNo'))}</label><input id="rsno" class="input mono" dir="ltr" maxlength="60" autocomplete="off" spellcheck="false" placeholder="${esc(t('rcvSupNoPh'))}" value="${esc(st.supplier_no || '')}"></div></div>
+        <datalist id="rsupl"></datalist>
+        <div class="field"><label for="rbr">${esc(t('posBranch'))}</label><select id="rbr" class="input"${fixedBranch ? ' disabled' : ''}></select></div>
+        <div id="rpayb"></div></section>
+      <section class="rcv-card rcv-items" aria-labelledby="rhead"><div class="rcv-h-row"><h2 class="rcv-h" id="rhead"></h2>
+          <button type="button" class="btn btn-ghost sm rcv-add" id="radd">${I('plus')} ${esc(t('rcvAddShort'))}</button></div>
+        <form class="field rcv-find" id="rsf" role="search"><label class="rcv-man" for="rq">${esc(t('rcvManT'))}</label><div class="inrow"><input id="rq" class="input" autocomplete="off" placeholder="${esc(t('rcvSearchPh'))}" enterkeyhint="search"></div></form>
+        <div id="rres" class="pres"></div><div id="rlines" class="plines"></div></section>
+      <div id="rsum"></div></main>`);
     try {
       const sh = (await api.shops({ p_limit: 100 })).items;
       if (!SP.alive(n)) return;
@@ -415,11 +434,14 @@
       $('#rpayb').innerHTML = `<fieldset class="field"><legend>${esc(t('rcvPayT'))}</legend><div class="seg">${[['full', 'rcvPaidFull'], ['credit', 'rcvCredit'], ['part', 'rcvPart']].map(([k, l], i) =>
           `<input type="radio" name="rpay" id="rpay${i}" value="${k}"${(st.pay || 'full') === k ? ' checked' : ''}><label for="rpay${i}">${esc(t(l))}</label>`).join('')}</div></fieldset>
         ${st.pay === 'part' ? `<div class="prow"><label for="rpaid">${esc(t('rcvPaidNow'))}</label><input id="rpaid" class="input num" inputmode="decimal" dir="ltr" maxlength="12" value="${esc(st.paid || '')}"></div>` : ''}`;
-      $$('input[name=rpay]').forEach(r => r.onchange = () => { st.pay = r.value; saveR(st); drawPay(); });
-      if ($('#rpaid')) $('#rpaid').oninput = e => { st.paid = SP.digits(e.target.value); e.target.classList.remove('invalid'); saveR(st); };
+      $$('input[name=rpay]').forEach(r => r.onchange = () => { st.pay = r.value; saveR(st); drawPay(); paySum(); });
+      if ($('#rpaid')) $('#rpaid').oninput = e => { st.paid = SP.digits(e.target.value); e.target.classList.remove('invalid'); saveR(st); paySum(); };
     }
     drawPay();
     $('#rsup').oninput = e => { st.supplier = e.target.value; e.target.classList.remove('invalid'); saveR(st); };
+    $('#rsno').oninput = e => { st.supplier_no = e.target.value; saveR(st); };
+    /* the suppliers already bought from, so a name is written the same way each time (his account goes by the name) */
+    if (SP.can('costs')) sb().rpc('list_suppliers', { p_limit: 100 }).then(r => { const d = chk(r); if (d && SP.alive(n) && $('#rsupl')) $('#rsupl').innerHTML = (d.items || []).map(x => `<option value="${esc(x.name)}"></option>`).join(''); }).catch(() => {});
 
     /* catalog matching */
     async function check(l) {
@@ -512,6 +534,7 @@
           title: String(x.title || '').trim().slice(0, 120), qty: Math.max(1, Math.round(toNum(x.qty) || 1)), cost: toNum(x.cost != null ? x.cost : x.unit_price), src: 'photo'
         })).filter(x => x.title || x.code || x.barcode);
         if (r.supplier && !st.supplier) { st.supplier = String(r.supplier).slice(0, 120); $('#rsup').value = st.supplier; }
+        if (r.invoice_no && !st.supplier_no) { st.supplier_no = String(r.invoice_no).trim().slice(0, 60); $('#rsno').value = st.supplier_no; }
         const added = items.map(x => addLine(x));
         saveR(st); draw();
         box.innerHTML = `<div class="readcard ${items.length ? 'ok' : 'warn'}"><img src="${url}" alt=""><span class="ar-main"><b>${esc(t('rcvFromPhoto'))}</b>
@@ -550,15 +573,37 @@
         if (el) { el.focus({ preventScroll: true }); try { if (keep.pos != null) el.setSelectionRange(keep.pos, keep.pos); } catch (e) { /* not a text field */ } }
       }
     }
+    /* each line: the part's picture (a tick when it is in the catalog, a plus when it is new), its fields, and what the line costs */
+    const lineTot = l => l.cost == null || l.qty === '' ? '—' : money((Number(l.cost) || 0) * (Number(l.qty) || 0), curOf());
+    const pic = l => {
+      const cat = (l.match && l.match.cat) || l.cat || 'other', icon = (D.CATS.find(c => c.id === cat) || {}).icon || 'box', img = l.match && l.match.img;
+      return `<span class="rl-pic">${img ? SP.imgTag(img, '', '', true) : I(icon)}<i class="rl-badge">${I(l.match ? 'check' : l.state === 'checking' ? 'search' : 'plus')}</i></span>`;
+    };
+    const totals = () => ({ units: st.lines.reduce((k, l) => k + (Number(l.qty) || 0), 0), total: st.lines.reduce((k, l) => k + (Number(l.cost) || 0) * (Number(l.qty) || 0), 0) });
+    /* on credit or part paid, the total box says what is still owed to the supplier */
+    function paySum() {
+      const box = $('#rpaysum');
+      if (!box) return;
+      const cur = curOf(), { total } = totals(), paid = st.pay === 'credit' ? 0 : st.pay === 'part' ? Math.min(Number(String(st.paid || '').replace(',', '.')) || 0, total) : null;
+      box.innerHTML = paid == null ? '' : `<div class="prow"><span>${esc(t('posPaid'))}</span><b class="num">${esc(money(paid, cur))}</b></div>
+        <div class="prow owe"><span>${esc(t('purOwedT'))}</span><b class="num">${esc(money(total - paid, cur))}</b></div>`;
+    }
+    function sums() {
+      const { units, total } = totals();
+      if ($('#rtot')) $('#rtot').textContent = money(total, curOf());
+      if ($('#rnu')) $('#rnu').textContent = SP.fmtNum(units);
+      paySum();
+    }
     function paint() {
-      const cur = curOf(), units = st.lines.reduce((k, l) => k + (Number(l.qty) || 0), 0), total = st.lines.reduce((k, l) => k + (Number(l.cost) || 0) * (Number(l.qty) || 0), 0);
-      $('#rhead').textContent = st.lines.length ? t('rcvLines', { n: st.lines.length }) : '';
+      const cur = curOf(), { units, total } = totals();
+      $('#rhead').innerHTML = `${I('box')} ${esc(st.lines.length ? t('rcvLines', { n: st.lines.length }) : t('rcvLines0'))}`;
       $('#rlines').innerHTML = st.lines.length ? st.lines.map(l => {
-        const state = l.state === 'checking' ? `<span class="rl-state">${esc(t('rcvChecking'))}</span>`
-          : l.match ? `<span class="rl-state ok">${I('check')}<span><b>${esc(l.match.title)}</b><small>${esc([l.match.sku || l.match.part_no, l.match.mm, t('rcvMatched', { n: l.match.qty == null ? '—' : l.match.qty })].filter(Boolean).join(' · '))}</small>${l.match.loc ? `<small class="rl-loc">${I('pin')} ${esc(l.match.loc)}</small>` : ''}</span></span>`
-          : `<span class="rl-state new">${I('plus')}<span><b>${esc(t('rcvNew'))}</b>${l.src === 'photo' && l.title ? `<small>${esc(l.title)}</small>` : ''}</span></span>`;
+        const state = l.state === 'checking' ? `<span class="rl-state"><span><b>${esc(l.title || l.code || l.barcode || '…')}</b><small>${esc(t('rcvChecking'))}</small></span></span>`
+          : l.match ? `<span class="rl-state ok"><span><b>${esc(l.match.title)}</b>${[l.match.sku || l.match.part_no, l.match.mm].some(Boolean) ? `<small>${esc([l.match.sku || l.match.part_no, l.match.mm].filter(Boolean).join(' · '))}</small>` : ''}
+              <small class="rl-stock">${esc(t('rcvMatched', { n: l.match.qty == null ? '—' : l.match.qty }))}</small>${l.match.loc ? `<small class="rl-loc">${I('pin')} ${esc(l.match.loc)}</small>` : ''}</span></span>`
+          : `<span class="rl-state new"><span><b>${esc(t('rcvNew'))}</b>${l.src === 'photo' && l.title ? `<small>${esc(l.title)}</small>` : ''}</span></span>`;
         return `<div class="rline ${l.match ? 'ok' : l.state === 'checking' ? '' : 'new'}" data-k="${l.k}">
-          <div class="rl-head">${state}<button type="button" class="iconbtn sm" data-a="pick" aria-label="${esc(t('rcvChange'))}">${I('edit')}</button><button type="button" class="iconbtn sm" data-a="del" aria-label="${esc(t('rcvDel'))}">${I('trash')}</button></div>
+          <div class="rl-head">${pic(l)}${state}<button type="button" class="iconbtn sm" data-a="pick" aria-label="${esc(t('rcvChange'))}">${I('edit')}</button><button type="button" class="iconbtn sm" data-a="del" aria-label="${esc(t('rcvDel'))}">${I('trash')}</button></div>
           <div class="rl-grid"><label>${esc(t('rcvCode'))}<input class="input mono" dir="ltr" data-f="code" maxlength="60" spellcheck="false" value="${esc(l.barcode && !l.code ? l.barcode : l.code)}"></label>
             <label>${esc(t('posQty'))}<input class="input num" dir="ltr" inputmode="numeric" data-f="qty" maxlength="7" value="${esc(l.qty)}"></label>
             <label>${esc(t('rcvCost'))}<input class="input num" dir="ltr" inputmode="decimal" data-f="cost" maxlength="12" value="${l.cost == null ? '' : esc(l.cost)}"></label></div>
@@ -567,19 +612,22 @@
             <label>${esc(t('makerL'))}<input class="input" data-f="maker" maxlength="60" list="rmkl" autocomplete="off" placeholder="${esc(t('makerPh'))}" value="${esc(l.maker || '')}"></label>
             <label>${esc(t('locL'))}<input class="input" data-f="location" maxlength="60" autocomplete="off" placeholder="${esc(t('locPh'))}" value="${esc(l.location || '')}"></label>
             ${canPrice ? `<label>${esc(t('rcvSell'))}<input class="input num" dir="ltr" inputmode="decimal" data-f="price" maxlength="12" value="${l.price == null ? '' : esc(l.price)}"></label>` : ''}</div>` : ''}
+          <div class="rl-foot"><span>${esc(t('rcvLineTot'))}</span><b class="num" data-lt>${esc(lineTot(l))}</b></div>
         </div>`;
       }).join('') + (st.lines.some(l => !l.match) ? `<datalist id="rmkl">${(SP.MAKERS || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist>` : '') : `<p class="muted-p pos-empty">${esc(t('rcvEmpty'))}</p>`;
-      $('#rsum').innerHTML = st.lines.length ? `<div class="mcard psum"><div class="prow"><span>${esc(t('rcvUnits'))}</span><b class="num">${esc(SP.fmtNum(units))}</b></div>
-          <div class="prow big"><span>${esc(t('rcvTotal'))}</span><b class="num" id="rtot">${esc(money(total, cur))}</b></div>
+      $('#rsum').innerHTML = st.lines.length ? `<div class="mcard psum rcv-tot"><div class="rcv-tot-row"><span><small>${esc(t('rcvItemsK'))}</small><b class="num" id="rnl">${esc(SP.fmtNum(st.lines.length))}</b></span>
+            <span><small>${esc(t('rcvUnits'))}</small><b class="num" id="rnu">${esc(SP.fmtNum(units))}</b></span></div>
+          <div class="prow big"><span>${esc(t('rcvTotal'))}</span><b class="num" id="rtot">${esc(money(total, cur))}</b></div><div id="rpaysum" class="rcv-paysum"></div>
           <div class="field"><label for="rnote">${esc(t('rcvNote'))}</label><input id="rnote" class="input" maxlength="500" value="${esc(st.note || '')}"></div>
           <p class="form-err" id="rerr" role="alert"></p>
           <div class="form-actions"><button type="button" class="btn btn-signal" id="rsave">${I('check')} ${esc(t('rcvSave'))}</button>
             ${SP.can('sales') ? `<button type="button" class="btn btn-ink" id="rpos">${I('tag')} ${esc(t('rcvToPos'))}</button>` : ''}
             <button type="button" class="btn btn-ghost" id="rclr">${I('trash')} ${esc(t('rcvClear'))}</button></div></div>` : '';
+      paySum();
       if ($('#rnote')) $('#rnote').oninput = e => { st.note = e.target.value; saveR(st); };
       if ($('#rsave')) $('#rsave').onclick = save;
       if ($('#rpos')) $('#rpos').onclick = toPos;
-      if ($('#rclr')) $('#rclr').onclick = async () => { if (await SP.confirmSheet({ title: t('rcvClearQ'), ok: t('rcvClear'), danger: true })) { st.lines = []; st.note = ''; st.supplier = ''; st.pay = 'full'; st.paid = ''; $('#rsup').value = ''; drawPay(); saveR(st); $('#rread').innerHTML = ''; draw(); } };
+      if ($('#rclr')) $('#rclr').onclick = async () => { if (await SP.confirmSheet({ title: t('rcvClearQ'), ok: t('rcvClear'), danger: true })) { st.lines = []; st.note = ''; st.supplier = ''; st.supplier_no = ''; st.pay = 'full'; st.paid = ''; $('#rsup').value = ''; $('#rsno').value = ''; drawPay(); saveR(st); $('#rread').innerHTML = ''; draw(); } };
     }
     const lineOf = el => st.lines.find(l => l.k === (el.closest('[data-k]') || {}).dataset.k);
     $('#rlines').addEventListener('input', e => {
@@ -591,7 +639,7 @@
       else if (f === 'code') { const s = v.trim(); if (/^\d{8,14}$/.test(s)) { l.barcode = s; l.code = ''; } else { l.code = s.toUpperCase(); l.barcode = l.match ? l.barcode : ''; } }
       else l[f] = v;
       saveR(st);
-      if (f === 'qty' || f === 'cost') { const tot = st.lines.reduce((k, x) => k + (Number(x.cost) || 0) * (Number(x.qty) || 0), 0); if ($('#rtot')) $('#rtot').textContent = money(tot, curOf()); }
+      if (f === 'qty' || f === 'cost') { const lt = $('[data-lt]', e.target.closest('[data-k]')); if (lt) lt.textContent = lineTot(l); sums(); }
     });
     $('#rlines').addEventListener('change', async e => {
       if (e.target.dataset.f !== 'code') return;
@@ -651,25 +699,25 @@
       const source = st.lines.some(l => l.src === 'photo') ? 'photo' : st.lines.some(l => l.src === 'scan') ? 'scan' : 'manual';
       try {
         const r = await chk(await sb().rpc('receive_stock', { p: {
-          branch: st.branch || null, supplier: (st.supplier || '').trim(), note: (st.note || '').trim(), ...(paid != null ? { paid } : {}), source, auto: !!o.auto,
+          branch: st.branch || null, supplier: (st.supplier || '').trim(), supplier_no: (st.supplier_no || '').trim(), note: (st.note || '').trim(), ...(paid != null ? { paid } : {}), source, auto: !!o.auto,
           items: st.lines.map(l => l.match ? { product_id: l.match.id, qty: Number(l.qty), cost: l.cost }
             : { part_no: l.code || '', barcode: l.barcode || '', title: l.title.trim(), qty: Number(l.qty), cost: l.cost, price: canPrice ? l.price : null, cat: l.cat || 'other', maker: String(l.maker || '').trim(), location: String(l.location || '').trim().slice(0, 60) })
         } }));
         sessionStorage.removeItem(RCV);
         if (o.auto) return entered(r, o.url);
         SP.toast(t('rcvSaved', { n: r.no, u: r.updated, a: r.new }));
-        SP.go('purchases');
+        SP.go('pur-' + r.id);
       } catch (x) { err.textContent = rcvErr(x); b.classList.remove('busy'); }
     }
     /* entered by itself: what went in, and a way to take it back (the lines come back to fix) */
     function entered(r, url) {
-      const was = JSON.parse(JSON.stringify(st.lines)), cur = curOf();
-      st.lines = []; st.note = ''; saveR(st); draw();
+      const was = JSON.parse(JSON.stringify(st.lines)), cur = curOf(), wasNo = st.supplier_no || '';
+      st.lines = []; st.note = ''; st.supplier_no = ''; if ($('#rsno')) $('#rsno').value = ''; saveR(st); draw();
       $('#rread').innerHTML = `<div class="readcard ok done">${url ? `<img src="${url}" alt="">` : ''}<span class="ar-main"><b>${I('check')} ${esc(t('rcvAutoDone'))}</b>
           <small>${esc(t('rcvAutoSum', { n: r.no, u: SP.fmtNum(r.updated), a: SP.fmtNum(r.new) }))}${r.total ? ' · ' + esc(money(r.total, cur)) : ''}</small></span></div>
         <table class="inv-items rcv-done"><tbody>${was.map(l => `<tr><td>${esc(l.match ? l.match.title : l.title)}${l.code || l.barcode ? `<small class="mono">${esc(l.code || l.barcode)}</small>` : ''}</td>
           <td class="num">× ${esc(SP.fmtNum(+l.qty))}</td><td>${l.match ? '' : `<span class="pill">${esc(t('rcvNewShort'))}</span>`}</td></tr>`).join('')}</tbody></table>
-        <div class="form-actions"><button type="button" class="btn btn-ghost" id="rundo">${I('undo')} ${esc(t('rcvUndo'))}</button><a class="btn btn-ghost" href="#purchases">${I('copy')} ${esc(t('rcvSeeList'))}</a>
+        <div class="form-actions"><button type="button" class="btn btn-ghost" id="rundo">${I('undo')} ${esc(t('rcvUndo'))}</button><a class="btn btn-ghost" href="#pur-${esc(r.id)}">${I('receipt')} ${esc(t('rcvOpenInv'))}</a>
           <label class="btn btn-signal" for="rpf">${I('camera')} ${esc(t('rcvAnother'))}</label></div>`;
       $('#rundo').onclick = async () => {
         if (!await SP.confirmSheet({ title: t('rcvUndoQ', { n: r.no }), body: t('rcvUndoB'), ok: t('rcvUndo'), danger: true })) return;
@@ -679,6 +727,7 @@
           SP.toast(t('rcvUndone', { n: r.no }), 5000);
           /* the lines come back as they were read; the known parts are looked up again for their stock now */
           st.lines = was; st.lines.forEach(l => { if (l.match) l.state = 'checking'; });
+          st.supplier_no = wasNo; if ($('#rsno')) $('#rsno').value = wasNo;
           saveR(st); $('#rread').innerHTML = ''; draw(); checkAll(st.lines.filter(l => l.state === 'checking'));
         } catch (x) { if (b) b.classList.remove('busy'); SP.toast(undoErr(x), 5000); }
       };
@@ -698,8 +747,9 @@
     SP.done(n);
   });
 
-  /* ---------- receiving history ---------- */
+  /* ---------- the purchase invoices ---------- */
   const when = v => { try { return new Intl.DateTimeFormat(SP.LANG + '-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(v)); } catch (e) { return String(v).slice(0, 16).replace('T', ' '); } };
+  const dayOf = v => { try { return new Intl.DateTimeFormat(SP.LANG + '-u-nu-latn', { day: 'numeric', month: 'numeric', year: 'numeric' }).format(new Date(v)); } catch (e) { return String(v).slice(0, 10); } };
   SP.route(/^purchases$/, async (m, n) => {
     if (gate(n) || !guard(['purchases', 'reports'], t('purT'))) return;
     const q = S.purQ || '';
@@ -708,25 +758,67 @@
       <div id="pl"><div class="sk sk-row"></div></div>
       <div class="center"><button type="button" class="btn btn-ghost more-btn" id="more" hidden></button></div></main>`);
     const cur = SP.currencyOf(S.country);
-    const row = v => `<details class="pur"><summary class="arow"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${esc(v.supplier || t('purNo', { n: v.no }))}${v.total != null && v.paid != null && +v.paid < +v.total ? ` <span class="pill demo">${esc(t('purOwed', { m: money(v.total - v.paid, cur) }))}</span>` : ''}</b>
-        <small>${[when(v.created_at), v.staff_name, v.branch_name, SP.count(+v.items_count || 0, 'parts')].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small></span>${v.total != null ? `<b class="num">${esc(money(v.total, cur))}</b>` : ''}</summary>
-      <table class="inv-items pur-items"><tbody>${(v.items || []).map(it => `<tr><td>${esc(it.title)}${it.code || SP.makerModel(it) ? `<small>${[it.code ? `<bdi class="mono">${esc(it.code)}</bdi>` : '', SP.makerModel(it) ? `<bdi>${esc(SP.makerModel(it))}</bdi>` : ''].filter(Boolean).join(' · ')}</small>` : ''}</td><td class="num">× ${esc(it.qty)}</td>${it.cost != null ? `<td class="num">${esc(money(it.cost, cur))}</td>` : ''}</tr>`).join('')}</tbody></table>
-      ${canUndo(v) ? `<div class="form-actions"><button type="button" class="btn btn-ghost sm" data-undo="${esc(v.id)}" data-no="${esc(v.no)}">${I('undo')} ${esc(t('purUndo'))}</button></div>` : ''}</details>`;
-    /* taking a receipt back: the owner any receipt, staff their own on the same day (the database checks again) */
-    const canUndo = v => SP.can('purchases') && (S.admin || (S.user && v.staff_id === S.user.id && Date.now() - Date.parse(v.created_at) < 864e5));
-    $('#pl').addEventListener('click', async e => {
-      const b = e.target.closest('[data-undo]');
-      if (!b || !await SP.confirmSheet({ title: t('rcvUndoQ', { n: b.dataset.no }), body: t('rcvUndoB'), ok: t('purUndo'), danger: true })) return;
-      b.classList.add('busy');
-      try { await chk(await sb().rpc('undo_receipt', { p_id: b.dataset.undo })); SP.toast(t('rcvUndoneList', { n: b.dataset.no })); SP.render(); }
-      catch (x) { b.classList.remove('busy'); SP.toast(undoErr(x), 5000); }
-    });
+    /* one row per invoice, opening its page: the supplier (or the number), when, his own invoice number, the branch, how many items, and what is still owed */
+    const row = v => `<a class="arow inv-row pur-row" href="#pur-${esc(v.id)}"><span class="inv-badge num">${esc(v.no)}</span><span class="ar-main"><b>${esc(v.supplier || t('purNo', { n: v.no }))}${v.total != null && v.paid != null && +v.paid < +v.total ? ` <span class="pill demo">${esc(t('purOwed', { m: money(v.total - v.paid, cur) }))}</span>` : ''}</b>
+        <small>${[when(v.created_at), v.branch_name, SP.count(+v.items_count || 0, 'items')].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}${v.supplier_no ? ` · <bdi class="pur-rno">${esc(t('purSupNoShort', { n: '\u2066' + v.supplier_no + '\u2069' }))}</bdi>` : ''}</small></span>${v.total != null ? `<b class="num">${esc(money(v.total, cur))}</b>` : ''}</a>`;
     // searched on the keyboard's search key, like the stock list; the field's ✕ shows them all again
     const sf = $('#puf'), go = () => { const v = $('input', sf).value.trim(); if (v === (S.purQ || '')) return; S.purQ = v; SP.render(); };
     sf.onsubmit = e => { e.preventDefault(); go(); };
     $('input', sf).addEventListener('search', go);
     await SP.pager(n, $('#pl'), $('#more'), async off => { const rows = chk(await sb().rpc('list_purchases', { p_limit: 30, p_offset: off, ...(q ? { p_q: q } : {}) })) || []; return { items: rows, total: rows.length ? +rows[0].total_count : 0 }; },
       items => items.map(row).join(''), (r, first) => { if (first && !r.total) $('#pl').innerHTML = q ? `<p class="muted-p">${esc(t('purNoHit', { q }))}</p>` : empty('box', t('purEmpty'), '', SP.can('purchases') ? `<a class="btn btn-signal" href="#receive">${I('plus')} ${esc(t('rcvT'))}</a>` : ''); });
+    SP.done(n);
+  });
+
+  /* one purchase invoice as paper, printed like the sale (js/pos.js SP.invoiceDoc): the company and branch, its number, the supplier
+     and his own invoice number, the «وارد» stamp (blue when paid, red when something is still owed), the lines, the totals, the note
+     and two places to sign. Without the costs permission it shows the parts and quantities only. */
+  const PAYK = { full: 'rcvPaidFull', credit: 'rcvCredit', part: 'rcvPart' };
+  SP.purchaseDoc = v => {
+    const cur = SP.currencyOf(S.country), br = v.branch || {}, items = v.items || [], costs = v.total != null;
+    const units = items.reduce((k, it) => k + (+it.qty || 0), 0), owed = costs && v.paid != null ? v.total - v.paid : 0;
+    return `<article class="invoice pur-doc" id="pur-doc">
+      ${SP.docHead ? SP.docHead(br, t('rcvT'), v.no) : ''}
+      <div class="pur-sup"><div class="pur-sup-main"><small>${esc(t('rcvSupplier'))}</small><b>${esc(v.supplier || '—')}</b>
+          ${v.supplier_no ? `<span class="pur-sno">${esc(t('rcvSupNo'))}: <bdi class="mono">${esc(v.supplier_no)}</bdi></span>` : ''}</div>
+        <div class="pur-stamp ${esc(v.pay || 'in')}" role="img" aria-label="${esc([t('purStampIn'), v.pay ? t('purSt_' + v.pay) : '', dayOf(v.created_at)].filter(Boolean).join(' · '))}">
+          <b>${esc(t('purStampIn'))}</b>${v.pay ? `<span>${esc(t('purSt_' + v.pay))}</span>` : ''}<small class="num">${esc(dayOf(v.created_at))}</small></div></div>
+      <dl class="inv-meta"><div><dt>${esc(t('invDate'))}</dt><dd>${esc(when(v.created_at))}</dd></div><div><dt>${esc(t('purBy'))}</dt><dd>${esc(v.staff_name || '—')}</dd></div>
+        <div><dt>${esc(t('posBranch'))}</dt><dd>${esc(br.name || '—')}</dd></div>${v.pay ? `<div><dt>${esc(t('rcvPayT'))}</dt><dd>${esc(t(PAYK[v.pay]))}</dd></div>` : ''}</dl>
+      <table class="inv-items"><thead><tr><th>${esc(t('invItem'))}</th><th>${esc(t('posQty'))}</th>${costs ? `<th>${esc(t('rcvCost'))}</th><th>${esc(t('posTotal'))}</th>` : ''}</tr></thead>
+        <tbody>${items.map(it => `<tr><td>${esc(it.title)}${it.created ? ` <span class="pill new">${esc(t('rcvNewShort'))}</span>` : ''}${it.code || SP.makerModel(it) ? `<small>${[it.code ? `<bdi class="mono">${esc(it.code)}</bdi>` : '', SP.makerModel(it) ? `<bdi>${esc(SP.makerModel(it))}</bdi>` : ''].filter(Boolean).join(' · ')}</small>` : ''}</td>
+          <td class="num">${esc(SP.fmtNum(+it.qty))}</td>${costs ? `<td class="num">${it.cost == null ? '—' : esc(money(it.cost, cur))}</td><td class="num">${it.cost == null ? '—' : esc(money(it.cost * it.qty, cur))}</td>` : ''}</tr>`).join('')}</tbody></table>
+      <dl class="inv-tot"><div><dt>${esc(t('rcvUnits'))}</dt><dd class="num">${esc(SP.fmtNum(units))}</dd></div>
+        ${costs ? `<div class="big"><dt>${esc(t('posTotal'))}</dt><dd class="num">${esc(money(v.total, cur))}</dd></div>
+          ${owed > 0.004 ? `<div><dt>${esc(t('posPaid'))}</dt><dd class="num">${esc(money(v.paid, cur))}</dd></div><div class="owe"><dt>${esc(t('purOwedT'))}</dt><dd class="num">${esc(money(owed, cur))}</dd></div>` : ''}` : ''}</dl>
+      ${v.note ? `<p class="inv-note">${esc(v.note)}</p>` : ''}
+      <div class="pur-sign"><span>${esc(t('purSignBy'))}</span><span>${esc(t('purSignSup'))}</span></div></article>`;
+  };
+  SP.route(/^pur-([0-9a-f-]{36})$/, async (m, n) => {
+    if (gate(n) || !guard(['purchases', 'reports'], t('purT'))) return;
+    shell(bar(t('purT')) + `<main class="wrap"><div class="sk sk-block"></div></main>`);
+    let v;
+    try { v = chk(await sb().rpc('get_purchase', { p_id: m[1] })); } catch (e) { return SP.fail(e, n); }
+    if (!SP.alive(n)) return;
+    if (!v) { shell(bar(t('purT')) + `<main class="wrap">${empty('box', t('purGone'), '', `<a class="btn btn-ink" href="#purchases">${esc(t('purT'))}</a>`)}</main>`); return SP.done(n); }
+    const cur = SP.currencyOf(S.country), canPrint = !SP.CFG.embedded, b = v.sup_balance == null ? null : +v.sup_balance;
+    const text = [t('purMsgT', { n: v.no }) + (v.supplier ? ' · ' + v.supplier : '') + (v.supplier_no ? ' (' + t('purSupNoShort', { n: v.supplier_no }) + ')' : ''),
+      ...(v.items || []).map(it => `• ${it.title} × ${it.qty}${it.cost != null ? ' = ' + money(it.cost * it.qty, cur) : ''}`),
+      v.total != null ? t('posTotal') + ': ' + money(v.total, cur) : ''].filter(Boolean).join('\n');
+    shell(bar(t('purNo', { n: v.no }), canPrint ? `<button type="button" class="iconbtn" onclick="window.print()" aria-label="${esc(t('invPrint'))}">${I('print')}</button>` : '') + `<main class="wrap invoice-wrap">
+      ${SP.purchaseDoc(v)}
+      ${b != null && v.sup_key ? `<a class="banner note pur-bal noprint${b > 0.004 ? ' owe' : ''}" id="psup" href="#supplier-${encodeURIComponent(v.sup_key)}">${I('truck')}<span><b>${esc(t(b > 0.004 ? 'purBalOwe' : b < -0.004 ? 'purBalCr' : 'purBal0', { s: v.supplier, m: money(Math.abs(b), cur) }))}</b><small>${esc(t('purBalSub'))}</small></span>${I('chevL', 'dirx')}</a>` : ''}
+      <div class="form-actions noprint">${canPrint ? `<button type="button" class="btn btn-ink" id="pprint" onclick="window.print()">${I('print')} ${esc(t('invPrint'))}</button>` : ''}
+        <a class="btn btn-wa" id="psh" href="${esc('https://wa.me/?text=' + encodeURIComponent(text))}" target="_blank" rel="noopener">${I('chat')} ${esc(t('purShare'))}</a>
+        ${v.can_undo ? `<button type="button" class="btn btn-danger" id="pundo">${I('undo')} ${esc(t('purUndo'))}</button>` : ''}
+        ${SP.can('purchases') ? `<a class="btn btn-ghost" href="#receive">${I('plus')} ${esc(t('rcvNewT'))}</a>` : ''}</div></main>`);
+    /* taking it back: the owner any receipt, staff their own on the same day (the database checks again) */
+    if ($('#pundo')) $('#pundo').onclick = async () => {
+      if (!await SP.confirmSheet({ title: t('rcvUndoQ', { n: v.no }), body: t('rcvUndoB'), ok: t('purUndo'), danger: true })) return;
+      const x = $('#pundo'); if (x) x.classList.add('busy');
+      try { await chk(await sb().rpc('undo_receipt', { p_id: v.id })); SP.toast(t('rcvUndoneList', { n: v.no })); SP.go('purchases'); }
+      catch (e) { if (x) x.classList.remove('busy'); SP.toast(undoErr(e), 5000); }
+    };
     SP.done(n);
   });
 })();

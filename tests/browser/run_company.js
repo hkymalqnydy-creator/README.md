@@ -172,11 +172,12 @@ const log = s => console.log(`${++step}. ${s}`);
     await page.locator('.rline.new [data-f="title"]').fill(''); await page.click('#rsave'); await page.waitForFunction(() => document.querySelector('#rerr').textContent.length > 3);
     must((await text('#rerr')).includes('اسم'), 'new part needs a name'); await page.locator('.rline.new [data-f="title"]').fill('حساس أكسجين سوناتا');
     await shot('11-receive');
-    await page.click('#rsave'); await page.waitForURL(/#purchases/); await see('details.pur');
+    await page.click('#rsave'); await page.waitForURL(/#pur-/); await see('#pur-doc');
     const rc = await page.evaluate(() => { const D = window.__mockdb, a = D.products.find(x => x.sku === 'HY-58101'), b = D.products.find(x => x.barcode === '8809999000017'); return [a.qty, a.cost, b && b.qty, b && b.price, b && b.cost, b && b.cat, b && b.title, D.purchases.length]; });
     must(rc[0] === h0 + 12 && rc[1] === 100 && rc[2] === 3 && rc[3] === 350 && rc[4] === 210 && rc[5] === 'electrical' && rc[7] === pu0 + 1, 'stock after receiving ' + JSON.stringify(rc));
-    must((await text('details.pur summary')).includes('الشركة الكورية'), 'history row'); log('received into stock: brake pads ' + h0 + ' → ' + rc[0] + ', new part "' + rc[6] + '" ×3 at 350');
-    await page.click('details.pur summary'); await page.waitForTimeout(150); await shot('12-purchases');
+    must((await text('#pur-doc')).includes('الشركة الكورية'), 'the purchase invoice opens'); log('received into stock: brake pads ' + h0 + ' → ' + rc[0] + ', new part "' + rc[6] + '" ×3 at 350');
+    await shot('12-purchase');
+    await go('purchases'); await see('#pl .pur-row'); must((await text('#pl .pur-row')).includes('الشركة الكورية'), 'history row');
     // ----- camera scanning in the point of sale (test camera engine) -----
     await go('pos'); await see('#pscan');
     await page.evaluate(() => { window.SP_BARCODE_ENGINE = { name: 'test', async start(v, onCode) { const id = setTimeout(() => onCode('8809999000017'), 250); const id2 = setTimeout(() => onCode('8809999000017'), 300); const id3 = setTimeout(() => onCode('NOPE-123'), 600); return () => { clearTimeout(id); clearTimeout(id2); clearTimeout(id3); window.__camStopped = true; }; }, async still() { return null; } }; });
@@ -272,7 +273,7 @@ const log = s => console.log(`${++step}. ${s}`);
     await go('receive'); await see('#rq'); await page.fill('#rq', 'NS-40206'); await page.press('#rq', 'Enter'); await see('.rline'); // an exact code is added straight away
     await see('#rsave'); await page.click('label[for="rpay1"]'); await page.waitForTimeout(150); await page.click('#rsave'); await page.waitForTimeout(200);
     must((await text('#rerr')).includes('المورّد'), 'credit needs the supplier name: ' + await text('#rerr'));
-    await page.fill('#rsup', 'مؤسسة الاختبار'); await page.click('#rsave'); await page.waitForURL(/#purchases/); await see('details.pur .pill');
+    await page.fill('#rsup', 'مؤسسة الاختبار'); await page.click('#rsave'); await page.waitForURL(/#pur-/); await see('#pur-doc .pur-stamp.credit');
     const ns = await page.evaluate(async () => (await SP.sb.rpc('list_suppliers', { p_q: 'الاختبار' })).data.items[0]);
     must(ns && ns.balance > 0 && ns.balance === ns.total, 'receipt on credit is owed in full: ' + JSON.stringify(ns)); log('receipt on credit: the new supplier is owed ' + ns.balance);
     await go(''); await page.click('[data-act="lang"]'); await page.click('[data-l="en"]'); await see('.hero h1');

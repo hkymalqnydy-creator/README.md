@@ -335,7 +335,7 @@
           <div class="led-bal ${b > 0 ? 'owe' : b < 0 ? 'cr' : ''}"><small>${esc(t(b < 0 ? 'buyCreditT' : 'supBalance'))}</small><b class="num">${esc(money(Math.abs(b)))}</b></div>
           <div class="astats">${stat('supBought', money(d.total))}${stat('supDue', money(d.due))}${stat('supPaidLater', money(d.paid_later))}${stat('supReceipts', SP.fmtNum(+d.count || 0))}</div>
           ${SP.can('purchases') ? `<div class="form-actions"><button type="button" class="btn btn-signal" id="spay">${I('plus')} ${esc(t('supPay'))}</button></div>` : ''}</section>
-        <section class="mcard"><h2 class="lbl">${esc(t('supReceipts'))}</h2>${d.receipts.map(v => `<a class="arow inv-row" href="#purchases"><span class="inv-badge num">${esc(v.no)}</span>
+        <section class="mcard"><h2 class="lbl">${esc(t('supReceipts'))}</h2>${d.receipts.map(v => `<a class="arow inv-row" href="#pur-${esc(v.id)}"><span class="inv-badge num">${esc(v.no)}</span>
             <span class="ar-main"><b><span class="num">${esc(money(v.total))}</span>${v.total - v.paid > 0 ? ` <span class="pill demo">${esc(t('invLeft', { m: money(v.total - v.paid) }))}</span>` : ''}</b>
             <small>${[when(v.created_at), SP.count(+v.items_count || 0, 'parts'), v.branch_name].filter(Boolean).map(x => `<bdi>${esc(x)}</bdi>`).join(' · ')}</small></span>${I('chevL', 'dirx')}</a>`).join('')}</section>
         ${d.payments.length ? `<section class="mcard"><h2 class="lbl">${esc(t('buyPayments'))}</h2>${payRows(d.payments, S.admin)}</section>` : ''}</main>`);

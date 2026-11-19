@@ -1033,6 +1033,8 @@ create table if not exists public.purchases (
 );
 -- what was paid to the supplier on receiving; null = paid in full (also every receipt from before this column)
 alter table public.purchases add column if not exists paid numeric(14,2);
+-- the supplier's own number on his invoice (رقم فاتورة المورّد), typed or read from the photo; the receipt is found by it
+alter table public.purchases add column if not exists supplier_no text not null default '' check (char_length(supplier_no) <= 60);
 create table if not exists public.purchase_items (
   id          bigserial primary key,
   purchase_id uuid not null references public.purchases(id) on delete cascade,
@@ -1078,8 +1080,9 @@ begin
     (select id from public.shops order by created_at limit 1));
   select owner_id into v_owner from public.shops where id = v_branch;
   if v_owner is null then raise exception 'create a branch first'; end if;
-  insert into public.purchases (branch_id, staff_id, staff_name, supplier, note)
-  values (v_branch, v_me, coalesce(nullif(v_staff.name, ''), (select email from auth.users where id = v_me), ''), left(coalesce(p->>'supplier', ''), 120), left(coalesce(p->>'note', ''), 500))
+  insert into public.purchases (branch_id, staff_id, staff_name, supplier, note, supplier_no)
+  values (v_branch, v_me, coalesce(nullif(v_staff.name, ''), (select email from auth.users where id = v_me), ''), left(coalesce(p->>'supplier', ''), 120), left(coalesce(p->>'note', ''), 500),
+          left(btrim(coalesce(p->>'supplier_no', '')), 60))
   returning id into v_pid;
   for v_it in select value from jsonb_array_elements(p->'items') loop
     v_qty := floor(coalesce(public.try_num(v_it->>'qty'), 0))::integer;
@@ -1155,6 +1158,7 @@ returns setof jsonb language sql stable security definer set search_path = publi
   from public.purchases pu left join public.shops s on s.id = pu.branch_id cross join q
   where auth.uid() is not null and (public.has_perm('purchases') or public.has_perm('reports'))
     and (q.raw is null or pu.no::text = q.raw
+         or (pu.supplier_no <> '' and upper(regexp_replace(pu.supplier_no, '[\s\-./]', '', 'g')) = upper(regexp_replace(q.raw, '[\s\-./]', '', 'g')))
          or public.norm_ar(pu.supplier) like '%' || public.norm_ar(q.raw) || '%'
          or exists (select 1 from public.purchase_items it left join public.products pr on pr.id = it.product_id
                     where it.purchase_id = pu.id
@@ -1436,6 +1440,27 @@ begin
   delete from public.supplier_payments where id = p_id;
 end $$;
 
+-- one purchase invoice, as its page shows and prints it: the branch, the supplier and his own invoice number, each line (and whether
+-- it made a new part), how it was paid, and what the company owes that supplier now. The money needs the costs permission, like the list.
+create or replace function public.get_purchase(p_id uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select (to_jsonb(pu) - 'total' - 'paid') || jsonb_build_object(
+    'total', case when public.has_perm('costs') then pu.total end,
+    'paid', case when public.has_perm('costs') then coalesce(pu.paid, pu.total) end,
+    'pay', case when public.has_perm('costs') then case when pu.paid is null or pu.paid >= pu.total then 'full' when pu.paid = 0 then 'credit' else 'part' end end,
+    'branch', jsonb_build_object('name', s.name, 'city', s.city, 'phone', s.phone),
+    'sup_key', public.sup_key(pu.supplier),
+    'sup_balance', case when public.has_perm('costs') and public.sup_key(pu.supplier) is not null then
+        coalesce((select sum(x.total - coalesce(x.paid, x.total)) from public.purchases x where public.sup_key(x.supplier) = public.sup_key(pu.supplier)), 0)
+      - coalesce((select sum(y.amount) from public.supplier_payments y where public.sup_key(y.supplier) = public.sup_key(pu.supplier)), 0) end,
+    'can_undo', public.has_perm('purchases') and (public.is_admin() or (pu.staff_id = auth.uid() and pu.created_at >= now() - interval '24 hours')),
+    'items', coalesce((select jsonb_agg(jsonb_build_object('id', it.id, 'title', it.title, 'code', coalesce(it.code, nullif(pr.sku, ''), nullif(pr.part_no, '')), 'qty', it.qty, 'maker', it.maker,
+                                                            'make', pr.make, 'model', pr.model, 'created', it.created, 'cost', case when public.has_perm('costs') then it.cost end) order by it.id)
+                       from public.purchase_items it left join public.products pr on pr.id = it.product_id where it.purchase_id = pu.id), '[]'::jsonb))
+  from public.purchases pu left join public.shops s on s.id = pu.branch_id
+  where pu.id = p_id and auth.uid() is not null and (public.has_perm('purchases') or public.has_perm('reports'));
+$$;
+
 -- المصروفات
 create or replace function public.add_expense(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -1541,6 +1566,7 @@ grant execute on function public.list_suppliers(text, boolean, integer, integer)
 grant execute on function public.supplier_detail(text) to authenticated;
 grant execute on function public.add_supplier_payment(text, numeric, text) to authenticated;
 grant execute on function public.delete_supplier_payment(bigint) to authenticated;
+grant execute on function public.get_purchase(uuid) to authenticated;
 grant execute on function public.add_expense(jsonb) to authenticated;
 grant execute on function public.list_expenses(date, date, integer, integer) to authenticated;
 grant execute on function public.delete_expense(bigint) to authenticated;

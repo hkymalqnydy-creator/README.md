@@ -121,7 +121,8 @@ const log = (() => { let n = 0; return s => console.log(`${++n}. ${s}`); })();
     log('invoice photo read by Claude: ' + (await page.locator('.rl-state b').allInnerTexts()).join(' | '));
     await page.locator('.rline.new [data-f="price"]').fill('120');
     await shot('01-receive');
-    await page.click('#rsave'); await page.waitForURL(/#purchases/, { timeout: 8000 }); await see('details.pur');
+    await page.click('#rsave'); await page.waitForURL(/#pur-/, { timeout: 8000 }); await see('#pur-doc');
+    must(await page.locator('#pprint').count() === 0 && await page.locator('#psh').count() === 1, 'the purchase invoice in the page: no print button, WhatsApp share');
     const after = await db(() => { const D = window.__mockdb; return [D.products.find(x => x.sku === 'HY-58101').qty, (D.products.find(x => x.barcode === '8801234500017') || {}).qty, D.products.find(x => x.sku === 'KI-26300').qty, D.products.find(x => x.sku === 'KI-26300').cost]; });
     must(after[0] === h0 + 10 && after[1] === 2 && after[2] === k0 + 4 && +after[3] === 250, 'stock after receiving ' + JSON.stringify(after)); log('received into stock: brake pads +10, oil filters +4 at 250 (1,000 ÷ 4), new sensor ×2');
     // Claude not allowed: a clear message, nothing else breaks

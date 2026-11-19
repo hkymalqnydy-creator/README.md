@@ -371,11 +371,17 @@
   /* ---------- one invoice ---------- */
   const when = v => { try { return new Intl.DateTimeFormat(SP.LANG + '-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(v)); } catch (e) { return String(v).slice(0, 16).replace('T', ' '); } };
   /* one invoice as a printed page: the staff's invoice here, and the merchant's own copy in his «صادر ووارد» (js/merchants.js) */
+  /* the top of a printed page: the company's logo or wordmark, the branch, and the paper's kind and number (the sale here, the purchase in js/scan.js) */
+  SP.docHead = (br, label, no) => {
+    const st = S.settings || {}, app = st.brand_name || SP.CFG.appName || t('app');
+    br = br || {};
+    return `<header class="inv-head">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : SP.CFG.logoInk ? '' : `<span class="brand-mark">${I('nut')}</span>`}<div>${!st.logo && SP.CFG.logoInk ? `<img class="inv-wm" src="${esc(SP.CFG.logoInk)}" alt="${esc(app)}">` : `<b>${esc(app)}</b>`}<small>${esc([br.name, br.city, br.phone ? SP.prettyPhone(br.phone, S.country) : ''].filter(Boolean).join(' · '))}</small></div>
+            <div class="inv-no"><small>${esc(label)}</small><b class="num">${esc(no)}</b></div></header>`;
+  };
   SP.invoiceDoc = v => {
-    const st = S.settings || {}, cur = v.currency, br = v.branch || {}, app = st.brand_name || SP.CFG.appName || t('app');
+    const st = S.settings || {}, cur = v.currency, br = v.branch || {};
     return `<article class="invoice${v.status === 'returned' || v.status === 'cancelled' ? ' returned' : ''}" id="invoice">
-          <header class="inv-head">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : SP.CFG.logoInk ? '' : `<span class="brand-mark">${I('nut')}</span>`}<div>${!st.logo && SP.CFG.logoInk ? `<img class="inv-wm" src="${esc(SP.CFG.logoInk)}" alt="${esc(app)}">` : `<b>${esc(app)}</b>`}<small>${esc([br.name, br.city, br.phone ? SP.prettyPhone(br.phone, S.country) : ''].filter(Boolean).join(' · '))}</small></div>
-            <div class="inv-no"><small>${esc(t('invT', { n: '' }).trim())}</small><b class="num">${esc(v.no)}</b></div></header>
+          ${SP.docHead(br, t('invT', { n: '' }).trim(), v.no)}
           ${v.status === 'returned' ? `<p class="inv-stamp">${esc(t('invReturned'))}</p>` : ''}${v.status === 'cancelled' ? `<p class="inv-stamp">${esc(t('ordCancelled'))}</p>` : ''}
           <dl class="inv-meta"><div><dt>${esc(t('invDate'))}</dt><dd>${esc(when(v.created_at))}</dd></div><div><dt>${esc(t('invStaff'))}</dt><dd>${esc(v.staff_name || '—')}</dd></div>
             ${v.customer_name || v.customer_phone ? `<div><dt>${esc(t('custName'))}</dt><dd>${esc([v.customer_name, v.customer_phone].filter(Boolean).join(' · '))}</dd></div>` : ''}<div><dt>${esc(t('posPay'))}</dt><dd>${esc(t('pay_' + v.payment))}</dd></div></dl>
