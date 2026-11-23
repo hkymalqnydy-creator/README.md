@@ -50,8 +50,8 @@ def sub(text, old, new, count=1):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--name', required=True, help='company / app name, e.g. CROSSKY or متجر العاصمة')
-    ap.add_argument('--slug', default='', help='the edition\'s short Latin id (a-z, 0-9), e.g. alasima: its offline caches, the data it keeps on the phone, the app ids; default from the name')
+    ap.add_argument('--name', required=True, help='company / app name, e.g. CROSSKY or PITLANE')
+    ap.add_argument('--slug', default='', help='the edition\'s short Latin id (a-z, 0-9), e.g. pitlane: its offline caches, the data it keeps on the phone, the app ids; default from the name')
     ap.add_argument('--email', required=True, help='owner e-mail used by the demo (password 123456)')
     ap.add_argument('--brand', required=True, help='folder with the brand PNGs (see branding/crossky/make_assets.py)')
     ap.add_argument('--out', required=True, help='output folder (replaced)')
@@ -81,7 +81,7 @@ def main():
     if site and not site.endswith('/'):
         site += '/'
     if a.slug and not re.fullmatch(r'[a-z0-9]+', a.slug):
-        raise SystemExit('--slug takes a-z and 0-9 only, e.g. alasima')
+        raise SystemExit('--slug takes a-z and 0-9 only, e.g. pitlane')
     if a.tint and not re.fullmatch(r'[a-z]+', a.tint):
         raise SystemExit('--tint takes a colour name, e.g. burgundy')
     name, slug = a.name.strip(), a.slug or re.sub(r'[^a-z0-9]+', '', a.name.lower()) or 'company'

@@ -1,4 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs>
-<linearGradient id="burg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8E2640"/><stop offset="1" stop-color="#5E1424"/></linearGradient>
-<linearGradient id="mist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6F0F1"/><stop offset="1" stop-color="#E4D3D8"/></linearGradient>
-</defs><path fill-rule="evenodd" fill="#fff" transform="translate(297.00 314.20) scale(4.30000)" d="M25 0 L75 0 L100 46 L75 92 L25 92 L0 46 Z M33.5 77 L33.5 47 A25 25 0 0 1 50 23.6 A25 25 0 0 1 66.5 47 L66.5 77 Z"/></svg>

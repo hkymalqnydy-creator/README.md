@@ -1,0 +1,5 @@
+[
+  {"id": "welcome", "_note": "A text-only welcome at the top of the home screen; the owner changes or removes it in Owner panel → Ads.",
+   "img": "", "title": "أهلاً بيك في PITLANE", "sub": "قطع غيار أصلية وتجارية لكل السيارات، والتوصيل لكل ليبيا.",
+   "cta": "اسألنا على واتساب", "go": "wa", "to": "", "pos": "", "until": "", "on": true}
+]

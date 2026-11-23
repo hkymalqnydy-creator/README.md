@@ -13,7 +13,7 @@
 - **للإدارة**: أول حساب يُنشأ يصبح المدير. يوثّق المحلات، ويعدّل أي محل، ويضع إعلاناً في الرئيسية.
 - **الأمان**: قواعد صلاحيات داخل قاعدة البيانات (RLS)، فلا يقدر أحد يعدّل محل غيره حتى لو تلاعب بالتطبيق.
 
-## نسخة الشركة الواحدة (أمثلة: [`crossky/`](crossky/) بالأزرق، و[`alasima/`](alasima/) «متجر العاصمة» بالبرغندي)
+## نسخة الشركة الواحدة (أمثلة: [`crossky/`](crossky/) بالأزرق، و[`pitlane/`](pitlane/) «PITLANE» بالبرغندي)
 
 نفس الكود يشتغل كتطبيق لشركة واحدة وفروعها (`mode: 'company'` في `config.js`)، ويضيف:
 
@@ -43,15 +43,17 @@ python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand b
 
 `--empty-stock` يخلّي النسخة تبدا فاضية: ما فيهاش قطع ولا مبيعات ولا مشتريات ولا مصروفات (الحسابات والفروع والتجار والإعلان يقعدوا)، والهاتف اللي كان فيه البضاعة التجريبية تنمسح منه مرة وحدة. من غيره تبدا النسخة بقطع وفواتير للتجربة.
 
-«متجر العاصمة» بالبرغندي والأبيض، بشعاره (صامولة فيها بوابة مقوّسة، من `branding/alasima/make_assets.py`):
+«PITLANE» (بِت لين، كان اسمه «متجر العاصمة») بالبرغندي والأبيض، بشعاره (صامولة فيها علم الشطرنج متاع السباقات، من `branding/pitlane/make_assets.py`):
 
 ```
-python3 tools/build_company.py --name "متجر العاصمة" --slug alasima --email owner@alasima.ly --brand branding/alasima/png --out alasima \
-  --skin royal --tint burgundy --color '#7A1C32' --logo branding/alasima/svg/wordmark-white.svg --logo-ink branding/alasima/svg/wordmark-ink.svg \
-  --hero-car branding/alasima/svg/hero-car.svg --demo-ads branding/alasima/ads.json --site-url https://hkymalqnydy-creator.github.io/README.md/alasima/ \
+python3 tools/build_company.py --name PITLANE --slug pitlane --email owner@pitlane.ly --brand branding/pitlane/png --out pitlane \
+  --skin royal --tint burgundy --color '#7A1C32' --logo branding/pitlane/svg/wordmark-white.svg --logo-ink branding/pitlane/svg/wordmark-ink.svg \
+  --hero-car branding/pitlane/svg/hero-car.svg --demo-ads branding/pitlane/ads.json --site-url https://hkymalqnydy-creator.github.io/README.md/pitlane/ \
   --brands all --empty-stock --tagline-ar "قطع غيار السيارات" --tagline-en "Car parts" --hero-title "قطع غيار سيارتك… كلها عندنا" \
   --about $'{app} لقطع غيار السيارات: قطع أصلية وتجارية لكل الماركات.\n\nنخدم الزبائن والورش والتجار في كل ليبيا، بأسعار الجملة والقطاعي ومع التوصيل.'
 ```
+
+العنوان القديم [`alasima/`](alasima/) يحوّل لـ `pitlane/`، والهاتف اللي حفظ التطبيق القديم يمسح نسخته ويفتح الجديد.
 
 `--tint` يغيّر لون الواجهة (`burgundy` برغندي وأبيض، وبدونه أزرق CROSSKY). `--slug` اسم قصير بالإنجليزي للنسخة: كاشها ومفاتيحها على الهاتف وأرقام تطبيقاتها، باش نسختين على نفس الموقع ما يتلخبطوش (السلة والمفضلة وبيانات التجربة لكل وحدة بروحها). `--hero-title` و`--hero-sub` و`--about` كلام البداية في الواجهة و«عن الشركة» (المالك يبدّله من التطبيق).
 

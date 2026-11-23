@@ -1725,7 +1725,7 @@ body.ai-open{overflow:hidden}
 @media print{.pur-doc .inv-items th{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pur-sign{margin-top:56px}}
 .rcv-items .rl-state small.rl-stock{color:var(--good);font-weight:700}
 
-/* ---------- the brand skin in burgundy and white (config tint: 'burgundy'; متجر العاصمة) ----------
+/* ---------- the brand skin in burgundy and white (config tint: 'burgundy'; PITLANE) ----------
    Plan: the same calm page as royal, in wine red. The bar and the hero are burgundy with the white wordmark, the hero
    ends on the slant with a thin rose stripe (the one bold thing), and below it white cards on a faint rose-grey with
    burgundy accents. On the burgundy bar the counters are white with burgundy numbers. */
