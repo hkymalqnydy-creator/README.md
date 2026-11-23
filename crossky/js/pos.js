@@ -208,7 +208,7 @@
   });
 
   /* ---------- point of sale ---------- */
-  const POS_KEY = 'sp_pos';
+  const POS_KEY = SP.own('sp_pos');
   const loadPos = () => { try { return JSON.parse(sessionStorage.getItem(POS_KEY) || 'null') || { lines: [], pay: 'cash' }; } catch (e) { return { lines: [], pay: 'cash' }; } };
   const savePos = v => { try { sessionStorage.setItem(POS_KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } };
   /* Puts parts on the open sale (used by "open as a sale" when receiving, and by the assistant), with the customer and payment if given. */

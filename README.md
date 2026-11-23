@@ -13,7 +13,7 @@
 - **للإدارة**: أول حساب يُنشأ يصبح المدير. يوثّق المحلات، ويعدّل أي محل، ويضع إعلاناً في الرئيسية.
 - **الأمان**: قواعد صلاحيات داخل قاعدة البيانات (RLS)، فلا يقدر أحد يعدّل محل غيره حتى لو تلاعب بالتطبيق.
 
-## نسخة الشركة الواحدة (مثال: [`crossky/`](crossky/))
+## نسخة الشركة الواحدة (أمثلة: [`crossky/`](crossky/) بالأزرق، و[`alasima/`](alasima/) «متجر العاصمة» بالبرغندي)
 
 نفس الكود يشتغل كتطبيق لشركة واحدة وفروعها (`mode: 'company'` في `config.js`)، ويضيف:
 
@@ -42,6 +42,18 @@ python3 tools/build_company.py --name CROSSKY --email owner@crossky.ly --brand b
 ```
 
 `--empty-stock` يخلّي النسخة تبدا فاضية: ما فيهاش قطع ولا مبيعات ولا مشتريات ولا مصروفات (الحسابات والفروع والتجار والإعلان يقعدوا)، والهاتف اللي كان فيه البضاعة التجريبية تنمسح منه مرة وحدة. من غيره تبدا النسخة بقطع وفواتير للتجربة.
+
+«متجر العاصمة» بالبرغندي والأبيض، بشعاره (صامولة فيها بوابة مقوّسة، من `branding/alasima/make_assets.py`):
+
+```
+python3 tools/build_company.py --name "متجر العاصمة" --slug alasima --email owner@alasima.ly --brand branding/alasima/png --out alasima \
+  --skin royal --tint burgundy --color '#7A1C32' --logo branding/alasima/svg/wordmark-white.svg --logo-ink branding/alasima/svg/wordmark-ink.svg \
+  --hero-car branding/alasima/svg/hero-car.svg --demo-ads branding/alasima/ads.json --site-url https://hkymalqnydy-creator.github.io/README.md/alasima/ \
+  --brands all --empty-stock --tagline-ar "قطع غيار السيارات" --tagline-en "Car parts" --hero-title "قطع غيار سيارتك… كلها عندنا" \
+  --about $'{app} لقطع غيار السيارات: قطع أصلية وتجارية لكل الماركات.\n\nنخدم الزبائن والورش والتجار في كل ليبيا، بأسعار الجملة والقطاعي ومع التوصيل.'
+```
+
+`--tint` يغيّر لون الواجهة (`burgundy` برغندي وأبيض، وبدونه أزرق CROSSKY). `--slug` اسم قصير بالإنجليزي للنسخة: كاشها ومفاتيحها على الهاتف وأرقام تطبيقاتها، باش نسختين على نفس الموقع ما يتلخبطوش (السلة والمفضلة وبيانات التجربة لكل وحدة بروحها). `--hero-title` و`--hero-sub` و`--about` كلام البداية في الواجهة و«عن الشركة» (المالك يبدّله من التطبيق).
 
 الماركات المعروضة من البداية كورية ويابانية (`--brands KR,JP`)، وتقدر تحط ماركات معينة (`--brands toyota,kia`) أو `--brands all`. صاحب الشركة يغيّرها بعدين من التطبيق.
 

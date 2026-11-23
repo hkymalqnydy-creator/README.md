@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs>
+<linearGradient id="burg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8E2640"/><stop offset="1" stop-color="#5E1424"/></linearGradient>
+<linearGradient id="mist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6F0F1"/><stop offset="1" stop-color="#E4D3D8"/></linearGradient>
+</defs><rect width="1024" height="1024" fill="url(#burg)"/><path d="M0 850 L1024 730 L1024 1024 L0 1024Z" fill="url(#mist)"/><path d="M0 850 L1024 730" stroke="#C24863" stroke-width="16"/></svg>

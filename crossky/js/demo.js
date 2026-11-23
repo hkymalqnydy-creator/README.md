@@ -7,7 +7,8 @@
   /* one saved demo per app, so two demo builds on the same web address keep their own data */
   /* SEED goes up when the sample data changes (v2: part pictures, v3: the air filter itself, v4: customers, suppliers, expenses and stock changes,
      v5: the activity log and a discount limit for the seller), so every phone starts again from the new data */
-  const CONF = window.SPARAT_CONFIG || {}, SEED = 5, SUFFIX = CONF.mode === 'company' ? '_' + String(CONF.appName || 'co').toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
+  const CONF = window.SPARAT_CONFIG || {}, SEED = 5, OWN = /^[a-z0-9]+$/.test(CONF.slug || '') ? '_' + CONF.slug : '';
+  const SUFFIX = CONF.mode === 'company' ? (OWN || '_' + String(CONF.appName || 'co').toLowerCase().replace(/[^a-z0-9]+/g, '')) : '';
   const KEY = 'sp_demo_db_v' + SEED + SUFFIX;
   try { for (let v = 1; v < SEED; v++) { localStorage.removeItem('sp_demo_db_v' + v + SUFFIX); localStorage.removeItem('sp_demo_db_v' + v + SUFFIX + '_session'); } } catch (e) { /* no storage */ }
   const DEMO_MERCHANT = '218925551234@' + (CONF.phoneDomain || 'phone.invalid');
@@ -60,8 +61,9 @@
   const ICON = { brakes: 'c_brakes', electrical: 'c_elec', engine: 'c_engine', lights: 'c_light', oils: 'c_oil', suspension: 'c_susp', cooling: 'c_cool', tires: 'c_tire', body: 'c_body', ac: 'c_ac', transmission: 'c_gear', interior: 'c_int' };
   /* the brand-blue look (config skin 'royal') keeps its pictures in the same family of blues */
   const PAL_ROYAL = [['#eef2ff', '#d3ddff', '#2f54e6'], ['#f2f5fb', '#dde4f1', '#24366f'], ['#e8f0ff', '#c6d6ff', '#2343d2'], ['#f4f6fb', '#e1e6ef', '#3b4566']];
+  const PAL_BURGUNDY = [['#f8eef1', '#ecd3da', '#7a1c32'], ['#f6f1f2', '#e6dadd', '#4a1a26'], ['#fbeef1', '#f0cdd6', '#9b2e48'], ['#f6f2f3', '#e5dfe1', '#5a4249']];
   function art(cat, k) {
-    const pal = (window.SPARAT_CONFIG || {}).skin === 'royal' ? PAL_ROYAL : PAL;
+    const pal = CONF.skin === 'royal' ? (CONF.tint === 'burgundy' ? PAL_BURGUNDY : PAL_ROYAL) : PAL;
     const IC = window.SP_IC || {}, [a, b, c] = pal[k % pal.length], icon = IC[ICON[cat]] || IC.wrench || '';
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/><ellipse cx="200" cy="248" rx="110" ry="14" fill="#000" opacity=".08"/><g transform="translate(110 50) scale(7.5)" fill="none" stroke="${c}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icon}</g></svg>`;
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
@@ -105,10 +107,11 @@
     const owner = { id: uuid(), email, password: '123456' };
     DB.users.push(owner); DB.admins.push(owner.id);
     const ago = m => new Date(Date.now() - m * 60000).toISOString();
+    const T = C.demoTexts || {};
     Object.assign(DB.settings, {
-      brand_name: app, tagline: 'قطع غيار السيارات الكورية واليابانية', hero_title: 'قطع الكوري والياباني… كلها عندنا',
-      hero_sub: 'أصلي وتجاري بأسعار الجملة والقطاعي، مع التوصيل لكل المدن الليبية.',
-      about: app + ' شركة متخصصة في قطع غيار السيارات الكورية واليابانية: هيونداي، كيا، تويوتا، نيسان، ميتسوبيشي وغيرها.\n\nنوفر القطع الأصلية والتجارية بضمان، ونخدم الزبائن والورش والتجار في كل ليبيا.',
+      brand_name: app, tagline: T.tagline || 'قطع غيار السيارات الكورية واليابانية', hero_title: T.hero_title || 'قطع الكوري والياباني… كلها عندنا',
+      hero_sub: T.hero_sub || 'أصلي وتجاري بأسعار الجملة والقطاعي، مع التوصيل لكل المدن الليبية.',
+      about: T.about ? String(T.about).split('{app}').join(app) : app + ' شركة متخصصة في قطع غيار السيارات الكورية واليابانية: هيونداي، كيا، تويوتا، نيسان، ميتسوبيشي وغيرها.\n\nنوفر القطع الأصلية والتجارية بضمان، ونخدم الزبائن والورش والتجار في كل ليبيا.',
       contact_wa: '0912345678', contact_phone: '0912345678', address: 'طرابلس – طريق المطار', price_mode: 'all', orders_enabled: true, open_signup: false, brands: [], ads: demoAds(),
       bot_rules: [
         { k: 'توصيل, شحن, delivery', a: 'نعم، التوصيل متاح لكل المدن الليبية. ابعتلنا موقعك على واتساب ونحددلك الوقت والتكلفة.' },
@@ -295,7 +298,7 @@
         .forEach(k => { DB[k] = []; });
       DB.invoice_returns = [];
       Object.assign(DB, { inv_seq: b.inv_seq, pur_seq: b.pur_seq, move_seq: b.move_seq, pay_seq: b.pay_seq, exp_seq: b.exp_seq, act_seq: b.act_seq, batch_seq: b.batch_seq, emptied: 1 });
-      try { localStorage.removeItem('sp_cart'); localStorage.removeItem('sp_favs'); sessionStorage.removeItem('sp_pos'); sessionStorage.removeItem('sp_rcv'); } catch (e) { /* no storage */ }
+      try { ['sp_cart', 'sp_favs'].forEach(k => localStorage.removeItem(k + OWN)); ['sp_pos', 'sp_rcv'].forEach(k => sessionStorage.removeItem(k + OWN)); } catch (e) { /* no storage */ }
       emptied = true;
     }
     /* every car brand in the world now: a demo saved with only the Korean and Japanese ones shows them all */

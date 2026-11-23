@@ -17,12 +17,13 @@ const URL0 = process.env.URL0 || 'http://localhost:8765/';
   await page.goto(URL0);
   // the home's new arrivals: the sample parts, or the empty store when the edition starts empty (--empty-stock)
   await page.locator('#gnew .card, #gnew .empty').first().waitFor({ timeout: 15000 });
+  // the edition built into the folder: its name, its id (offline caches, what it keeps on the phone) and its demo owner
+  const cfg = await page.evaluate(() => window.SPARAT_CONFIG), NAME = cfg.appName, SLUG = cfg.slug || 'crossky', EMAIL = cfg.demoEmail;
   const title = await page.title(), brand = (await page.locator('.topbar .brand').first().innerText()).trim() || (await page.getAttribute('.topbar .brand img', 'alt')) || '';
-  must(title.startsWith('CROSSKY') && brand.includes('CROSSKY'), 'name: ' + title + ' / ' + brand);
+  must(title.startsWith(NAME) && brand.includes(NAME), 'name: ' + title + ' / ' + brand);
   must(await page.evaluate(() => [...document.querySelectorAll('.topbar .brand img')].every(i => i.complete && i.naturalWidth > 0)), 'the logo in the bar loads');
   const man = await (await page.request.get(URL0 + 'manifest.webmanifest')).json();
-  must(man.name === 'CROSSKY' && man.shortcuts.some(s => s.url === './#receive'), 'manifest');
-  const cfg = await page.evaluate(() => window.SPARAT_CONFIG);
+  must(man.name === NAME && man.shortcuts.some(s => s.url === './#receive'), 'manifest');
   must(cfg.mode === 'company' && cfg.demo === true && cfg.brands.length === 0, 'config (every brand)');
   let empty = '';
   if (cfg.demoEmpty) {
@@ -37,12 +38,12 @@ const URL0 = process.env.URL0 || 'http://localhost:8765/';
     empty = ' | empty store, old goods cleared once';
   }
   const sw = await page.evaluate(async () => { await navigator.serviceWorker.register('sw.js'); const r = await navigator.serviceWorker.ready; await new Promise(s => setTimeout(s, 1500)); return { active: !!r.active, caches: await caches.keys() }; });
-  must(sw.active && sw.caches.some(k => k.startsWith('crossky-')) && !sw.caches.some(k => k.startsWith('sparat-')), 'service worker caches: ' + sw.caches.join(','));
+  must(sw.active && sw.caches.some(k => k.startsWith(SLUG + '-')) && !sw.caches.some(k => k.startsWith('sparat-')), 'service worker caches: ' + sw.caches.join(','));
   // owner login (demo)
   await page.evaluate(() => { location.hash = 'login'; }); await page.locator('#ap').waitFor();
   if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]');
   await page.locator('#ae').waitFor();
-  await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456');
+  await page.fill('#ae', EMAIL); await page.fill('#ap', '123456');
   await page.locator('#ae').press('Enter'); await page.waitForTimeout(1200);
   await page.evaluate(() => { location.hash = 'receive'; }); await page.locator('#rpf').waitFor({ state: 'attached', timeout: 8000 }); await page.locator('#rscan').waitFor();
   await page.evaluate(() => { location.hash = 'pos'; }); await page.locator('#pscan').waitFor({ timeout: 8000 });

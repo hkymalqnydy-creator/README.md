@@ -357,7 +357,7 @@
   };
 
   /* ---------- receiving stock ---------- */
-  const RCV = 'sp_rcv';
+  const RCV = SP.own('sp_rcv');
   const loadR = () => { try { return JSON.parse(sessionStorage.getItem(RCV) || 'null') || { lines: [], supplier: '', note: '' }; } catch (e) { return { lines: [], supplier: '', note: '' }; } };
   const saveR = v => { try { sessionStorage.setItem(RCV, JSON.stringify(v)); } catch (e) { /* private mode */ } };
   const lid = () => Math.random().toString(36).slice(2, 10);

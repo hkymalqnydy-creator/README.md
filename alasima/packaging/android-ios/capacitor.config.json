@@ -1,0 +1,15 @@
+{
+  "appId": "ly.alasima.app",
+  "appName": "متجر العاصمة",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#7A1C32"
+  },
+  "ios": {
+    "backgroundColor": "#7A1C32",
+    "contentInset": "never"
+  }
+}

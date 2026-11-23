@@ -5,6 +5,10 @@
   const D = window.SP_DATA, L = window.SP_I18N, VIN = window.SP_VIN, I = window.SP_I;
   const SP = window.SP = { CFG, D, L, VIN, I };
   if (/^[a-z]+$/.test(CFG.skin || '')) document.documentElement.setAttribute('data-skin', CFG.skin);
+  /* the brand skin's colour (config tint, e.g. 'burgundy'; css/styles.css): royal blue when none */
+  if (/^[a-z]+$/.test(CFG.tint || '')) document.documentElement.setAttribute('data-tint', CFG.tint);
+  /* what this edition keeps on the phone (cart, favourites, drafts) under its own name (config slug), so two editions on one web address stay apart */
+  SP.own = k => k + (/^[a-z0-9]+$/.test(CFG.slug || '') ? '_' + CFG.slug : '');
 
   /* ---------- helpers ---------- */
   const $ = (s, r = document) => r.querySelector(s);
@@ -110,7 +114,8 @@
   };
   /* A brand's mark, shown where the country flag used to be: the logo the company uploaded for it (settings.brand_logos,
      or the map given while editing), otherwise the brand's initials on a hexagon in one of the app's own tones. */
-  const MARK_TONES = ['#2f54e6', '#1b2a6b', '#0e7c86', '#6b3fa0', '#3b4566', '#1f6f43', '#24539c', '#4a3a8c'];
+  const MARK_TONES = CFG.tint === 'burgundy' ? ['#7a1c32', '#4a1020', '#9b3550', '#5b2a38', '#3e2a31', '#86495a', '#6a1a2c', '#2f1a21']
+    : ['#2f54e6', '#1b2a6b', '#0e7c86', '#6b3fa0', '#3b4566', '#1f6f43', '#24539c', '#4a3a8c'];
   function brandInitials(b) {
     const en = String(b.en || b.id || '').split(' / ')[0].replace(/\(.*?\)/g, '').trim();
     if (/^[A-Z0-9]{2,4}$/.test(en)) return en;
@@ -200,7 +205,7 @@
   function setCar(c) { S.car = c && c.make ? { make: c.make, model: c.model || '', year: c.year ? +c.year : '', vin: c.vin || '' } : null; store('sp_car', S.car); }
   function toggleFav(id) {
     if (S.favs.has(id)) S.favs.delete(id); else S.favs.add(id);
-    store('sp_favs', [...S.favs].slice(-300));
+    store(SP.own('sp_favs'), [...S.favs].slice(-300));
     return S.favs.has(id);
   }
 
@@ -478,8 +483,8 @@
     if (name) document.title = name + (st.tagline ? ' · ' + st.tagline : '');
   }
   const cart = {
-    get() { return arr(load('sp_cart', [])).filter(x => x && x.id && x.qty > 0); },
-    set(c) { store('sp_cart', c.slice(0, 100)); document.dispatchEvent(new Event('sp:cart')); },
+    get() { return arr(load(SP.own('sp_cart'), [])).filter(x => x && x.id && x.qty > 0); },
+    set(c) { store(SP.own('sp_cart'), c.slice(0, 100)); document.dispatchEvent(new Event('sp:cart')); },
     add(id, n) { const c = cart.get(), x = c.find(i => i.id === id); if (x) x.qty = Math.min(999, x.qty + (n || 1)); else c.push({ id, qty: n || 1 }); cart.set(c); },
     qty(id, q) { cart.set(cart.get().map(i => i.id === id ? { id, qty: Math.max(0, Math.min(999, q)) } : i).filter(i => i.qty > 0)); },
     count() { return cart.get().reduce((k, i) => k + i.qty, 0); },
@@ -606,7 +611,7 @@
     S.car = load('sp_car', null);
     S.err = await initBackend();
     /* after the backend: a demo that starts empty clears the saved favourites of the parts it removed (js/demo.js demoEmpty) */
-    S.favs = new Set(arr(load('sp_favs', [])));
+    S.favs = new Set(arr(load(SP.own('sp_favs'), [])));
     window.addEventListener('hashchange', render);
     if (!S.err) {
       try { const r = await sb.auth.getSession(); await refreshUser(r && r.data && r.data.session); } catch (e) { /* signed out */ }

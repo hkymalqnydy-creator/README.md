@@ -50,7 +50,8 @@ def sub(text, old, new, count=1):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--name', required=True, help='company / app name, e.g. CROSSKY')
+    ap.add_argument('--name', required=True, help='company / app name, e.g. CROSSKY or متجر العاصمة')
+    ap.add_argument('--slug', default='', help='the edition\'s short Latin id (a-z, 0-9), e.g. alasima: its offline caches, the data it keeps on the phone, the app ids; default from the name')
     ap.add_argument('--email', required=True, help='owner e-mail used by the demo (password 123456)')
     ap.add_argument('--brand', required=True, help='folder with the brand PNGs (see branding/crossky/make_assets.py)')
     ap.add_argument('--out', required=True, help='output folder (replaced)')
@@ -61,6 +62,10 @@ def main():
     ap.add_argument('--no-demo', action='store_true')
     ap.add_argument('--skin', default='', help='look of the edition: "" (market look) or "royal" (brand blue, see css/styles.css)')
     ap.add_argument('--color', default='#0d2038', help='brand colour for the splash screen, browser bar and app shells')
+    ap.add_argument('--tint', default='', help='colour of the royal skin: "" (royal blue) or "burgundy" (burgundy and white, see css/styles.css)')
+    ap.add_argument('--hero-title', default='', help='the demo\'s big line on the home screen (the owner changes it in the app)')
+    ap.add_argument('--hero-sub', default='', help='the demo\'s line under it')
+    ap.add_argument('--about', default='', help='the demo\'s «about us» text; {app} becomes the name')
     ap.add_argument('--logo', default='', help='wordmark SVG for the blue bar and splash (white); it replaces the name in the bar')
     ap.add_argument('--logo-ink', default='', help='wordmark SVG for paper and light screens (invoice, about page)')
     ap.add_argument('--hero-car', default='', help='picture of a car for the blue hero (SVG or PNG with a clear background)')
@@ -75,7 +80,12 @@ def main():
     site = a.site_url.strip()
     if site and not site.endswith('/'):
         site += '/'
-    name, slug = a.name.strip(), re.sub(r'[^a-z0-9]+', '', a.name.lower()) or 'company'
+    if a.slug and not re.fullmatch(r'[a-z0-9]+', a.slug):
+        raise SystemExit('--slug takes a-z and 0-9 only, e.g. alasima')
+    if a.tint and not re.fullmatch(r'[a-z]+', a.tint):
+        raise SystemExit('--tint takes a colour name, e.g. burgundy')
+    name, slug = a.name.strip(), a.slug or re.sub(r'[^a-z0-9]+', '', a.name.lower()) or 'company'
+    texts = {k: v for k, v in (('tagline', a.tagline_ar), ('hero_title', a.hero_title), ('hero_sub', a.hero_sub), ('about', a.about)) if v}
     app_id = a.app_id or 'ly.%s.app' % slug
     out = os.path.abspath(a.out)
     data = read(os.path.join(ROOT, 'js', 'data.js'))
@@ -148,16 +158,19 @@ def main():
 window.SPARAT_CONFIG = {
   mode: 'company',          // one company with its branches, customers, staff and sales system
   appName: %(jname)s,
+  slug: %(jslug)s,          // the edition's short id: what it keeps on the phone stays its own
   supabaseUrl: '',          // e.g. 'https://abcdefghijkl.supabase.co'
   supabaseKey: '',          // the anon / publishable key
   siteUrl: %(jsite)s,              // public address of the app, e.g. 'https://parts.example.ly/' (used in share links and e-mails)
-  skin: %(jskin)s,                 // look: '' (market) or 'royal' (brand blue)
+  skin: %(jskin)s,                 // look: '' (market) or 'royal' (brand colour)
+  tint: %(jtint)s,                 // colour of the royal skin: '' (royal blue) or 'burgundy'
   logo: %(jlogo)s,                 // wordmark for the blue bar (it replaces the name there)
   logoInk: %(jink)s,              // wordmark for paper and light screens
   heroCar: %(jcar)s,              // picture of a car in the blue hero (skin royal)
   demoExtra: %(jextra)s,      // the edition's own demo parts, with real photos
   demoAds: %(jads)s,      // the demo's ads at the top of the home screen (the owner changes them in Owner panel → Ads)
   demoEmpty: %(empty)s,     // true: the demo has no parts and no sales yet, to fill with your own (accounts, branches and settings stay)
+  demoTexts: %(jtexts)s,      // the demo's words on the home and «about us» (the owner changes them in Owner panel → Company settings)
   defaultCountry: %(jcountry)s,
   defaultLang: '',          // '' = follow the phone's language; or 'ar', 'en', 'fr', 'es', 'de', 'tr', 'ru', 'zh'
   demo: %(demo)s,             // demo data on the device while no server is set
@@ -165,10 +178,10 @@ window.SPARAT_CONFIG = {
   brands: %(jbrands)s  // brands shown until the owner picks them (Owner panel → Company settings); [] = all
   // aiScan: false          // stop the app from trying the AI invoice reader (supabase/functions/scan-invoice)
 };
-""" % {'name': name, 'jname': json.dumps(name), 'jcountry': json.dumps(a.country), 'demo': 'false' if a.no_demo else 'true', 'jemail': json.dumps(a.email), 'jbrands': json.dumps(brands), 'jsite': json.dumps(site), 'jskin': json.dumps(a.skin),
+""" % {'name': name, 'jname': json.dumps(name, ensure_ascii=False), 'jcountry': json.dumps(a.country), 'demo': 'false' if a.no_demo else 'true', 'jemail': json.dumps(a.email), 'jbrands': json.dumps(brands), 'jsite': json.dumps(site), 'jskin': json.dumps(a.skin),
        'jlogo': json.dumps('icons/logo.svg' if a.logo else ''), 'jink': json.dumps('icons/logo-ink.svg' if a.logo_ink else ''),
        'jcar': json.dumps(hero_car), 'jextra': json.dumps(extra, ensure_ascii=False), 'jads': json.dumps(ads, ensure_ascii=False),
-       'empty': 'true' if a.empty_stock else 'false'})
+       'empty': 'true' if a.empty_stock else 'false', 'jslug': json.dumps(slug), 'jtint': json.dumps(a.tint), 'jtexts': json.dumps(texts, ensure_ascii=False)})
 
     m = json.loads(read(os.path.join(ROOT, 'manifest.webmanifest')))
     m.update({'name': name, 'short_name': name, 'description': '%s · %s. %s' % (name, a.tagline_ar, a.tagline_en), 'background_color': a.color, 'theme_color': a.color,
@@ -238,7 +251,8 @@ window.SPARAT_CONFIG = {
     # guide
     guide = os.path.join(ROOT, 'docs', 'دليل-نسخة-الشركة.md')
     if os.path.exists(guide):
-        write(os.path.join(out, 'docs', 'دليل-نسخة-الشركة.md'), read(guide).replace('{{NAME}}', name).replace('{{EMAIL}}', a.email))
+        write(os.path.join(out, 'docs', 'دليل-نسخة-الشركة.md'), read(guide).replace('{{NAME}}', name).replace('{{EMAIL}}', a.email).replace('{{SLUG}}', slug)
+              .replace('{{APK}}', slug.upper() + ' APK'))
     readme = os.path.join(ROOT, 'docs', 'company-README.md')
     if os.path.exists(readme):
         write(os.path.join(out, 'README.md'), read(readme).replace('{{NAME}}', name).replace('{{EMAIL}}', a.email).replace('{{APPID}}', app_id))

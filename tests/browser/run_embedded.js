@@ -67,16 +67,17 @@ const log = (() => { let n = 0; return s => console.log(`${++n}. ${s}`); })();
   try {
     await page.goto(ORIGIN); await see('#gnew .card, #gnew .empty', 15000);
     const brandName = (await text('.topbar .brand')) || (await page.getAttribute('.topbar .brand img', 'alt')) || '';
-    must(brandName.includes('CROSSKY'), 'brand ' + brandName);
+    const ED = await db(() => ({ name: window.SPARAT_CONFIG.appName, email: window.SPARAT_CONFIG.demoEmail }));   // the edition built into SITE
+    must(brandName.includes(ED.name), 'brand ' + brandName);
     must(await page.evaluate(() => [...document.querySelectorAll('.topbar .brand img')].every(i => i.complete && i.naturalWidth > 0)), 'the logo in the bar loads');
     must(await page.locator('.banner.inst').count() === 0, 'no install banner inside the Claude app');
     // the Claude app blocks outside photos, so its page keeps the bundled part pictures
     must(await page.evaluate(() => [...document.querySelectorAll('img')].every(i => !/^https?:/.test(i.getAttribute('src') || ''))), 'no outside photos inside the Claude app');
     // the edition's ad still opens the home screen, on the brand gradient instead of its outside photo
-    must(await page.locator('.hero .ads .ad.noimg').count() === 1 && (await text('.ad-t')) === 'قطع غيار نيسان باترول', 'the Patrol ad without its photo');
-    const cfg = await page.evaluate(() => window.SPARAT_CONFIG);
-    must(cfg.embedded && cfg.noServiceWorker && cfg.demo && !cfg.supabaseUrl, 'page config'); log('opens as a page with the demo, fonts unreachable, no install banner, the Patrol ad on the brand gradient');
-    await go('login'); await see('#ap'); if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]'); await see('#ae'); await page.fill('#ae', 'owner@crossky.ly'); await page.fill('#ap', '123456'); await page.click('#ago');
+    const cfg = await page.evaluate(() => window.SPARAT_CONFIG), ad = (cfg.demoAds || [])[0];
+    must(!ad || (await page.locator('.hero .ads .ad.noimg').count() === 1 && (await text('.ad-t')) === ad.title), 'the edition\'s ad without an outside photo: ' + (ad && ad.title));
+    must(cfg.embedded && cfg.noServiceWorker && cfg.demo && !cfg.supabaseUrl, 'page config'); log('opens as a page with the demo, fonts unreachable, no install banner' + (ad ? ', the ad «' + ad.title + '» on the brand gradient' : ''));
+    await go('login'); await see('#ap'); if (await page.locator('[data-by="email"]').count()) await page.click('[data-by="email"]'); await see('#ae'); await page.fill('#ae', ED.email); await page.fill('#ap', '123456'); await page.click('#ago');
     await page.waitForURL(/#mine/); await page.waitForTimeout(400);
     if (cfg.demoEmpty) {
       // the edition that starts empty (--empty-stock): nothing in stock, and the first parts come in from a supplier invoice read by Claude

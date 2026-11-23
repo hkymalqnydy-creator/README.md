@@ -36,10 +36,11 @@ const log = s => console.log(`${++step}. ${s}`);
   const clean = (m) => { must(!errors.length, m + ': ' + errors.join(' | ')); };
   try {
     await page.goto(ORIGIN); await see('#gnew .empty', 15000);
+    const ED = await db(() => ({ email: window.SPARAT_CONFIG.demoEmail, ads: (window.SPARAT_CONFIG.demoAds || []).length }));   // the edition built into SITE
     const d0 = await db(() => { const D = window.__mockdb; return { p: D.products.length, i: D.invoices.length, b: D.purchases.length, m: D.stock_moves.length, e: D.expenses.length, a: D.activity.length,
       st: D.staff.map(x => x.perms.join('+')), sh: D.shops.length, c: D.customers.length, ads: (D.settings.ads || []).length }; });
     must(!d0.p && !d0.i && !d0.b && !d0.m && !d0.e && !d0.a, 'nothing in stock and nothing sold, bought or spent: ' + JSON.stringify(d0));
-    must(d0.sh === 3 && d0.c >= 2 && d0.st.includes('warehouse') && d0.st.some(x => x.includes('sales')) && d0.ads >= 1, 'the branches, staff, merchants and ads stay: ' + JSON.stringify(d0));
+    must(d0.sh === 3 && d0.c >= 2 && d0.st.includes('warehouse') && d0.st.some(x => x.includes('sales')) && d0.ads === ED.ads, 'the branches, staff, merchants and ads stay: ' + JSON.stringify(d0));
     must(/ما فيش قطع بعد/.test(await text('#gnew .empty')) && !(await page.locator('#gnew .card').count()), 'a customer sees the parts are coming');
     must(/^https:\/\/wa\.me\/218912345678\?text=/.test(await page.getAttribute('#gnew .empty a.btn-wa', 'href') || ''), 'and asks for the part he needs on the company\'s WhatsApp');
     await page.locator('#gnew').scrollIntoViewIfNeeded(); await page.waitForTimeout(300); await shot('01-home');
@@ -47,7 +48,7 @@ const log = s => console.log(`${++step}. ${s}`);
     must(!(await page.locator('.card').count()), 'a search finds nothing');
     clean('the store and a search with no parts');
     log('a customer: an empty store that says the parts are coming; the store and a search open with nothing in them');
-    await signIn('email', 'owner@crossky.ly');
+    await signIn('email', ED.email);
     await go(''); await see('#gnew .empty');
     must(await page.locator('#gnew .empty a[href="#receive"]').count() === 1, 'staff are sent to bring their stock in');
     await page.locator('#gnew').scrollIntoViewIfNeeded(); await page.waitForTimeout(300); await shot('02-home-owner');
