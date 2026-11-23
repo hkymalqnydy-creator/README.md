@@ -22,6 +22,8 @@ MARK_W, MARK_H = 100.0, 92.0
 _C = (50.0, 46.0)
 _OUT = [(25, 0), (75, 0), (100, 46), (75, 92), (25, 92), (0, 46)]
 _IN = [(_C[0] + (x - _C[0]) * 0.76, _C[1] + (y - _C[1]) * 0.76) for x, y in _OUT]
+# the flag runs on a little under the rim, so no hairline shows where a dark square meets it
+_FLAG = [(_C[0] + (x - _C[0]) * 0.80, _C[1] + (y - _C[1]) * 0.80) for x, y in _OUT]
 
 
 def _poly(pts):
@@ -29,15 +31,24 @@ def _poly(pts):
 
 
 def _checks():
+    """The dark squares of a 4 × 4 flag laid on the hole of the nut; the outer ones run on under the rim."""
     x0, x1 = min(p[0] for p in _IN), max(p[0] for p in _IN)
     y0, y1 = min(p[1] for p in _IN), max(p[1] for p in _IN)
-    w, h = (x1 - x0) / 4, (y1 - y0) / 4
-    return ' '.join('M%.2f %.2f h%.2f v%.2f h%.2f Z' % (x0 + i * w, y0 + j * h, w, h, -w) for i in range(4) for j in range(4) if (i + j) % 2 == 0)
+    w, h, m = (x1 - x0) / 4, (y1 - y0) / 4, 4.0
+    sq = []
+    for i in range(4):
+        for j in range(4):
+            if (i + j) % 2:
+                continue
+            a, b = x0 + i * w - (m if i == 0 else 0), x0 + (i + 1) * w + (m if i == 3 else 0)
+            c, d = y0 + j * h - (m if j == 0 else 0), y0 + (j + 1) * h + (m if j == 3 else 0)
+            sq.append('M%.2f %.2f H%.2f V%.2f H%.2f Z' % (a, c, b, d, a))
+    return ' '.join(sq)
 
 
 def mark(x, y, width, fill='#fff', uid='m'):
     s = width / MARK_W
-    return (f'<g transform="translate({x:.2f} {y:.2f}) scale({s:.5f})"><clipPath id="{uid}"><path d="{_poly(_IN)}"/></clipPath>'
+    return (f'<g transform="translate({x:.2f} {y:.2f}) scale({s:.5f})"><clipPath id="{uid}"><path d="{_poly(_FLAG)}"/></clipPath>'
             f'<path fill-rule="evenodd" fill="{fill}" d="{_poly(_OUT)} {_poly(_IN)}"/><path fill="{fill}" clip-path="url(#{uid})" d="{_checks()}"/></g>')
 
 
