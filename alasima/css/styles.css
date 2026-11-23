@@ -408,7 +408,7 @@ textarea.input{resize:vertical;min-height:92px;line-height:1.55}
 .busy-pick::after{content:"";position:absolute;inset:0;background:rgba(15,17,20,.4);z-index:1}
 
 /* dashboard */
-.mine{display:grid;gap:14px;padding-top:16px}
+.mine{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding-top:16px}
 .mine .sec-h{margin:6px 0 -2px}
 .mcard{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;display:grid;gap:12px}
 .mc-head{display:flex;align-items:center;gap:12px}
@@ -841,7 +841,7 @@ details.pur[open]>summary{padding-bottom:4px}
 [data-skin=royal] .topbar .badge,[data-skin=royal] .cartbtn .badge{background:var(--stripe);color:#fff}
 [data-skin=royal] .topbar :focus-visible,[data-skin=royal] .hero :focus-visible{outline-color:#fff}
 /* hero: flat blue, one big search, the car plate */
-[data-skin=royal] .hero{background:var(--asphalt);padding:10px 0 26px}
+[data-skin=royal] .hero{background:var(--asphalt);padding:10px 0 26px;overflow-x:clip}
 [data-skin=royal] .hero h1{font-size:clamp(30px,8.2vw,50px);line-height:1.16;max-width:14ch}
 [data-skin=royal] .hero h1 em{color:inherit}
 [data-skin=royal] .hero p{color:var(--on-dark-2);margin:8px 0 20px}
@@ -1510,7 +1510,7 @@ body.ai-open{overflow:hidden}
 .ms-acts{justify-content:center;width:100%}
 .mr-shop .switch{margin:4px 0}
 /* «استعلام سعر»: the bar on the System tab, and the part's card */
-.sys-look{display:flex;align-items:center;gap:10px;min-height:52px;margin:-4px 0 14px;padding:0 14px;border-radius:16px;background:var(--surface);border:1px solid var(--line);color:var(--muted);text-decoration:none;font-weight:600;font-size:14px}
+.sys-look{display:flex;align-items:center;gap:10px;min-width:0;width:100%;min-height:52px;margin:-4px 0 14px;padding:0 14px;border-radius:16px;background:var(--surface);border:1px solid var(--line);color:var(--muted);text-decoration:none;font-weight:600;font-size:14px}
 .sys-look>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sys-look .ic{width:20px;height:20px;flex:none;color:var(--signal)}
 .pq .inrow .btn{flex:none;padding-inline:14px}
